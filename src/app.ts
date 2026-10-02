@@ -1,5 +1,13 @@
 import { Application, Container, UPDATE_PRIORITY, type Ticker } from "pixi.js";
-import { createButtons, buttonFaces, navigate } from "./menu/options";
+import {
+  createButtons,
+  buttonFaces,
+  resetButtons,
+  enterButtons,
+  setButtonsActive,
+  navigate,
+} from "./menu/options";
+import { createPage, showPage, hidePage, type Page } from "./menu/page";
 import {
   createLanding,
   setLandingEnabled,
@@ -17,6 +25,7 @@ import type { RingStyle } from "./effects/ring/ring";
 import {
   cubicBezier,
   smoothDamp,
+  tween,
   type Easing,
   type Spring,
 } from "./effects/tween/tween";
@@ -24,16 +33,23 @@ import {
   createRain,
   addSurface,
   setSurfacesActive,
+  setBulletFloor,
+  setRainFloor,
+  onBulletImpact,
   type RainLayers,
 } from "./effects/rain/rain";
 import { setPortal, addPortalView, startPortal } from "./effects/portal/portal";
-import { createVivid } from "./worlds/vivid";
+import { seaHeight, createVivid, type Vivid } from "./worlds/vivid";
+import { createNightSea } from "./worlds/nightsea";
 
 const background: string = "#0b1026";
 const rainEnabled: boolean = true;
 const revealDuration: number = 500; // ms
 const revealEasing: Easing = cubicBezier(0.3, 0, 0.25, 1);
 const peekSmoothing: number = 0.12; // s
+const diveDuration: number = 1800; // ms
+const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
+const diveFlip: number = -Math.PI; // rad
 
 const container: HTMLDivElement = document.getElementById(
   "app",
@@ -55,18 +71,26 @@ const vivid: Container = new Container();
 const cityFront: Container = new Container();
 const vividFront: Container = new Container();
 
-vivid.addChild(createVivid(app));
+city.addChild(createNightSea(app));
+
+const ocean: Vivid = createVivid(app);
+vivid.addChild(ocean.view);
 
 const menu: Container = new Container();
-const buttons: Container = createButtons(app);
+const buttons: Container = await createButtons(app);
 menu.addChild(buttons);
 
 const landing: Container = await createLanding(app);
 
 if (rainEnabled) {
+  setBulletFloor(ocean.surface);
+  setRainFloor(1 - seaHeight / 100);
+  onBulletImpact(ocean.absorb);
+
   const rain: RainLayers = await createRain(app);
   city.addChild(rain.backRain);
-  vivid.addChild(rain.backBullets);
+  ocean.scene.addChild(ocean.aboveSea, rain.backBullets);
+  rain.backBullets.setMask({ mask: ocean.aboveSea, inverse: false });
   cityFront.addChild(rain.frontRain);
   vividFront.addChild(rain.frontBullets);
 
@@ -77,7 +101,16 @@ if (rainEnabled) {
   }
 }
 
+const pageNames: Array<string> = ["play", "stats", "config", "about"];
+const pages: Map<string, Page> = new Map();
+
 vivid.addChild(menu);
+
+for (let index = 0; index < pageNames.length; index++) {
+  const page: Page = createPage(app, pageNames[index]!);
+  pages.set(pageNames[index]!, page);
+  vivid.addChild(page.root);
+}
 addPortalView(city, true);
 addPortalView(vivid, false);
 addPortalView(cityFront, true);
@@ -85,9 +118,11 @@ addPortalView(vividFront, false);
 app.stage.addChild(city, vivid, landing, cityFront, vividFront);
 startPortal(app);
 
-type Screen = "landing" | "intro" | "main" | "outro";
+type Screen =
+  "landing" | "intro" | "main" | "outro" | "diving" | "page" | "rising";
 
 let menuOpen: boolean = false;
+let currentPage: Page | null = null;
 let screen: Screen = "landing";
 const peek: Spring = { value: 0, velocity: 0 };
 
@@ -119,13 +154,51 @@ app.ticker.add(
   UPDATE_PRIORITY.HIGH,
 );
 
+function dive(page: Page, name: string): void {
+  screen = "diving";
+  currentPage = page;
+  ocean.setScenery(name);
+  fadeOut(app.ticker, buttons, 300);
+  tween(app.ticker, diveDuration, (progress: number) => {
+    ocean.setDepth(diveEasing(progress));
+    ocean.setFlip(diveFlip * diveEasing(progress));
+  })
+    .then(() => showPage(app.ticker, page))
+    .then(() => {
+      screen = "page";
+    });
+}
+
+function rise(page: Page): void {
+  screen = "rising";
+  hidePage(app.ticker, page)
+    .then(() =>
+      tween(app.ticker, diveDuration, (progress: number) => {
+        ocean.setDepth(diveEasing(1 - progress));
+        ocean.setFlip(diveFlip * diveEasing(1 - progress));
+      }),
+    )
+    .then(() => {
+      buttons.visible = true;
+      enterButtons(app.ticker);
+      navigate("menu");
+      screen = "main";
+    });
+}
+
 window.addEventListener("keydown", (event: KeyboardEvent) => {
+  if (event.key === "Escape" && screen === "page" && currentPage !== null) {
+    rise(currentPage);
+    return;
+  }
+
   if (event.key !== "Escape" || screen !== "main") {
     return;
   }
 
   screen = "outro";
   menuOpen = false;
+  setButtonsActive(false);
   menu.interactiveChildren = false;
   setSurfacesActive(false);
 
@@ -154,6 +227,7 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
   ).then(() => {
     menu.visible = true;
     buttons.visible = true;
+    resetButtons();
     peek.value = 1;
     peek.velocity = 0;
     showThroughRing();
@@ -179,6 +253,7 @@ document.addEventListener("navigate", (event: Event) => {
     menu.interactiveChildren = true;
     setSurfacesActive(true);
 
+    enterButtons(app.ticker);
     moveLogoToCorner(app.ticker, revealDuration, revealEasing);
     setLandingEnabled(landing, false);
     rippleReveal(
@@ -202,6 +277,7 @@ document.addEventListener("navigate", (event: Event) => {
   if (name === "menu") {
     buttons.visible = true;
     menuOpen = true;
+    setButtonsActive(true);
     return;
   }
 
@@ -210,6 +286,15 @@ document.addEventListener("navigate", (event: Event) => {
   }
 
   menuOpen = false;
+  setButtonsActive(false);
+
+  const page: Page | undefined = pages.get(name);
+
+  if (page !== undefined) {
+    dive(page, name);
+    return;
+  }
+
   fadeOut(app.ticker, buttons, 300).then(() => {
     container.dispatchEvent(new CustomEvent<string>("open", { detail: name }));
   });

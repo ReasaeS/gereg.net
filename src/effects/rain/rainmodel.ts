@@ -27,6 +27,7 @@ type RainConfig = {
   color: string;
   layerChances: Array<LayerChance>;
   sprites: Array<RainSprite>;
+  spriteColors: Array<string>;
   spriteMinAlpha: number;
   spriteMaxAlpha: number;
 };
@@ -39,7 +40,9 @@ type Drop = {
   alpha: number;
   layer: Layer;
   sprite: number;
+  spriteColor: number;
   spriteAlpha: number;
+  absorbed: boolean;
   hit: boolean;
   hitX: number;
   hitY: number;
@@ -121,6 +124,8 @@ function spawnDrop(
     Math.floor(Math.random() * config.sprites.length),
     Math.max(config.sprites.length - 1, 0),
   );
+  drop.spriteColor = Math.floor(Math.random() * config.spriteColors.length);
+  drop.absorbed = false;
   drop.spriteAlpha = mix(
     config.spriteMinAlpha,
     config.spriteMaxAlpha,
@@ -139,7 +144,12 @@ function spawnDrop(
   drop.hitY = 0;
 }
 
-function createDrop(config: RainConfig, width: number, height: number): Drop {
+function createDrop(
+  config: RainConfig,
+  width: number,
+  height: number,
+  floor: number,
+): Drop {
   const drop: Drop = {
     x: 0,
     y: 0,
@@ -148,7 +158,9 @@ function createDrop(config: RainConfig, width: number, height: number): Drop {
     alpha: 0,
     layer: -1,
     sprite: 0,
+    spriteColor: 0,
     spriteAlpha: 0,
+    absorbed: false,
     hit: false,
     hitX: 0,
     hitY: 0,
@@ -160,10 +172,10 @@ function createDrop(config: RainConfig, width: number, height: number): Drop {
   drop.x += config.wind * time;
   drop.y += drop.speed * time;
 
-  if (drop.y > height) {
+  if (drop.y > floor) {
     drop.hit = true;
-    drop.hitX = drop.x - (config.wind * (drop.y - height)) / drop.speed;
-    drop.hitY = height;
+    drop.hitX = drop.x - (config.wind * (drop.y - floor)) / drop.speed;
+    drop.hitY = floor;
   }
 
   return drop;

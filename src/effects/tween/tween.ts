@@ -83,6 +83,22 @@ function smoothDamp(
   spring.value = value;
 }
 
+function springStep(
+  spring: Spring,
+  target: number,
+  frequency: number,
+  damping: number,
+  delta: number,
+): void {
+  const omega: number = Math.PI * 2 * frequency;
+  const force: number =
+    -(spring.value - target) * omega * omega -
+    2 * damping * omega * spring.velocity;
+
+  spring.velocity += force * delta;
+  spring.value += spring.velocity * delta;
+}
+
 function tween(
   ticker: Ticker,
   duration: number,
@@ -107,5 +123,5 @@ function tween(
   });
 }
 
-export { cubicBezier, ease, easeOut, approach, smoothDamp, tween };
+export { cubicBezier, ease, easeOut, approach, smoothDamp, springStep, tween };
 export type { Easing, Spring };

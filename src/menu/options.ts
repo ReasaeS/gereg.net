@@ -1,5 +1,5 @@
 import {
-  ColorMatrixFilter,
+  Assets,
   Container,
   Graphics,
   Rectangle,
@@ -7,231 +7,336 @@ import {
   type Application,
   type Ticker,
 } from "pixi.js";
-import { approach, ease } from "../effects/tween/tween";
+import {
+  cubicBezier,
+  springStep,
+  tween,
+  type Easing,
+  type Spring,
+} from "../effects/tween/tween";
 
-const buttonTop: number = 200; // px
-const buttonThick: number = 150; // px
-const buttonGap: number = 20; // px
-const buttonWidth: number = 33; // vw
-const buttonGrow: number = 5;
-const buttonBorder: number = 4;
-const textSaturationBoost: number = 25;
-const textLightnessBoost: number = 45;
-const bottomSaturationDrop: number = 20;
-const bottomLightnessDrop: number = 12;
-const glowSize: number = 12;
-const glowLightness: number = 55;
-const textPadding: number = 40;
-const indigoHue: number = 275;
-const indigoPull: number = 0.5;
-const hoverDuration: number = 150; // ms
-const hoverBrightness: number = 1.3;
-
-type Info = {
-  name: string;
-  hue: number;
-  saturation: number;
-  lightness: number;
-};
-
-type Colors = {
-  background: string;
-  text: string;
-  bottom: string;
-  glow: string;
-};
-
-type MenuButton = {
-  view: Container;
-  face: Graphics;
-  filters: Array<ColorMatrixFilter>;
-  colors: Colors;
-  hovered: boolean;
-  hover: number;
-};
-
-const info: Array<Info> = [
-  { name: "play", hue: 0, saturation: 50, lightness: 25 },
-  { name: "stats", hue: 130, saturation: 50, lightness: 25 },
-  { name: "config", hue: 220, saturation: 50, lightness: 25 },
-  { name: "about", hue: 0, saturation: 0, lightness: 25 },
+const fontPath: string = "./fonts/BarlowCondensed-BlackItalic.ttf";
+const fontFamily: Array<string> = [
+  "Barlow Condensed",
+  "Arial Black",
+  "Impact",
+  "sans-serif",
 ];
+const fontSize: number = 132; // px
+const menuLeft: number = 52; // vw
+const menuTop: number = 20; // vh
+const menuReach: number = 44; // vw
+const menuReference: number = 1000; // px
+const menuMinScale: number = 0.4;
+const menuMaxScale: number = 1.2;
+const menuTilt: number = -0.18; // rad
+const itemSpacing: number = 122; // px
+const itemShift: number = 46; // px
+const idleColor: string = "#ffffff";
+const idleAlpha: number = 0.9;
+const selectedColor: string = "#061a52";
+const shadowColor: string = "#020b30";
+const shadowDistance: number = 9; // px
+const highlightColor: string = "#ffffff";
+const accentColor: string = "#ff2a4d";
+const highlightPadding: number = 30; // px
+const selectScale: number = 1.14;
+const springFrequency: number = 4.5; // Hz
+const springDamping: number = 0.45;
+const maxDelta: number = 0.05; // s
+const enterDuration: number = 420; // ms
+const enterStagger: number = 70; // ms
+const enterDistance: number = 1200; // px
+const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
+const bobAmount: number = 4; // px
+const bobSpeed: number = 0.35; // Hz
+
+const names: Array<string> = ["play", "stats", "config", "about"];
+
+type MenuItem = {
+  name: string;
+  view: Container;
+  label: Text;
+  scale: Spring;
+  enter: number; // px
+  baseX: number; // px
+  baseY: number; // px
+};
+
+type Highlight = {
+  x: Spring;
+  y: Spring;
+  width: Spring;
+};
+
+const items: Array<MenuItem> = new Array();
+const highlight: Highlight = {
+  x: { value: 0, velocity: 0 },
+  y: { value: 0, velocity: 0 },
+  width: { value: 0, velocity: 0 },
+};
+
+let selected: number = 0;
+let active: boolean = false;
 
 function navigate(name: string): void {
   document.dispatchEvent(new CustomEvent<string>("navigate", { detail: name }));
 }
 
-function hsl(hue: number, saturation: number, lightness: number): string {
-  return "hsl(" + hue + ", " + saturation + "%, " + lightness + "%)";
+function select(index: number): void {
+  selected = (index + items.length) % items.length;
 }
 
-function pullHue(hue: number): number {
-  const difference: number = ((indigoHue - hue + 540) % 360) - 180;
-  return (hue + difference * indigoPull + 360) % 360;
+function confirm(): void {
+  if (active) {
+    navigate(items[selected]!.name);
+  }
 }
 
-function buttonColors(aInfo: Info): Colors {
-  const hue: number = pullHue(aInfo.hue);
-  const textSaturation: number =
-    aInfo.saturation === 0
-      ? 0
-      : Math.min(100, aInfo.saturation + textSaturationBoost);
-  const textLightness: number = Math.min(
-    100,
-    aInfo.lightness + textLightnessBoost,
-  );
-
-  const bottomSaturation: number = Math.max(
-    0,
-    aInfo.saturation - bottomSaturationDrop,
-  );
-  const bottomLightness: number = Math.max(
-    0,
-    aInfo.lightness - bottomLightnessDrop,
-  );
-
-  return {
-    background: hsl(hue, aInfo.saturation, aInfo.lightness),
-    text: hsl(hue, textSaturation, textLightness),
-    bottom: hsl(hue, bottomSaturation, bottomLightness),
-    glow: hsl(hue, aInfo.saturation === 0 ? 0 : 100, glowLightness),
-  };
-}
-
-function glowText(
-  name: string,
-  color: string,
-  glow: string,
-  blur: number,
-): Text {
-  const text: Text = new Text({
+function createItem(name: string, index: number): MenuItem {
+  const view: Container = new Container();
+  const label: Text = new Text({
     text: name.toUpperCase(),
     style: {
-      fontFamily: "monospace",
-      fontSize: buttonThick / 2,
-      fill: color,
-      padding: blur * 2,
+      fontFamily: fontFamily,
+      fontSize: fontSize,
+      fontStyle: "italic",
+      fontWeight: "900",
+      fill: idleColor,
+      padding: shadowDistance * 2,
       dropShadow: {
-        color: glow,
-        alpha: 1,
-        blur: blur,
-        distance: 0,
-        angle: 0,
+        color: shadowColor,
+        alpha: 0.85,
+        blur: 0,
+        distance: shadowDistance,
+        angle: Math.PI / 3,
       },
     },
   });
-  text.anchor.set(0, 0.5);
-
-  return text;
-}
-
-function createLabel(name: string, colors: Colors): Container {
-  const label: Container = new Container();
-  label.addChild(glowText(name, colors.text, colors.glow, glowSize * 2));
-  label.addChild(glowText(name, colors.text, colors.glow, glowSize));
-  label.addChild(glowText(name, colors.text, colors.text, glowSize / 4));
-  label.position.set(buttonBorder + textPadding, buttonThick / 2);
-
-  return label;
-}
-
-function paintButton(button: MenuButton, width: number): void {
-  const border: number = buttonBorder;
-  const height: number = buttonThick;
-
-  button.face
-    .clear()
-    .rect(0, 0, width, height)
-    .fill(button.colors.background)
-    .poly([0, 0, width, 0, width, border, border, border])
-    .fill(button.colors.text)
-    .poly([0, 0, border, border, border, height - border, 0, height])
-    .fill(button.colors.text)
-    .poly([
-      0,
-      height,
-      border,
-      height - border,
-      width,
-      height - border,
-      width,
-      height,
-    ])
-    .fill(button.colors.bottom);
-  button.view.hitArea = new Rectangle(0, 0, width, height);
-}
-
-function createButton(aInfo: Info, index: number): MenuButton {
-  const view: Container = new Container();
-  const button: MenuButton = {
+  const item: MenuItem = {
+    name: name,
     view: view,
-    face: new Graphics(),
-    filters: [new ColorMatrixFilter()],
-    colors: buttonColors(aInfo),
-    hovered: false,
-    hover: 0,
+    label: label,
+    scale: { value: 1, velocity: 0 },
+    enter: enterDistance,
+    baseX: itemShift * index,
+    baseY: itemSpacing * index,
   };
 
-  view.addChild(button.face);
-  view.addChild(createLabel(aInfo.name, button.colors));
-  view.y = buttonTop + (buttonThick + buttonGap) * index;
+  label.anchor.set(0, 0.5);
+  view.addChild(label);
+  view.alpha = 0;
+  view.hitArea = new Rectangle(
+    -highlightPadding,
+    -label.height / 2,
+    label.width + highlightPadding * 2,
+    label.height,
+  );
   view.eventMode = "static";
   view.cursor = "pointer";
   view.interactiveChildren = false;
 
-  view.on("pointerover", () => {
-    button.hovered = true;
+  view.on("pointerover", () => select(index));
+  view.on("pointertap", () => {
+    select(index);
+    confirm();
   });
-  view.on("pointerout", () => {
-    button.hovered = false;
-  });
-  view.on("pointertap", () => navigate(aInfo.name));
 
-  return button;
+  return item;
 }
 
-const buttons: Array<MenuButton> = new Array();
+function drawHighlight(graphics: Graphics, height: number): void {
+  const x: number = highlight.x.value;
+  const y: number = highlight.y.value;
+  const width: number = highlight.width.value;
+  const left: number = x - highlightPadding * 1.4;
+  const right: number = x + width + highlightPadding * 1.8;
+  const top: number = y - height / 2 + 4;
+  const bottom: number = y + height / 2 - 6;
 
-function buttonFaces(): Array<Container> {
-  return buttons.map((button: MenuButton) => button.face);
+  graphics
+    .clear()
+    .poly([
+      left + 22,
+      top + 18,
+      right + 30,
+      top - 2,
+      right + 14,
+      bottom + 16,
+      left - 8,
+      bottom + 24,
+    ])
+    .fill(accentColor)
+    .poly([
+      left,
+      top + 8,
+      right,
+      top - 8,
+      right - 16,
+      bottom + 2,
+      left + 12,
+      bottom + 10,
+    ])
+    .fill(highlightColor);
 }
 
-function createButtons(app: Application): Container {
-  const buttonDiv: Container = new Container();
+function menuWidth(): number {
+  let width: number = 0;
 
-  for (let index = 0; index < info.length; index++) {
-    const button: MenuButton = createButton(info[index]!, index);
-    buttons.push(button);
-    buttonDiv.addChild(button.view);
+  for (let index = 0; index < items.length; index++) {
+    const item: MenuItem = items[index]!;
+    width = Math.max(
+      width,
+      item.baseX + item.label.width * selectScale + highlightPadding * 3,
+    );
   }
 
-  app.ticker.add((ticker: Ticker) => {
-    for (let index = 0; index < buttons.length; index++) {
-      const button: MenuButton = buttons[index]!;
-      button.hover = approach(
-        button.hover,
-        button.hovered ? 1 : 0,
-        ticker.deltaMS / hoverDuration,
-      );
-
-      const grow: number = ease(button.hover);
-      const width: number =
-        (app.screen.width * (buttonWidth + buttonGrow * grow)) / 100;
-
-      paintButton(button, width);
-      button.view.x = app.screen.width - width;
-
-      if (grow === 0) {
-        button.view.filters = null;
-      } else {
-        button.filters[0]!.brightness(1 + (hoverBrightness - 1) * grow, false);
-        button.view.filters = button.filters;
-      }
-    }
-  });
-
-  return buttonDiv;
+  return width;
 }
 
-export { createButtons, buttonFaces, navigate };
-export type { Info };
+function resetButtons(): void {
+  for (let index = 0; index < items.length; index++) {
+    items[index]!.enter = enterDistance;
+    items[index]!.view.alpha = 0;
+  }
+}
+
+function enterButtons(ticker: Ticker): Promise<void> {
+  const total: number = enterDuration + enterStagger * (items.length - 1);
+
+  return tween(ticker, total, (progress: number) => {
+    for (let index = 0; index < items.length; index++) {
+      const item: MenuItem = items[index]!;
+      const local: number = Math.min(
+        Math.max((progress * total - index * enterStagger) / enterDuration, 0),
+        1,
+      );
+
+      item.enter = enterDistance * (1 - enterEasing(local));
+      item.view.alpha = Math.min(local * 2, 1);
+    }
+  });
+}
+
+function setButtonsActive(value: boolean): void {
+  active = value;
+}
+
+function buttonFaces(): Array<Container> {
+  return items.map((item: MenuItem) => item.view);
+}
+
+async function createButtons(app: Application): Promise<Container> {
+  await Assets.load({
+    src: fontPath,
+    data: { family: "Barlow Condensed", weights: ["900"], style: "italic" },
+  });
+
+  const root: Container = new Container();
+  const marker: Graphics = new Graphics();
+  let time: number = 0;
+
+  root.addChild(marker);
+
+  for (let index = 0; index < names.length; index++) {
+    const item: MenuItem = createItem(names[index]!, index);
+    items.push(item);
+    root.addChild(item.view);
+  }
+
+  const width: number = menuWidth();
+  const textHeight: number = items[0]?.label.height ?? fontSize;
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (!active) {
+      return;
+    }
+
+    if (event.code === "ArrowDown" || event.code === "KeyS") {
+      select(selected + 1);
+    } else if (event.code === "ArrowUp" || event.code === "KeyW") {
+      select(selected - 1);
+    } else if (event.code === "Enter" || event.code === "Space") {
+      confirm();
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+  });
+
+  app.ticker.add((ticker: Ticker) => {
+    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    const screenWidth: number = app.screen.width;
+    const screenHeight: number = app.screen.height;
+    const scale: number = Math.min(
+      Math.max(screenHeight / menuReference, menuMinScale),
+      (screenWidth * menuReach) / 100 / width,
+      menuMaxScale,
+    );
+
+    time += delta;
+    root.position.set(
+      (screenWidth * menuLeft) / 100,
+      (screenHeight * menuTop) / 100,
+    );
+    root.scale.set(scale);
+    root.rotation = menuTilt;
+
+    for (let index = 0; index < items.length; index++) {
+      const item: MenuItem = items[index]!;
+      const chosen: boolean = index === selected;
+      const bob: number =
+        Math.sin((time * bobSpeed + index * 0.25) * Math.PI * 2) * bobAmount;
+
+      springStep(
+        item.scale,
+        chosen ? selectScale : 1,
+        springFrequency,
+        springDamping,
+        delta,
+      );
+      item.view.position.set(item.baseX + item.enter, item.baseY + bob);
+      item.view.scale.set(item.scale.value);
+      item.label.tint = chosen ? selectedColor : idleColor;
+      item.label.alpha = chosen ? 1 : idleAlpha;
+    }
+
+    const target: MenuItem = items[selected]!;
+
+    springStep(
+      highlight.x,
+      target.view.x,
+      springFrequency,
+      springDamping,
+      delta,
+    );
+    springStep(
+      highlight.y,
+      target.view.y,
+      springFrequency,
+      springDamping,
+      delta,
+    );
+    springStep(
+      highlight.width,
+      target.label.width * target.scale.value,
+      springFrequency,
+      springDamping,
+      delta,
+    );
+    marker.alpha = target.view.alpha;
+    drawHighlight(marker, textHeight);
+  });
+
+  return root;
+}
+
+export {
+  createButtons,
+  buttonFaces,
+  resetButtons,
+  enterButtons,
+  setButtonsActive,
+  navigate,
+};

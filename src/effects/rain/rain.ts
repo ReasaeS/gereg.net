@@ -7,7 +7,7 @@ import {
   type Rectangle,
   type Ticker,
 } from "pixi.js";
-import { loadSprites } from "./rainsprites";
+import { loadSprites, type SpriteLayers } from "./rainsprites";
 import {
   dropCount,
   createDrop,
@@ -36,8 +36,8 @@ const splashLife: number = 0.35;
 const splashBounce: number = 0.4;
 const splashSize: number = 1.5;
 const rainColor: string = "#aabedc";
-const spriteMinAlpha: number = 0.6;
-const spriteMaxAlpha: number = 1;
+const spriteMinAlpha: number = 0.25;
+const spriteMaxAlpha: number = 0.45;
 const spritePath: string = "./sprites/bullets/";
 const spriteScale: number = 1;
 const maxDelta: number = 0.05; // s
@@ -54,33 +54,23 @@ const spriteKinds: Array<SpriteKind> = [
 ];
 
 const spriteColors: Array<string> = [
-  "white",
-  "gray",
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "cyan",
-  "blue",
-  "purple",
-  "pink",
+  "#e5e5ef",
+  "#6f7686",
+  "#ff0000",
+  "#ff6f00",
+  "#ffdf00",
+  "#1fff30",
+  "#00dfff",
+  "#1f4fff",
+  "#af1fff",
+  "#ff4fbf",
 ];
 
 function rainSprites(): Array<RainSprite> {
-  const sprites: Array<RainSprite> = new Array();
-
-  for (let kind = 0; kind < spriteKinds.length; kind++) {
-    for (let color = 0; color < spriteColors.length; color++) {
-      const spriteKind: SpriteKind = spriteKinds[kind]!;
-      sprites.push({
-        path:
-          spritePath + spriteKind.name + "_" + spriteColors[color]! + ".png",
-        size: spriteKind.size * spriteScale,
-      });
-    }
-  }
-
-  return sprites;
+  return spriteKinds.map((kind: SpriteKind) => ({
+    path: spritePath + kind.name + ".png",
+    size: kind.size * spriteScale,
+  }));
 }
 
 const layerChances: Array<LayerChance> = [
@@ -103,6 +93,7 @@ const config: RainConfig = {
   color: rainColor,
   layerChances: layerChances,
   sprites: rainSprites(),
+  spriteColors: spriteColors,
   spriteMinAlpha: spriteMinAlpha,
   spriteMaxAlpha: spriteMaxAlpha,
 };
@@ -111,7 +102,9 @@ type RainLayer = {
   rain: Container;
   streaks: ParticleContainer;
   splashes: ParticleContainer;
-  bullets: ParticleContainer;
+  bullets: Container;
+  bulletColors: ParticleContainer;
+  bulletCores: ParticleContainer;
 };
 
 type RainLayers = {
@@ -126,7 +119,11 @@ type DropView = {
   layer: RainLayer;
   streak: Particle;
   bullet: Particle;
+  core: Particle;
 };
+
+type Floor = (x: number) => number;
+type Impact = (x: number, y: number, color: string) => void;
 
 type SplashView = {
   splash: Splash;
@@ -138,6 +135,21 @@ const surfaces: Array<Container> = new Array();
 const rects: Array<Rectangle> = new Array();
 
 let surfacesActive: boolean = true;
+let floor: Floor | null = null;
+let rainFloor: number = 1; // of screen height
+let impact: Impact | null = null;
+
+function setBulletFloor(value: Floor | null): void {
+  floor = value;
+}
+
+function setRainFloor(value: number): void {
+  rainFloor = value;
+}
+
+function onBulletImpact(value: Impact | null): void {
+  impact = value;
+}
 
 function addSurface(surface: Container): void {
   surfaces.push(surface);
@@ -201,7 +213,17 @@ function createLayer(bulletTexture: Texture): RainLayer {
       color: true,
     },
   });
-  const bullets: ParticleContainer = new ParticleContainer({
+  const bullets: Container = new Container();
+  const bulletColors: ParticleContainer = new ParticleContainer({
+    texture: bulletTexture,
+    dynamicProperties: {
+      position: true,
+      vertex: true,
+      uvs: true,
+      color: true,
+    },
+  });
+  const bulletCores: ParticleContainer = new ParticleContainer({
     texture: bulletTexture,
     dynamicProperties: {
       position: true,
@@ -211,6 +233,8 @@ function createLayer(bulletTexture: Texture): RainLayer {
     },
   });
 
+  bulletCores.blendMode = "add";
+  bullets.addChild(bulletColors, bulletCores);
   rain.eventMode = "none";
   bullets.eventMode = "none";
   rain.addChild(streaks, splashes);
@@ -220,16 +244,19 @@ function createLayer(bulletTexture: Texture): RainLayer {
     streaks: streaks,
     splashes: splashes,
     bullets: bullets,
+    bulletColors: bulletColors,
+    bulletCores: bulletCores,
   };
 }
 
 async function createRain(app: Application): Promise<RainLayers> {
-  const textures: Array<Texture> = await loadSprites(
+  const textures: Array<SpriteLayers> = await loadSprites(
     app.renderer,
     config.sprites,
   );
-  const back: RainLayer = createLayer(textures[0] ?? Texture.WHITE);
-  const front: RainLayer = createLayer(textures[0] ?? Texture.WHITE);
+  const bulletTexture: Texture = textures[0]?.color ?? Texture.WHITE;
+  const back: RainLayer = createLayer(bulletTexture);
+  const front: RainLayer = createLayer(bulletTexture);
   const drops: Array<DropView> = new Array();
   const splashes: Array<SplashView> = new Array();
 
@@ -245,14 +272,16 @@ async function createRain(app: Application): Promise<RainLayers> {
     }
 
     view.layer.streaks.removeParticle(view.streak);
-    view.layer.bullets.removeParticle(view.bullet);
+    view.layer.bulletColors.removeParticle(view.bullet);
+    view.layer.bulletCores.removeParticle(view.core);
     layer.streaks.addParticle(view.streak);
-    layer.bullets.addParticle(view.bullet);
+    layer.bulletColors.addParticle(view.bullet);
+    layer.bulletCores.addParticle(view.core);
     view.layer = layer;
   }
 
   function addDrop(width: number, height: number): void {
-    const drop: Drop = createDrop(config, width, height);
+    const drop: Drop = createDrop(config, width, height, height * rainFloor);
     const layer: RainLayer = layerOf(drop);
     const view: DropView = {
       drop: drop,
@@ -265,13 +294,27 @@ async function createRain(app: Application): Promise<RainLayers> {
         rotation: Math.atan2(-config.wind, drop.speed),
         tint: config.color,
       }),
-      bullet: new Particle({ texture: textures[0] ?? Texture.WHITE }),
+      bullet: new Particle({
+        texture: bulletTexture,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      }),
+      core: new Particle({
+        texture: bulletTexture,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      }),
     };
-    view.bullet.anchorX = 0.5;
-    view.bullet.anchorY = 0.5;
     layer.streaks.addParticle(view.streak);
-    layer.bullets.addParticle(view.bullet);
+    layer.bulletColors.addParticle(view.bullet);
+    layer.bulletCores.addParticle(view.core);
     drops.push(view);
+    drawDrop(view);
+
+    if (belowFloor(view)) {
+      view.drop.absorbed = true;
+      drawDrop(view);
+    }
   }
 
   function removeDrop(): void {
@@ -279,7 +322,8 @@ async function createRain(app: Application): Promise<RainLayers> {
 
     if (view !== undefined) {
       view.layer.streaks.removeParticle(view.streak);
-      view.layer.bullets.removeParticle(view.bullet);
+      view.layer.bulletColors.removeParticle(view.bullet);
+      view.layer.bulletCores.removeParticle(view.core);
     }
   }
 
@@ -322,27 +366,58 @@ async function createRain(app: Application): Promise<RainLayers> {
     streak.scaleY = Math.max(visible, 0);
     streak.alpha = visible > 0 ? drop.alpha : 0;
 
-    const texture: Texture | undefined = textures[drop.sprite];
+    const layers: SpriteLayers | undefined = textures[drop.sprite];
 
-    if (texture === undefined) {
+    if (layers === undefined) {
       bullet.alpha = 0;
+      view.core.alpha = 0;
       return;
     }
 
     const size: number = config.sprites[drop.sprite]!.size;
-    const scale: number = size / texture.width;
+    const scale: number = size / layers.color.width;
     const speed: number = Math.hypot(config.wind, drop.speed);
     const reach: number =
-      (Math.hypot(texture.width, texture.height) * scale) / 2;
+      (Math.hypot(layers.color.width, layers.color.height) * scale) / 2;
     const past: number =
       ((drop.y - drop.hitY - drop.length / 2) / drop.speed) * speed - reach;
+    const x: number = drop.x - (config.wind * drop.length) / drop.speed / 2;
+    const y: number = drop.y - drop.length / 2;
+    const sunk: boolean =
+      drop.absorbed &&
+      floor !== null &&
+      y - (layers.color.height * scale) / 2 >= floor(x);
+    const alpha: number =
+      (drop.hit && past >= 0) || sunk ? 0 : drop.spriteAlpha;
 
-    bullet.texture = texture;
-    bullet.scaleX = scale;
-    bullet.scaleY = scale;
-    bullet.x = drop.x - (config.wind * drop.length) / drop.speed / 2;
-    bullet.y = drop.y - drop.length / 2;
-    bullet.alpha = drop.hit && past >= 0 ? 0 : drop.spriteAlpha;
+    bullet.texture = layers.color;
+    bullet.tint = config.spriteColors[drop.spriteColor]!;
+    view.core.texture = layers.core;
+
+    for (const particle of [bullet, view.core]) {
+      particle.scaleX = scale;
+      particle.scaleY = scale;
+      particle.x = x;
+      particle.y = y;
+      particle.alpha = alpha;
+    }
+  }
+
+  function belowFloor(view: DropView): boolean {
+    return floor !== null && view.bullet.y >= floor(view.bullet.x);
+  }
+
+  function absorb(view: DropView): void {
+    if (view.drop.absorbed || view.bullet.alpha === 0 || !belowFloor(view)) {
+      return;
+    }
+
+    view.drop.absorbed = true;
+    impact?.(
+      view.bullet.x,
+      floor!(view.bullet.x),
+      config.spriteColors[view.drop.spriteColor]!,
+    );
   }
 
   app.ticker.add((ticker: Ticker) => {
@@ -363,7 +438,13 @@ async function createRain(app: Application): Promise<RainLayers> {
 
     for (let index = 0; index < drops.length; index++) {
       const view: DropView = drops[index]!;
-      const hit: Hit | null = stepDrop(view.drop, delta, config, rects, height);
+      const hit: Hit | null = stepDrop(
+        view.drop,
+        delta,
+        config,
+        rects,
+        height * rainFloor,
+      );
 
       if (hit !== null) {
         addSplashes(hit, view.drop);
@@ -375,6 +456,7 @@ async function createRain(app: Application): Promise<RainLayers> {
       }
 
       drawDrop(view);
+      absorb(view);
     }
 
     for (let index = splashes.length - 1; index >= 0; index--) {
@@ -401,5 +483,12 @@ async function createRain(app: Application): Promise<RainLayers> {
   };
 }
 
-export { createRain, addSurface, setSurfacesActive };
+export {
+  createRain,
+  addSurface,
+  setSurfacesActive,
+  setBulletFloor,
+  setRainFloor,
+  onBulletImpact,
+};
 export type { RainLayers };
