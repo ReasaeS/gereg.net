@@ -16,6 +16,8 @@ import {
   type PageContent,
 } from "./menu/page";
 import { createEditor } from "./editor/editor";
+import { createSettings } from "./settings/panel";
+import { createGuides } from "./dev/guides";
 import {
   createLanding,
   setLandingEnabled,
@@ -117,6 +119,7 @@ vivid.addChild(menu);
 
 const pageContents: Map<string, PageContent> = new Map([
   ["customise", createEditor(app)],
+  ["config", createSettings(app)],
 ]);
 
 for (let index = 0; index < pageNames.length; index++) {
@@ -129,7 +132,14 @@ addPortalView(city, true);
 addPortalView(vivid, false);
 addPortalView(cityFront, true);
 addPortalView(vividFront, false);
-app.stage.addChild(city, vivid, landing, cityFront, vividFront);
+app.stage.addChild(
+  city,
+  vivid,
+  landing,
+  cityFront,
+  vividFront,
+  createGuides(app),
+);
 startPortal(app);
 
 type Screen =

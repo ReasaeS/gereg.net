@@ -192,6 +192,10 @@ function menuTexture(): Texture {
   return drawings[1]!.texture;
 }
 
+function menuPixels(): Pixels {
+  return drawings[1]!.pixels;
+}
+
 function createEditor(app: Application): Editor {
   const view: Container = new Container();
   const board: Container = new Container();
@@ -715,5 +719,5 @@ function createEditor(app: Application): Editor {
   return { view: view, setActive: setActive };
 }
 
-export { createEditor, playerTexture, menuTexture };
+export { createEditor, playerTexture, menuTexture, menuPixels };
 export type { Editor };

@@ -49,6 +49,8 @@ const flarePulse: number = 0.4; // Hz
 const flareScale: number = 0.6; // of lighthouse height
 const flareMinAlpha: number = 0.25;
 const flareMaxAlpha: number = 0.9;
+const beamCutoffAngle: number = 0.26; // rad from vertical
+const beamFadeAngle: number = 0.6; // rad from vertical
 
 function createBeamTexture(renderer: Renderer): Texture {
   const shape: Graphics = new Graphics();
@@ -95,7 +97,12 @@ function drawTower(tower: Graphics, theme: Theme): void {
     return (towerBottomWidth + (towerTopWidth - towerBottomWidth) * along) / 2;
   }
 
-  tower.clear();
+  tower
+    .clear()
+    .poly([
+      -40, 12, -34, -4, -22, -10, -6, -12, 14, -11, 30, -7, 42, -2, 46, 12,
+    ])
+    .fill(theme.menuSelected);
 
   for (let band = 0; band < stripeCount; band++) {
     const bottom: number = towerBottom - band * bandHeight;
@@ -212,8 +219,22 @@ function createLighthouse(
       flareMinAlpha +
       (flareMaxAlpha - flareMinAlpha) *
         (0.5 + 0.5 * Math.sin(time * flarePulse * Math.PI * 2));
-    beam.position.set(lampX + beamOriginX * scale, lampHeight);
+    const facing: number = Math.cos(aim.value);
+    const fade: number = Math.min(
+      Math.max(
+        (Math.asin(Math.min(Math.abs(facing), 1)) - beamCutoffAngle) /
+          (beamFadeAngle - beamCutoffAngle),
+        0,
+      ),
+      1,
+    );
+
+    beam.position.set(
+      lampX + Math.sign(facing) * beamOriginX * scale,
+      lampHeight,
+    );
     beam.rotation = aim.value;
+    beam.alpha = fade * fade * (3 - 2 * fade);
     beam.scale.set(
       Math.max(reach.value, 0) / beamTextureWidth,
       (width * beamLength * beamThickness) / beamTextureWidth,

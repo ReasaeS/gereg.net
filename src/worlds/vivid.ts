@@ -11,17 +11,12 @@ import {
   type Texture,
   type Ticker,
 } from "pixi.js";
+import { approach } from "../effects/tween/tween";
 import { createLighthouse, type Lighthouse } from "./lighthouse";
+import { createWitch, type Witch } from "./witch";
+import { menuPixels, menuTexture } from "../editor/editor";
 import { onTheme, type Theme } from "../theme/theme";
-
-type Glow = {
-  sprite: Sprite;
-  x: number; // %
-  y: number; // %
-  drift: number; // %
-  speed: number;
-  phase: number;
-};
+import { onSky, type Sky } from "../settings/settings";
 
 type Reflection = {
   x: number; // %
@@ -41,18 +36,8 @@ type Bloom = {
 type Mote = {
   particle: Particle;
   x: number; // %
-  y: number; // px
+  y: number; // %
   drift: number; // px
-  speed: number;
-  phase: number;
-};
-
-type Ray = {
-  sprite: Sprite;
-  alpha: number;
-  x: number; // %
-  width: number; // %
-  tilt: number; // rad
   speed: number;
   phase: number;
 };
@@ -71,7 +56,6 @@ type Scenery = {
   glowY: number; // screen heights below the dive point
   moteColor: string;
   kelp: boolean;
-  rayBoost: number;
 };
 
 type Target = () => Point | null;
@@ -89,26 +73,45 @@ type Vivid = {
   absorb: (x: number, y: number, color: string) => void;
 };
 
-type Shaft = {
-  sprite: Sprite;
+type Star = {
+  particle: Particle;
   x: number; // %
-  width: number; // %
-  tilt: number; // rad
-  sway: number; // rad
+  y: number; // of sky height
+  alpha: number;
   speed: number;
   phase: number;
 };
 
 const skyStops: Array<string> = ["#06205e", "#1a5fc4", "#8fd0ff", "#8fd0ff"];
 const seaStops: Array<string> = ["#2a86e0", "#0b3f9e", "#031448"];
+const nightSkyStops: Array<string> = [
+  "#010309",
+  "#061233",
+  "#173468",
+  "#1d3d74",
+];
+const nightSeaStops: Array<string> = ["#123a78", "#071d4a", "#020a26"];
+const nightDuration: number = 1.2; // s
+const starCount: number = 140;
+const starMinSize: number = 3; // px
+const starMaxSize: number = 8; // px
+const starMinAlpha: number = 0.3;
+const starMaxAlpha: number = 0.95;
+const starTwinkle: number = 0.35;
+const starHeight: number = 0.85; // of sky height
+const moonX: number = 0.36; // of screen width
+const moonY: number = 0.16; // of screen height
+const moonRadius: number = 0.045; // of screen height
+const moonColor: string = "#f3f1e4";
+const moonShade: string = "#d9d6c6";
+const moonHaloColor: string = "#9fc0ff";
+const moonHaloScale: number = 9; // moon radii
+const moonHaloAlpha: number = 0.35;
 const seaHeight: number = 20; // vh
 const abyssColor: string = "#01030a";
 const diveDistance: number = 2.2; // screen heights
 const sceneries: Map<string, Scenery> = new Map([
-  [
-    "config",
-    { glow: null, glowY: 0, moteColor: "#bfe9ff", kelp: false, rayBoost: 1 },
-  ],
+  ["config", { glow: null, glowY: 0, moteColor: "#bfe9ff", kelp: false }],
   [
     "play",
     {
@@ -116,7 +119,6 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: 0.7,
       moteColor: "#ff9aa8",
       kelp: false,
-      rayBoost: 0.4,
     },
   ],
   [
@@ -126,7 +128,6 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: 0.6,
       moteColor: "#b8ffd9",
       kelp: true,
-      rayBoost: 0.8,
     },
   ],
   [
@@ -136,7 +137,6 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: -0.8,
       moteColor: "#ffffff",
       kelp: false,
-      rayBoost: 3,
     },
   ],
 ]);
@@ -151,15 +151,7 @@ const kelpMinWidth: number = 6; // px
 const kelpMaxWidth: number = 16; // px
 const kelpMaxSway: number = 40; // px
 const kelpSegments: number = 12;
-const rayCount: number = 6;
-const rayMinWidth: number = 6; // %
-const rayMaxWidth: number = 16; // %
-const rayLength: number = 1.8; // of screen height
-const rayTilt: number = 0.22; // rad
-const rayMinAlpha: number = 0.05;
-const rayMaxAlpha: number = 0.12;
-const raySway: number = 0.04; // rad
-const moteCount: number = 90;
+const moteCount: number = 180;
 const moteMinSize: number = 2; // px
 const moteMaxSize: number = 6; // px
 const moteMaxAlpha: number = 0.5;
@@ -177,23 +169,6 @@ const reflectionMaxAlpha: number = 0.3;
 const reflectionMinSpeed: number = 6; // px/s
 const reflectionMaxSpeed: number = 20; // px/s
 const glowTextureSize: number = 256; // px
-const glowCount: number = 4;
-const glowScale: number = 0.7; // of the longer screen side
-const glowMinAlpha: number = 0.18;
-const glowMaxAlpha: number = 0.32;
-const glowDrift: number = 12; // %
-const glowMinSpeed: number = 0.03;
-const glowMaxSpeed: number = 0.08;
-const shaftCount: number = 7;
-const shaftMinWidth: number = 5; // %
-const shaftMaxWidth: number = 14; // %
-const shaftLength: number = 2.4; // of screen height
-const shaftTilt: number = 0.28; // rad
-const shaftSway: number = 0.05; // rad
-const shaftMinAlpha: number = 0.1;
-const shaftMaxAlpha: number = 0.22;
-const shaftMinSpeed: number = 0.04;
-const shaftMaxSpeed: number = 0.1;
 const glowFalloff: Array<Array<number>> = [
   [0, 1],
   [0.35, 0.45],
@@ -258,7 +233,6 @@ function createVivid(app: Application): Vivid {
   const rainLayer: Container = new Container();
   const view: Container = new Container();
   const sky: Graphics = new Graphics();
-  const light: Container = new Container();
   const scene: Container = new Container();
   const aboveSea: Graphics = new Graphics();
   const sea: Container = new Container();
@@ -268,9 +242,25 @@ function createVivid(app: Application): Vivid {
   const surface: Graphics = new Graphics();
   const seaMask: Graphics = new Graphics();
   let seaGradient: FillGradient = verticalGradient(seaStops);
-  const reflections: Array<Reflection> = new Array();
+  let nightSeaGradient: FillGradient = verticalGradient(nightSeaStops);
+  const nightSky: Graphics = new Graphics();
+  const nightWater: Graphics = new Graphics();
+  const nightGradient: FillGradient = verticalGradient(nightSkyStops);
+  const moon: Graphics = new Graphics();
+  const moonHalo: Sprite = new Sprite();
+  const starLayer: ParticleContainer = new ParticleContainer({
+    dynamicProperties: {
+      position: true,
+      vertex: true,
+      color: true,
+    },
+  });
+  const stars: Array<Star> = new Array();
+  let night: number = 0;
+  let nightTarget: number = 0;
   const glowTexture: Texture = createGlowTexture(app.renderer, glowFalloff);
   const plumeTexture: Texture = createGlowTexture(app.renderer, plumeFalloff);
+  const reflections: Array<Reflection> = new Array();
   const bloomLayer: ParticleContainer = new ParticleContainer({
     texture: plumeTexture,
     dynamicProperties: {
@@ -288,51 +278,15 @@ function createVivid(app: Application): Vivid {
     },
   });
   const motes: Array<Mote> = new Array();
-  const rays: Array<Ray> = new Array();
   let depth: number = 0;
   let flip: number = 0;
   let scenery: Scenery = sceneries.get("config")!;
   const sceneryGlow: Sprite = new Sprite(glowTexture);
   const kelpLayer: Graphics = new Graphics();
   const kelps: Array<Kelp> = new Array();
-  const glows: Array<Glow> = new Array();
-  const shafts: Array<Shaft> = new Array();
   let time: number = 0;
   let beamTarget: Target | null = null;
   const beamLocal: Point = new Point();
-
-  for (let index = 0; index < glowCount; index++) {
-    const sprite: Sprite = new Sprite(glowTexture);
-    sprite.anchor.set(0.5);
-    sprite.alpha = mix(glowMinAlpha, glowMaxAlpha, Math.random());
-    sprite.blendMode = "add";
-    light.addChild(sprite);
-    glows.push({
-      sprite: sprite,
-      x: mix(5, 95, Math.random()),
-      y: mix(5, 95, Math.random()),
-      drift: glowDrift * mix(0.5, 1, Math.random()),
-      speed: mix(glowMinSpeed, glowMaxSpeed, Math.random()),
-      phase: Math.random() * Math.PI * 2,
-    });
-  }
-
-  for (let index = 0; index < shaftCount; index++) {
-    const sprite: Sprite = new Sprite(glowTexture);
-    sprite.anchor.set(0.5);
-    sprite.alpha = mix(shaftMinAlpha, shaftMaxAlpha, Math.random());
-    sprite.blendMode = "add";
-    light.addChild(sprite);
-    shafts.push({
-      sprite: sprite,
-      x: ((index + Math.random()) / shaftCount) * 120 - 10,
-      width: mix(shaftMinWidth, shaftMaxWidth, Math.random()),
-      tilt: shaftTilt * mix(0.8, 1.2, Math.random()),
-      sway: shaftSway * mix(0.5, 1, Math.random()),
-      speed: mix(shaftMinSpeed, shaftMaxSpeed, Math.random()),
-      phase: Math.random() * Math.PI * 2,
-    });
-  }
 
   for (let index = 0; index < reflectionCount; index++) {
     reflections.push({
@@ -341,22 +295,6 @@ function createVivid(app: Application): Vivid {
       length: mix(reflectionMinLength, reflectionMaxLength, Math.random()),
       alpha: mix(reflectionMinAlpha, reflectionMaxAlpha, Math.random()),
       speed: mix(reflectionMinSpeed, reflectionMaxSpeed, Math.random()),
-    });
-  }
-
-  for (let index = 0; index < rayCount; index++) {
-    const sprite: Sprite = new Sprite(glowTexture);
-    sprite.anchor.set(0.5);
-    sprite.blendMode = "add";
-    deep.addChild(sprite);
-    rays.push({
-      sprite: sprite,
-      alpha: mix(rayMinAlpha, rayMaxAlpha, Math.random()),
-      x: ((index + Math.random()) / rayCount) * 110 - 5,
-      width: mix(rayMinWidth, rayMaxWidth, Math.random()),
-      tilt: rayTilt * mix(0.8, 1.2, Math.random()),
-      speed: mix(shaftMinSpeed, shaftMaxSpeed, Math.random()),
-      phase: Math.random() * Math.PI * 2,
     });
   }
 
@@ -375,7 +313,7 @@ function createVivid(app: Application): Vivid {
     motes.push({
       particle: particle,
       x: Math.random() * 100,
-      y: Math.random() * app.screen.height,
+      y: Math.random() * 100,
       drift: Math.random() * moteMaxDrift,
       speed: mix(0.05, 0.2, Math.random()),
       phase: Math.random() * Math.PI * 2,
@@ -393,16 +331,65 @@ function createVivid(app: Application): Vivid {
     });
   }
 
+  for (let index = 0; index < starCount; index++) {
+    const size: number = mix(
+      starMinSize,
+      starMaxSize,
+      Math.pow(Math.random(), 3),
+    );
+    const particle: Particle = new Particle({
+      texture: glowTexture,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      scaleX: size / glowTextureSize,
+      scaleY: size / glowTextureSize,
+      tint: 0xffffff,
+      alpha: 0,
+    });
+    starLayer.addParticle(particle);
+    stars.push({
+      particle: particle,
+      x: Math.random() * 100,
+      y: Math.pow(Math.random(), 1.4) * starHeight,
+      alpha: mix(starMinAlpha, starMaxAlpha, Math.random()),
+      speed: mix(0.1, 0.5, Math.random()),
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+
+  starLayer.texture = glowTexture;
+  starLayer.blendMode = "add";
+  moonHalo.texture = glowTexture;
+  moonHalo.anchor.set(0.5);
+  moonHalo.tint = moonHaloColor;
+  moonHalo.blendMode = "add";
   sceneryGlow.anchor.set(0.5);
   sceneryGlow.blendMode = "add";
   deep.addChild(sceneryGlow, kelpLayer, deepMask);
   setScenery("config");
   deep.setMask({ mask: deepMask, inverse: false });
-  sea.addChild(water, seaMask, deep, bloomLayer, surface);
+  sea.addChild(water, nightWater, seaMask, deep, bloomLayer, surface);
   bloomLayer.setMask({ mask: seaMask, inverse: false });
   const lighthouse: Lighthouse = createLighthouse(app.renderer, glowTexture);
 
-  scene.addChild(sky, light, rainLayer, lighthouse.view, lighthouse.beam, sea);
+  const witch: Witch = createWitch(
+    menuTexture(),
+    menuPixels(),
+    app.renderer.events.pointer.global,
+  );
+
+  scene.addChild(
+    sky,
+    nightSky,
+    starLayer,
+    moonHalo,
+    moon,
+    rainLayer,
+    witch.view,
+    lighthouse.view,
+    lighthouse.beam,
+    sea,
+  );
   moteLayer.blendMode = "add";
   moteLayer.alpha = 0;
 
@@ -422,22 +409,80 @@ function createVivid(app: Application): Vivid {
 
     const margin: number = overscan();
 
+    const radius: number = height * moonRadius;
+
     sky
       .clear()
       .rect(-margin, -margin, app.screen.width + margin * 2, height + margin)
       .fill(gradient);
+    nightSky
+      .clear()
+      .rect(-margin, -margin, app.screen.width + margin * 2, height + margin)
+      .fill(nightGradient);
+    moon
+      .clear()
+      .circle(0, 0, radius)
+      .fill(moonColor)
+      .circle(-radius * 0.35, -radius * 0.2, radius * 0.22)
+      .fill(moonShade)
+      .circle(radius * 0.3, radius * 0.35, radius * 0.14)
+      .fill(moonShade)
+      .circle(radius * 0.25, -radius * 0.4, radius * 0.09)
+      .fill(moonShade);
+    moon.position.set(app.screen.width * moonX, height * moonY);
+    moonHalo.position.copyFrom(moon.position);
+    moonHalo.width = radius * moonHaloScale;
+    moonHalo.height = radius * moonHaloScale;
     seaGradient.destroy();
-    seaGradient = new FillGradient({
+    seaGradient = seaFill(seaStops, surfaceDepth, total);
+    nightSeaGradient.destroy();
+    nightSeaGradient = seaFill(nightSeaStops, surfaceDepth, total);
+  }
+
+  function seaFill(
+    stops: Array<string>,
+    surfaceDepth: number,
+    total: number,
+  ): FillGradient {
+    return new FillGradient({
       type: "linear",
       start: { x: 0, y: 0 },
       end: { x: 0, y: 1 },
       colorStops: [
-        { offset: 0, color: seaStops[0]! },
-        { offset: (surfaceDepth * 0.5) / total, color: seaStops[1]! },
-        { offset: surfaceDepth / total, color: seaStops[2]! },
+        { offset: 0, color: stops[0]! },
+        { offset: (surfaceDepth * 0.5) / total, color: stops[1]! },
+        { offset: surfaceDepth / total, color: stops[2]! },
         { offset: 1, color: abyssColor },
       ],
     });
+  }
+
+  function drawNight(width: number, top: number, delta: number): void {
+    night = approach(night, nightTarget, delta / nightDuration);
+
+    const fade: number = night * night * (3 - 2 * night);
+
+    nightSky.alpha = fade;
+    nightWater.alpha = fade;
+    moon.alpha = fade;
+    moonHalo.alpha = fade * moonHaloAlpha;
+    starLayer.visible = fade > 0;
+
+    if (!starLayer.visible) {
+      return;
+    }
+
+    for (let index = 0; index < stars.length; index++) {
+      const star: Star = stars[index]!;
+      const twinkle: number =
+        1 -
+        starTwinkle *
+          (0.5 + 0.5 * Math.sin(time * star.speed * Math.PI * 2 + star.phase));
+
+      star.particle.x = (width * star.x) / 100;
+      star.particle.y = top * star.y;
+      star.particle.alpha = star.alpha * twinkle * fade;
+    }
   }
 
   function overscan(): number {
@@ -514,23 +559,13 @@ function createVivid(app: Application): Vivid {
     scene.position.set(width / 2, height / 2);
     scene.pivot.set(width / 2, height / 2 + dive);
     scene.rotation = flip;
+    moteLayer.position.set(width / 2, height / 2);
+    moteLayer.rotation = flip;
     moteLayer.alpha = Math.min(depth * 3, 1) * moteMaxAlpha;
     deepMask
       .clear()
       .rect(-overscan(), top, width + overscan() * 2, seaDepth(height))
       .fill(0xffffff);
-
-    for (let index = 0; index < rays.length; index++) {
-      const ray: Ray = rays[index]!;
-      const swing: number =
-        Math.sin(time * ray.speed * Math.PI * 2 + ray.phase) * raySway;
-
-      ray.sprite.position.set((width * ray.x) / 100, top);
-      ray.sprite.alpha = ray.alpha * mix(1, scenery.rayBoost, depth);
-      ray.sprite.rotation = ray.tilt + swing;
-      ray.sprite.width = (width * ray.width) / 100;
-      ray.sprite.height = height * rayLength * 2;
-    }
 
     drawScenery(width, height, dive);
 
@@ -538,15 +573,18 @@ function createVivid(app: Application): Vivid {
       return;
     }
 
+    const field: number = overscan() * 2;
+    const span: number = field + moteMaxSize * 2;
+
     for (let index = 0; index < motes.length; index++) {
       const mote: Mote = motes[index]!;
-      const span: number = height + moteMaxSize * 2;
-      const y: number = (((mote.y - dive * moteParallax) % span) + span) % span;
+      const start: number = (span * mote.y) / 100 - dive * moteParallax;
+      const y: number = ((start % span) + span) % span;
 
       mote.particle.x =
-        (width * mote.x) / 100 +
+        (field * (mote.x - 50)) / 100 +
         Math.sin((time * mote.speed + mote.phase) * Math.PI * 2) * mote.drift;
-      mote.particle.y = y - moteMaxSize;
+      mote.particle.y = y - span / 2;
     }
   }
 
@@ -559,6 +597,10 @@ function createVivid(app: Application): Vivid {
       .clear()
       .rect(-margin, top, width + margin * 2, seaDepth(height) + margin)
       .fill(seaGradient);
+    nightWater
+      .clear()
+      .rect(-margin, top, width + margin * 2, seaDepth(height) + margin)
+      .fill(nightSeaGradient);
     seaMask
       .clear()
       .rect(-margin, top, width + margin * 2, seaDepth(height) + margin)
@@ -660,21 +702,13 @@ function createVivid(app: Application): Vivid {
     gradient.destroy();
     gradient = verticalGradient(skyStops);
 
-    for (let index = 0; index < glows.length; index++) {
-      glows[index]!.sprite.tint =
-        index % 2 === 0 ? theme.horizon : theme.skyMiddle;
-    }
-
-    for (let index = 0; index < shafts.length; index++) {
-      shafts[index]!.sprite.tint = theme.light;
-    }
-
-    for (let index = 0; index < rays.length; index++) {
-      rays[index]!.sprite.tint = theme.light;
-    }
-
     build();
   });
+
+  onSky((sky: Sky) => {
+    nightTarget = sky === "night" ? 1 : 0;
+  });
+  night = nightTarget;
 
   build();
   app.renderer.on("resize", build);
@@ -683,13 +717,16 @@ function createVivid(app: Application): Vivid {
     const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
     const width: number = app.screen.width;
     const height: number = app.screen.height;
-    const size: number = Math.max(width, height) * glowScale;
 
     time += delta;
 
+    witch.update(width, height, delta);
+
     const target: Point | null = beamTarget?.() ?? null;
 
-    if (target !== null) {
+    if (witch.hovered()) {
+      beamLocal.copyFrom(witch.view.position);
+    } else if (target !== null) {
       scene.toLocal(target, undefined, beamLocal);
     }
 
@@ -697,33 +734,11 @@ function createVivid(app: Application): Vivid {
       width,
       height,
       height * (1 - seaHeight / 100),
-      target === null ? null : beamLocal,
+      target === null && !witch.hovered() ? null : beamLocal,
       delta,
     );
 
-    for (let index = 0; index < glows.length; index++) {
-      const glow: Glow = glows[index]!;
-      const angle: number = time * glow.speed * Math.PI * 2 + glow.phase;
-
-      glow.sprite.position.set(
-        (width * (glow.x + glow.drift * Math.cos(angle))) / 100,
-        (height * (glow.y + glow.drift * Math.sin(angle * 0.7))) / 100,
-      );
-      glow.sprite.width = size;
-      glow.sprite.height = size;
-    }
-
-    for (let index = 0; index < shafts.length; index++) {
-      const shaft: Shaft = shafts[index]!;
-      const swing: number =
-        Math.sin(time * shaft.speed * Math.PI * 2 + shaft.phase) * shaft.sway;
-
-      shaft.sprite.position.set((width * shaft.x) / 100, 0);
-      shaft.sprite.rotation = shaft.tilt + swing;
-      shaft.sprite.width = (width * shaft.width) / 100;
-      shaft.sprite.height = height * shaftLength;
-    }
-
+    drawNight(width, height * (1 - seaHeight / 100), delta);
     drawSea(width, height, delta);
     drawDeep(width, height, height * (1 - seaHeight / 100));
     drawBlooms(delta, height);
