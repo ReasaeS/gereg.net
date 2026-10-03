@@ -8,6 +8,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { loadSprites, type SpriteLayers } from "./rainsprites";
+import { getTheme, onTheme, type Theme } from "../../theme/theme";
 import {
   dropCount,
   createDrop,
@@ -35,7 +36,6 @@ const splashGravity: number = 1200;
 const splashLife: number = 0.35;
 const splashBounce: number = 0.4;
 const splashSize: number = 1.5;
-const rainColor: string = "#aabedc";
 const spriteMinAlpha: number = 0.25;
 const spriteMaxAlpha: number = 0.45;
 const spritePath: string = "./sprites/bullets/";
@@ -51,19 +51,6 @@ const spriteKinds: Array<SpriteKind> = [
   { name: "small", size: 12 },
   { name: "orb", size: 18 },
   { name: "big", size: 38 },
-];
-
-const spriteColors: Array<string> = [
-  "#e5e5ef",
-  "#6f7686",
-  "#ff0000",
-  "#ff6f00",
-  "#ffdf00",
-  "#1fff30",
-  "#00dfff",
-  "#1f4fff",
-  "#af1fff",
-  "#ff4fbf",
 ];
 
 function rainSprites(): Array<RainSprite> {
@@ -90,10 +77,10 @@ const config: RainConfig = {
   splashBounce: splashBounce,
   splashSize: splashSize,
   dropWidth: dropWidth,
-  color: rainColor,
+  color: getTheme().rain,
   layerChances: layerChances,
   sprites: rainSprites(),
-  spriteColors: spriteColors,
+  spriteColors: [getTheme().bullets],
   spriteMinAlpha: spriteMinAlpha,
   spriteMaxAlpha: spriteMaxAlpha,
 };
@@ -259,6 +246,19 @@ async function createRain(app: Application): Promise<RainLayers> {
   const front: RainLayer = createLayer(bulletTexture);
   const drops: Array<DropView> = new Array();
   const splashes: Array<SplashView> = new Array();
+
+  onTheme((theme: Theme) => {
+    config.color = theme.rain;
+    config.spriteColors = [theme.bullets];
+
+    for (let index = 0; index < drops.length; index++) {
+      drops[index]!.streak.tint = theme.rain;
+    }
+
+    for (let index = 0; index < splashes.length; index++) {
+      splashes[index]!.particle.tint = theme.rain;
+    }
+  });
 
   function layerOf(drop: Drop): RainLayer {
     return drop.layer === 1 ? front : back;

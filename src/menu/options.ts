@@ -2,6 +2,7 @@ import {
   Assets,
   Container,
   Graphics,
+  Point,
   Rectangle,
   Text,
   type Application,
@@ -14,6 +15,7 @@ import {
   type Easing,
   type Spring,
 } from "../effects/tween/tween";
+import { getTheme } from "../theme/theme";
 
 const fontPath: string = "./fonts/BarlowCondensed-BlackItalic.ttf";
 const fontFamily: Array<string> = [
@@ -32,13 +34,9 @@ const menuMaxScale: number = 1.2;
 const menuTilt: number = -0.18; // rad
 const itemSpacing: number = 122; // px
 const itemShift: number = 46; // px
-const idleColor: string = "#ffffff";
 const idleAlpha: number = 0.9;
-const selectedColor: string = "#061a52";
 const shadowColor: string = "#020b30";
 const shadowDistance: number = 9; // px
-const highlightColor: string = "#ffffff";
-const accentColor: string = "#ff2a4d";
 const highlightPadding: number = 30; // px
 const selectScale: number = 1.14;
 const springFrequency: number = 4.5; // Hz
@@ -51,7 +49,7 @@ const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const bobAmount: number = 4; // px
 const bobSpeed: number = 0.35; // Hz
 
-const names: Array<string> = ["play", "stats", "config", "about"];
+const names: Array<string> = ["play", "customise", "create", "config"];
 
 type MenuItem = {
   name: string;
@@ -83,6 +81,18 @@ function navigate(name: string): void {
   document.dispatchEvent(new CustomEvent<string>("navigate", { detail: name }));
 }
 
+function selectedPoint(): Point | null {
+  const item: MenuItem | undefined = items[selected];
+
+  if (item === undefined || !item.view.parent?.visible) {
+    return null;
+  }
+
+  return item.view.parent.toGlobal(
+    new Point(item.view.x - highlightPadding * 1.4, item.view.y),
+  );
+}
+
 function select(index: number): void {
   selected = (index + items.length) % items.length;
 }
@@ -102,7 +112,7 @@ function createItem(name: string, index: number): MenuItem {
       fontSize: fontSize,
       fontStyle: "italic",
       fontWeight: "900",
-      fill: idleColor,
+      fill: 0xffffff,
       padding: shadowDistance * 2,
       dropShadow: {
         color: shadowColor,
@@ -166,7 +176,7 @@ function drawHighlight(graphics: Graphics, height: number): void {
       left - 8,
       bottom + 24,
     ])
-    .fill(accentColor)
+    .fill(getTheme().accent)
     .poly([
       left,
       top + 8,
@@ -177,7 +187,7 @@ function drawHighlight(graphics: Graphics, height: number): void {
       left + 12,
       bottom + 10,
     ])
-    .fill(highlightColor);
+    .fill(getTheme().highlight);
 }
 
 function menuWidth(): number {
@@ -298,7 +308,7 @@ async function createButtons(app: Application): Promise<Container> {
       );
       item.view.position.set(item.baseX + item.enter, item.baseY + bob);
       item.view.scale.set(item.scale.value);
-      item.label.tint = chosen ? selectedColor : idleColor;
+      item.label.tint = chosen ? getTheme().menuSelected : getTheme().menuText;
       item.label.alpha = chosen ? 1 : idleAlpha;
     }
 
@@ -333,6 +343,7 @@ async function createButtons(app: Application): Promise<Container> {
 }
 
 export {
+  selectedPoint,
   createButtons,
   buttonFaces,
   resetButtons,

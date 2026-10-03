@@ -1,5 +1,6 @@
 import { Container, Text, type Application, type Ticker } from "pixi.js";
 import { cubicBezier, tween, type Easing } from "../effects/tween/tween";
+import { getTheme } from "../theme/theme";
 
 const fontFamily: Array<string> = [
   "Barlow Condensed",
@@ -25,8 +26,15 @@ const enterDistance: number = 400; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
 
+type PageContent = {
+  view: Container;
+  setActive: (active: boolean) => void;
+};
+
 type Page = {
+  view: Container;
   root: Container;
+  content: PageContent | null;
   offset: number; // px
 };
 
@@ -51,15 +59,25 @@ function createText(text: string, size: number, color: string): Text {
   });
 }
 
-function createPage(app: Application, name: string): Page {
+function createPage(
+  app: Application,
+  name: string,
+  content: PageContent | null,
+): Page {
+  const view: Container = new Container();
   const root: Container = new Container();
-  const page: Page = { root: root, offset: 0 };
+  const page: Page = { view: view, root: root, content: content, offset: 0 };
   const title: Text = createText(name.toUpperCase(), titleSize, titleColor);
   const hint: Text = createText("ESC  BACK", hintSize, hintColor);
 
   hint.position.set(title.width * 0.08, title.height + hintGap);
   root.addChild(title, hint);
-  root.visible = false;
+  view.addChild(root);
+  view.visible = false;
+
+  if (content !== null) {
+    view.addChild(content.view);
+  }
 
   app.ticker.add(() => {
     const scale: number = Math.min(
@@ -73,28 +91,33 @@ function createPage(app: Application, name: string): Page {
     );
     root.scale.set(scale);
     root.rotation = pageTilt;
+    title.tint = getTheme().menuText;
   });
 
   return page;
 }
 
 function showPage(ticker: Ticker, page: Page): Promise<void> {
-  page.root.visible = true;
+  page.view.visible = true;
 
   return tween(ticker, enterDuration, (progress: number) => {
     page.offset = enterDistance * (1 - enterEasing(progress));
-    page.root.alpha = Math.min(progress * 2, 1);
+    page.view.alpha = Math.min(progress * 2, 1);
+  }).then(() => {
+    page.content?.setActive(true);
   });
 }
 
 function hidePage(ticker: Ticker, page: Page): Promise<void> {
+  page.content?.setActive(false);
+
   return tween(ticker, leaveDuration, (progress: number) => {
     page.offset = enterDistance * progress * progress;
-    page.root.alpha = 1 - progress;
+    page.view.alpha = 1 - progress;
   }).then(() => {
-    page.root.visible = false;
+    page.view.visible = false;
   });
 }
 
 export { createPage, showPage, hidePage };
-export type { Page };
+export type { Page, PageContent };

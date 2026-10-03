@@ -4,12 +4,15 @@ import {
   Graphics,
   Particle,
   ParticleContainer,
+  Point,
   Sprite,
   type Application,
   type Renderer,
   type Texture,
   type Ticker,
 } from "pixi.js";
+import { createLighthouse, type Lighthouse } from "./lighthouse";
+import { onTheme, type Theme } from "../theme/theme";
 
 type Glow = {
   sprite: Sprite;
@@ -71,13 +74,17 @@ type Scenery = {
   rayBoost: number;
 };
 
+type Target = () => Point | null;
+
 type Vivid = {
+  setBeamTarget: (target: Target) => void;
   view: Container;
   scene: Container;
   setDepth: (depth: number) => void;
   setFlip: (angle: number) => void;
   setScenery: (name: string) => void;
   aboveSea: Graphics;
+  rainLayer: Container;
   surface: (x: number) => number;
   absorb: (x: number, y: number, color: string) => void;
 };
@@ -113,7 +120,7 @@ const sceneries: Map<string, Scenery> = new Map([
     },
   ],
   [
-    "stats",
+    "customise",
     {
       glow: "#1fd68a",
       glowY: 0.6,
@@ -123,7 +130,7 @@ const sceneries: Map<string, Scenery> = new Map([
     },
   ],
   [
-    "about",
+    "create",
     {
       glow: "#e8f4ff",
       glowY: -0.8,
@@ -145,7 +152,6 @@ const kelpMaxWidth: number = 16; // px
 const kelpMaxSway: number = 40; // px
 const kelpSegments: number = 12;
 const rayCount: number = 6;
-const rayColor: string = "#7fd8ff";
 const rayMinWidth: number = 6; // %
 const rayMaxWidth: number = 16; // %
 const rayLength: number = 1.8; // of screen height
@@ -171,7 +177,7 @@ const reflectionMaxAlpha: number = 0.3;
 const reflectionMinSpeed: number = 6; // px/s
 const reflectionMaxSpeed: number = 20; // px/s
 const glowTextureSize: number = 256; // px
-const glowColors: Array<string> = ["#3fd8ff", "#1e6bff", "#9fe8ff", "#2a3dff"];
+const glowCount: number = 4;
 const glowScale: number = 0.7; // of the longer screen side
 const glowMinAlpha: number = 0.18;
 const glowMaxAlpha: number = 0.32;
@@ -179,7 +185,6 @@ const glowDrift: number = 12; // %
 const glowMinSpeed: number = 0.03;
 const glowMaxSpeed: number = 0.08;
 const shaftCount: number = 7;
-const shaftColor: string = "#bff4ff";
 const shaftMinWidth: number = 5; // %
 const shaftMaxWidth: number = 14; // %
 const shaftLength: number = 2.4; // of screen height
@@ -250,6 +255,7 @@ function createGlowTexture(
 }
 
 function createVivid(app: Application): Vivid {
+  const rainLayer: Container = new Container();
   const view: Container = new Container();
   const sky: Graphics = new Graphics();
   const light: Container = new Container();
@@ -292,11 +298,12 @@ function createVivid(app: Application): Vivid {
   const glows: Array<Glow> = new Array();
   const shafts: Array<Shaft> = new Array();
   let time: number = 0;
+  let beamTarget: Target | null = null;
+  const beamLocal: Point = new Point();
 
-  for (let index = 0; index < glowColors.length; index++) {
+  for (let index = 0; index < glowCount; index++) {
     const sprite: Sprite = new Sprite(glowTexture);
     sprite.anchor.set(0.5);
-    sprite.tint = glowColors[index]!;
     sprite.alpha = mix(glowMinAlpha, glowMaxAlpha, Math.random());
     sprite.blendMode = "add";
     light.addChild(sprite);
@@ -313,7 +320,6 @@ function createVivid(app: Application): Vivid {
   for (let index = 0; index < shaftCount; index++) {
     const sprite: Sprite = new Sprite(glowTexture);
     sprite.anchor.set(0.5);
-    sprite.tint = shaftColor;
     sprite.alpha = mix(shaftMinAlpha, shaftMaxAlpha, Math.random());
     sprite.blendMode = "add";
     light.addChild(sprite);
@@ -341,7 +347,6 @@ function createVivid(app: Application): Vivid {
   for (let index = 0; index < rayCount; index++) {
     const sprite: Sprite = new Sprite(glowTexture);
     sprite.anchor.set(0.5);
-    sprite.tint = rayColor;
     sprite.blendMode = "add";
     deep.addChild(sprite);
     rays.push({
@@ -395,14 +400,16 @@ function createVivid(app: Application): Vivid {
   deep.setMask({ mask: deepMask, inverse: false });
   sea.addChild(water, seaMask, deep, bloomLayer, surface);
   bloomLayer.setMask({ mask: seaMask, inverse: false });
-  scene.addChild(sky, light, sea);
+  const lighthouse: Lighthouse = createLighthouse(app.renderer, glowTexture);
+
+  scene.addChild(sky, light, rainLayer, lighthouse.view, lighthouse.beam, sea);
   moteLayer.blendMode = "add";
   moteLayer.alpha = 0;
 
   view.eventMode = "none";
   view.addChild(scene, moteLayer);
 
-  const gradient: FillGradient = verticalGradient(skyStops);
+  let gradient: FillGradient = verticalGradient(skyStops);
 
   function seaDepth(height: number): number {
     return (height * seaHeight) / 100 + height * (diveDistance + 1);
@@ -634,6 +641,41 @@ function createVivid(app: Application): Vivid {
     }
   }
 
+  onTheme((theme: Theme) => {
+    skyStops.splice(
+      0,
+      skyStops.length,
+      theme.skyTop,
+      theme.skyMiddle,
+      theme.horizon,
+      theme.horizon,
+    );
+    seaStops.splice(
+      0,
+      seaStops.length,
+      theme.seaSurface,
+      theme.seaMiddle,
+      theme.seaDeep,
+    );
+    gradient.destroy();
+    gradient = verticalGradient(skyStops);
+
+    for (let index = 0; index < glows.length; index++) {
+      glows[index]!.sprite.tint =
+        index % 2 === 0 ? theme.horizon : theme.skyMiddle;
+    }
+
+    for (let index = 0; index < shafts.length; index++) {
+      shafts[index]!.sprite.tint = theme.light;
+    }
+
+    for (let index = 0; index < rays.length; index++) {
+      rays[index]!.sprite.tint = theme.light;
+    }
+
+    build();
+  });
+
   build();
   app.renderer.on("resize", build);
 
@@ -644,6 +686,20 @@ function createVivid(app: Application): Vivid {
     const size: number = Math.max(width, height) * glowScale;
 
     time += delta;
+
+    const target: Point | null = beamTarget?.() ?? null;
+
+    if (target !== null) {
+      scene.toLocal(target, undefined, beamLocal);
+    }
+
+    lighthouse.update(
+      width,
+      height,
+      height * (1 - seaHeight / 100),
+      target === null ? null : beamLocal,
+      delta,
+    );
 
     for (let index = 0; index < glows.length; index++) {
       const glow: Glow = glows[index]!;
@@ -679,7 +735,11 @@ function createVivid(app: Application): Vivid {
     setDepth: setDepth,
     setFlip: setFlip,
     setScenery: setScenery,
+    setBeamTarget: (target: Target) => {
+      beamTarget = target;
+    },
     aboveSea: aboveSea,
+    rainLayer: rainLayer,
     surface: seaSurface,
     absorb: absorb,
   };

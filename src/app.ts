@@ -5,9 +5,17 @@ import {
   resetButtons,
   enterButtons,
   setButtonsActive,
+  selectedPoint,
   navigate,
 } from "./menu/options";
-import { createPage, showPage, hidePage, type Page } from "./menu/page";
+import {
+  createPage,
+  showPage,
+  hidePage,
+  type Page,
+  type PageContent,
+} from "./menu/page";
+import { createEditor } from "./editor/editor";
 import {
   createLanding,
   setLandingEnabled,
@@ -74,6 +82,7 @@ const vividFront: Container = new Container();
 city.addChild(createNightSea(app));
 
 const ocean: Vivid = createVivid(app);
+ocean.setBeamTarget(selectedPoint);
 vivid.addChild(ocean.view);
 
 const menu: Container = new Container();
@@ -89,7 +98,7 @@ if (rainEnabled) {
 
   const rain: RainLayers = await createRain(app);
   city.addChild(rain.backRain);
-  ocean.scene.addChild(ocean.aboveSea, rain.backBullets);
+  ocean.rainLayer.addChild(ocean.aboveSea, rain.backBullets);
   rain.backBullets.setMask({ mask: ocean.aboveSea, inverse: false });
   cityFront.addChild(rain.frontRain);
   vividFront.addChild(rain.frontBullets);
@@ -101,15 +110,20 @@ if (rainEnabled) {
   }
 }
 
-const pageNames: Array<string> = ["play", "stats", "config", "about"];
+const pageNames: Array<string> = ["play", "customise", "create", "config"];
 const pages: Map<string, Page> = new Map();
 
 vivid.addChild(menu);
 
+const pageContents: Map<string, PageContent> = new Map([
+  ["customise", createEditor(app)],
+]);
+
 for (let index = 0; index < pageNames.length; index++) {
-  const page: Page = createPage(app, pageNames[index]!);
-  pages.set(pageNames[index]!, page);
-  vivid.addChild(page.root);
+  const name: string = pageNames[index]!;
+  const page: Page = createPage(app, name, pageContents.get(name) ?? null);
+  pages.set(name, page);
+  vivid.addChild(page.view);
 }
 addPortalView(city, true);
 addPortalView(vivid, false);

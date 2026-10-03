@@ -1,5 +1,6 @@
 import {
   Assets,
+  Color,
   Circle as HitCircle,
   ColorMatrixFilter,
   Container,
@@ -9,6 +10,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { navigate } from "./options";
+import { onTheme, type Theme } from "../theme/theme";
 import { createRing, type Ring, type RingStyle } from "../effects/ring/ring";
 import type { Circle } from "../effects/reveal/reveal";
 import {
@@ -130,12 +132,47 @@ async function createLanding(application: Application): Promise<Container> {
   const view: Container = new Container();
   const logo: Sprite = new Sprite(texture);
   const ringFilters: Array<ColorMatrixFilter> = [new ColorMatrixFilter()];
-  const logoFilters: Array<ColorMatrixFilter> = [new ColorMatrixFilter()];
+  const logoTint: ColorMatrixFilter = new ColorMatrixFilter();
+  const logoBright: ColorMatrixFilter = new ColorMatrixFilter();
   const currentRing: Ring = createRing(landingRing);
   ring = currentRing;
 
   view.addChild(currentRing.view);
   view.addChild(logo);
+  logo.filters = [logoTint, logoBright];
+
+  onTheme((theme: Theme) => {
+    const [red, green, blue] = new Color(theme.ring).toRgbArray() as [
+      number,
+      number,
+      number,
+    ];
+
+    landingRing.color = theme.ring;
+    ringSize = 0;
+    logoTint.matrix = [
+      0,
+      0,
+      0,
+      0,
+      red,
+      0,
+      0,
+      0,
+      0,
+      green,
+      0,
+      0,
+      0,
+      0,
+      blue,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ];
+  });
   view.eventMode = "static";
   view.cursor = "pointer";
   view.interactiveChildren = false;
@@ -170,10 +207,9 @@ async function createLanding(application: Application): Promise<Container> {
     );
     logo.width = from.width + (to.width - from.width) * corner;
     logo.height = (logo.width * logoViewHeight) / logoViewWidth;
-    brighten(
-      logo,
-      logoFilters,
+    logoBright.brightness(
       corner === 0 ? landingBrightness() : glideBrightness,
+      false,
     );
   });
 

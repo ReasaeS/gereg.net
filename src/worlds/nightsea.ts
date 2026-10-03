@@ -6,6 +6,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { seaHeight } from "./vivid";
+import { onTheme, type Theme } from "../theme/theme";
 
 type Reflection = {
   x: number; // %
@@ -15,7 +16,7 @@ type Reflection = {
   speed: number; // px/s
 };
 
-const seaStops: Array<string> = ["#1a2a52", "#0b1430", "#040814"];
+const seaDeep: string = "#040814";
 const crestColor: string = "#9fb4d8";
 const crestAlpha: number = 0.35;
 const crestWidth: number = 2; // px
@@ -38,15 +39,7 @@ function createNightSea(app: Application): Container {
   const water: Graphics = new Graphics();
   const surface: Graphics = new Graphics();
   const reflections: Array<Reflection> = new Array();
-  const gradient: FillGradient = new FillGradient({
-    type: "linear",
-    start: { x: 0, y: 0 },
-    end: { x: 0, y: 1 },
-    colorStops: seaStops.map((color: string, index: number) => ({
-      offset: index / (seaStops.length - 1),
-      color: color,
-    })),
-  });
+  let gradient: FillGradient = new FillGradient({ type: "linear" });
 
   for (let index = 0; index < reflectionCount; index++) {
     reflections.push({
@@ -57,6 +50,19 @@ function createNightSea(app: Application): Container {
       speed: mix(reflectionMinSpeed, reflectionMaxSpeed, Math.random()),
     });
   }
+
+  onTheme((theme: Theme) => {
+    gradient.destroy();
+    gradient = new FillGradient({
+      type: "linear",
+      start: { x: 0, y: 0 },
+      end: { x: 0, y: 1 },
+      colorStops: [
+        { offset: 0, color: theme.nightSea },
+        { offset: 1, color: seaDeep },
+      ],
+    });
+  });
 
   view.eventMode = "none";
   view.addChild(water, surface);
