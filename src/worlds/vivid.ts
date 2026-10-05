@@ -62,6 +62,8 @@ type Target = () => Point | null;
 
 type Vivid = {
   setBeamTarget: (target: Target) => void;
+  setHoverBlocker: (blocker: (point: Point) => boolean) => void;
+  resetBeam: () => void;
   view: Container;
   scene: Container;
   setDepth: (depth: number) => void;
@@ -99,14 +101,6 @@ const starMinAlpha: number = 0.3;
 const starMaxAlpha: number = 0.95;
 const starTwinkle: number = 0.35;
 const starHeight: number = 0.85; // of sky height
-const moonX: number = 0.36; // of screen width
-const moonY: number = 0.16; // of screen height
-const moonRadius: number = 0.045; // of screen height
-const moonColor: string = "#f3f1e4";
-const moonShade: string = "#d9d6c6";
-const moonHaloColor: string = "#9fc0ff";
-const moonHaloScale: number = 9; // moon radii
-const moonHaloAlpha: number = 0.35;
 const seaHeight: number = 20; // vh
 const abyssColor: string = "#01030a";
 const diveDistance: number = 2.2; // screen heights
@@ -246,8 +240,6 @@ function createVivid(app: Application): Vivid {
   const nightSky: Graphics = new Graphics();
   const nightWater: Graphics = new Graphics();
   const nightGradient: FillGradient = verticalGradient(nightSkyStops);
-  const moon: Graphics = new Graphics();
-  const moonHalo: Sprite = new Sprite();
   const starLayer: ParticleContainer = new ParticleContainer({
     dynamicProperties: {
       position: true,
@@ -286,6 +278,7 @@ function createVivid(app: Application): Vivid {
   const kelps: Array<Kelp> = new Array();
   let time: number = 0;
   let beamTarget: Target | null = null;
+  let hoverBlocker: ((point: Point) => boolean) | null = null;
   const beamLocal: Point = new Point();
 
   for (let index = 0; index < reflectionCount; index++) {
@@ -359,10 +352,6 @@ function createVivid(app: Application): Vivid {
 
   starLayer.texture = glowTexture;
   starLayer.blendMode = "add";
-  moonHalo.texture = glowTexture;
-  moonHalo.anchor.set(0.5);
-  moonHalo.tint = moonHaloColor;
-  moonHalo.blendMode = "add";
   sceneryGlow.anchor.set(0.5);
   sceneryGlow.blendMode = "add";
   deep.addChild(sceneryGlow, kelpLayer, deepMask);
@@ -376,18 +365,17 @@ function createVivid(app: Application): Vivid {
     menuTexture(),
     menuPixels(),
     app.renderer.events.pointer.global,
+    (point: Point) => hoverBlocker?.(point) ?? false,
   );
 
   scene.addChild(
     sky,
     nightSky,
     starLayer,
-    moonHalo,
-    moon,
     rainLayer,
-    witch.view,
     lighthouse.view,
     lighthouse.beam,
+    witch.view,
     sea,
   );
   moteLayer.blendMode = "add";
@@ -409,8 +397,6 @@ function createVivid(app: Application): Vivid {
 
     const margin: number = overscan();
 
-    const radius: number = height * moonRadius;
-
     sky
       .clear()
       .rect(-margin, -margin, app.screen.width + margin * 2, height + margin)
@@ -419,20 +405,6 @@ function createVivid(app: Application): Vivid {
       .clear()
       .rect(-margin, -margin, app.screen.width + margin * 2, height + margin)
       .fill(nightGradient);
-    moon
-      .clear()
-      .circle(0, 0, radius)
-      .fill(moonColor)
-      .circle(-radius * 0.35, -radius * 0.2, radius * 0.22)
-      .fill(moonShade)
-      .circle(radius * 0.3, radius * 0.35, radius * 0.14)
-      .fill(moonShade)
-      .circle(radius * 0.25, -radius * 0.4, radius * 0.09)
-      .fill(moonShade);
-    moon.position.set(app.screen.width * moonX, height * moonY);
-    moonHalo.position.copyFrom(moon.position);
-    moonHalo.width = radius * moonHaloScale;
-    moonHalo.height = radius * moonHaloScale;
     seaGradient.destroy();
     seaGradient = seaFill(seaStops, surfaceDepth, total);
     nightSeaGradient.destroy();
@@ -464,8 +436,6 @@ function createVivid(app: Application): Vivid {
 
     nightSky.alpha = fade;
     nightWater.alpha = fade;
-    moon.alpha = fade;
-    moonHalo.alpha = fade * moonHaloAlpha;
     starLayer.visible = fade > 0;
 
     if (!starLayer.visible) {
@@ -752,6 +722,10 @@ function createVivid(app: Application): Vivid {
     setScenery: setScenery,
     setBeamTarget: (target: Target) => {
       beamTarget = target;
+    },
+    resetBeam: lighthouse.reset,
+    setHoverBlocker: (blocker: (point: Point) => boolean) => {
+      hoverBlocker = blocker;
     },
     aboveSea: aboveSea,
     rainLayer: rainLayer,

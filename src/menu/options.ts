@@ -76,6 +76,7 @@ const highlight: Highlight = {
 
 let selected: number = 0;
 let active: boolean = false;
+const hoverLocal: Point = new Point();
 
 function navigate(name: string): void {
   document.dispatchEvent(new CustomEvent<string>("navigate", { detail: name }));
@@ -84,13 +85,31 @@ function navigate(name: string): void {
 function selectedPoint(): Point | null {
   const item: MenuItem | undefined = items[selected];
 
-  if (item === undefined || !item.view.parent?.visible) {
+  if (!active || item === undefined || !item.view.parent?.visible) {
     return null;
   }
 
   return item.view.parent.toGlobal(
     new Point(item.view.x - highlightPadding * 1.4, item.view.y),
   );
+}
+
+function menuHovered(point: Point): boolean {
+  for (let index = 0; index < items.length; index++) {
+    const view: Container = items[index]!.view;
+
+    if (!view.parent?.visible || view.alpha === 0 || !view.hitArea) {
+      continue;
+    }
+
+    view.toLocal(point, undefined, hoverLocal);
+
+    if (view.hitArea.contains(hoverLocal.x, hoverLocal.y)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function select(index: number): void {
@@ -344,6 +363,7 @@ async function createButtons(app: Application): Promise<Container> {
 
 export {
   selectedPoint,
+  menuHovered,
   createButtons,
   buttonFaces,
   resetButtons,

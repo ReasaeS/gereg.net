@@ -25,7 +25,12 @@ function mix(from: number, to: number, amount: number): number {
   return from + (to - from) * amount;
 }
 
-function createWitch(texture: Texture, pixels: Pixels, pointer: Point): Witch {
+function createWitch(
+  texture: Texture,
+  pixels: Pixels,
+  pointer: Point,
+  blocked: (point: Point) => boolean,
+): Witch {
   const view: Sprite = new Sprite(texture);
   const local: Point = new Point();
   let reveal: number = 0;
@@ -52,7 +57,7 @@ function createWitch(texture: Texture, pixels: Pixels, pointer: Point): Witch {
   }
 
   function hovered(): boolean {
-    if (!view.visible) {
+    if (!view.visible || blocked(pointer)) {
       return false;
     }
 

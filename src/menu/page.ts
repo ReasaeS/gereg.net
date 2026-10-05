@@ -1,5 +1,10 @@
 import { Container, Text, type Application, type Ticker } from "pixi.js";
-import { cubicBezier, tween, type Easing } from "../effects/tween/tween";
+import {
+  approach,
+  cubicBezier,
+  tween,
+  type Easing,
+} from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
 
 const fontFamily: Array<string> = [
@@ -25,10 +30,14 @@ const enterDuration: number = 450; // ms
 const enterDistance: number = 400; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
+const titleFade: number = 200; // ms
 
 type PageContent = {
   view: Container;
   setActive: (active: boolean) => void;
+  enter?: () => void;
+  back?: () => boolean;
+  fullscreen?: () => boolean;
 };
 
 type Page = {
@@ -79,7 +88,16 @@ function createPage(
     view.addChild(content.view);
   }
 
-  app.ticker.add(() => {
+  app.ticker.add((ticker: Ticker) => {
+    const hidden: boolean = page.content?.fullscreen?.() ?? false;
+
+    root.alpha = approach(
+      root.alpha,
+      hidden ? 0 : 1,
+      ticker.deltaMS / titleFade,
+    );
+    root.visible = root.alpha > 0;
+
     const scale: number = Math.min(
       Math.max(app.screen.height / pageReference, pageMinScale),
       pageMaxScale,
@@ -99,6 +117,7 @@ function createPage(
 
 function showPage(ticker: Ticker, page: Page): Promise<void> {
   page.view.visible = true;
+  page.content?.enter?.();
 
   return tween(ticker, enterDuration, (progress: number) => {
     page.offset = enterDistance * (1 - enterEasing(progress));
@@ -119,5 +138,5 @@ function hidePage(ticker: Ticker, page: Page): Promise<void> {
   });
 }
 
-export { createPage, showPage, hidePage };
+export { leaveDuration, createPage, showPage, hidePage };
 export type { Page, PageContent };

@@ -20,6 +20,7 @@ type Lighthouse = {
     target: Point | null,
     delta: number,
   ) => void;
+  reset: () => void;
 };
 
 const unitHeight: number = 100;
@@ -97,12 +98,7 @@ function drawTower(tower: Graphics, theme: Theme): void {
     return (towerBottomWidth + (towerTopWidth - towerBottomWidth) * along) / 2;
   }
 
-  tower
-    .clear()
-    .poly([
-      -40, 12, -34, -4, -22, -10, -6, -12, 14, -11, 30, -7, 42, -2, 46, 12,
-    ])
-    .fill(theme.menuSelected);
+  tower.clear();
 
   for (let band = 0; band < stripeCount; band++) {
     const bottom: number = towerBottom - band * bandHeight;
@@ -152,7 +148,7 @@ function drawTower(tower: Graphics, theme: Theme): void {
     .arc(0, towerTop - 16, 8, Math.PI, 0)
     .closePath()
     .fill(theme.accent)
-    .rect(-0.75, towerTop - 28, 1.5, 5)
+    .rect(-0.75, towerTop - 29, 1.5, 5)
     .fill(theme.menuSelected);
 }
 
@@ -241,7 +237,15 @@ function createLighthouse(
     );
   }
 
-  return { view: view, beam: beam, update: update };
+  function reset(): void {
+    aim.value = 0;
+    aim.velocity = 0;
+    reach.value = 0;
+    reach.velocity = 0;
+    beam.scale.x = 0;
+  }
+
+  return { view: view, beam: beam, update: update, reset: reset };
 }
 
 export { createLighthouse };

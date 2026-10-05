@@ -6,17 +6,25 @@ import {
   enterButtons,
   setButtonsActive,
   selectedPoint,
+  menuHovered,
   navigate,
 } from "./menu/options";
 import {
   createPage,
   showPage,
   hidePage,
+  leaveDuration as pageLeaveDuration,
   type Page,
   type PageContent,
 } from "./menu/page";
-import { createEditor } from "./editor/editor";
+import { createEditor, playerTexture } from "./editor/editor";
+import {
+  createPlayfield,
+  leaveDuration as playfieldLeaveDuration,
+  type Playfield,
+} from "./game/playfield";
 import { createSettings } from "./settings/panel";
+import { createMaker } from "./create/maker";
 import { createGuides } from "./dev/guides";
 import {
   createLanding,
@@ -57,9 +65,10 @@ const rainEnabled: boolean = true;
 const revealDuration: number = 500; // ms
 const revealEasing: Easing = cubicBezier(0.3, 0, 0.25, 1);
 const peekSmoothing: number = 0.12; // s
-const diveDuration: number = 1800; // ms
+const diveDuration: number = 850; // ms
 const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
 const diveFlip: number = -Math.PI; // rad
+const transitionLead: number = 200; // ms
 
 const container: HTMLDivElement = document.getElementById(
   "app",
@@ -85,6 +94,7 @@ city.addChild(createNightSea(app));
 
 const ocean: Vivid = createVivid(app);
 ocean.setBeamTarget(selectedPoint);
+ocean.setHoverBlocker(menuHovered);
 vivid.addChild(ocean.view);
 
 const menu: Container = new Container();
@@ -112,13 +122,14 @@ if (rainEnabled) {
   }
 }
 
-const pageNames: Array<string> = ["play", "customise", "create", "config"];
+const pageNames: Array<string> = ["customise", "create", "config"];
 const pages: Map<string, Page> = new Map();
 
 vivid.addChild(menu);
 
 const pageContents: Map<string, PageContent> = new Map([
   ["customise", createEditor(app)],
+  ["create", await createMaker(app)],
   ["config", createSettings(app)],
 ]);
 
@@ -132,18 +143,28 @@ addPortalView(city, true);
 addPortalView(vivid, false);
 addPortalView(cityFront, true);
 addPortalView(vividFront, false);
+const playfield: Playfield = await createPlayfield(app, playerTexture());
+
 app.stage.addChild(
   city,
   vivid,
   landing,
   cityFront,
   vividFront,
+  playfield.view,
   createGuides(app),
 );
 startPortal(app);
 
 type Screen =
-  "landing" | "intro" | "main" | "outro" | "diving" | "page" | "rising";
+  | "landing"
+  | "intro"
+  | "main"
+  | "outro"
+  | "diving"
+  | "page"
+  | "rising"
+  | "playing";
 
 let menuOpen: boolean = false;
 let currentPage: Page | null = null;
@@ -178,41 +199,80 @@ app.ticker.add(
   UPDATE_PRIORITY.HIGH,
 );
 
-function dive(page: Page, name: string): void {
-  screen = "diving";
-  currentPage = page;
-  ocean.setScenery(name);
-  fadeOut(app.ticker, buttons, 300);
-  tween(app.ticker, diveDuration, (progress: number) => {
-    ocean.setDepth(diveEasing(progress));
-    ocean.setFlip(diveFlip * diveEasing(progress));
-  })
-    .then(() => showPage(app.ticker, page))
-    .then(() => {
-      screen = "page";
-    });
+function wait(duration: number): Promise<void> {
+  return tween(app.ticker, Math.max(duration, 0), () => undefined);
 }
 
-function rise(page: Page): void {
+function dive(name: string, arrive: () => Promise<void>, end: Screen): void {
+  screen = "diving";
+  ocean.setScenery(name);
+  fadeOut(app.ticker, buttons, 300);
+  Promise.all([
+    tween(app.ticker, diveDuration, (progress: number) => {
+      ocean.setDepth(diveEasing(progress));
+      ocean.setFlip(diveFlip * diveEasing(progress));
+    }),
+    wait(diveDuration - transitionLead).then(arrive),
+  ]).then(() => {
+    ocean.resetBeam();
+    screen = end;
+  });
+}
+
+function rise(leave: () => Promise<void>, leaveDuration: number): void {
   screen = "rising";
-  hidePage(app.ticker, page)
-    .then(() =>
-      tween(app.ticker, diveDuration, (progress: number) => {
-        ocean.setDepth(diveEasing(1 - progress));
-        ocean.setFlip(diveFlip * diveEasing(1 - progress));
-      }),
-    )
-    .then(() => {
-      buttons.visible = true;
-      enterButtons(app.ticker);
-      navigate("menu");
-      screen = "main";
-    });
+  Promise.all([
+    leave(),
+    wait(leaveDuration - transitionLead).then(() =>
+      Promise.all([
+        tween(app.ticker, diveDuration, (progress: number) => {
+          ocean.setDepth(diveEasing(1 - progress));
+          ocean.setFlip(diveFlip * (2 - diveEasing(1 - progress)));
+        }),
+        wait(diveDuration - transitionLead).then(() => {
+          buttons.visible = true;
+          setSurfacesActive(true);
+          return enterButtons(app.ticker);
+        }),
+      ]),
+    ),
+  ]).then(() => {
+    navigate("menu");
+    screen = "main";
+  });
+}
+
+function openPage(page: Page, name: string): void {
+  currentPage = page;
+  dive(name, () => showPage(app.ticker, page), "page");
+}
+
+function play(): void {
+  setSurfacesActive(false);
+  dive(
+    "play",
+    () => {
+      buttons.visible = false;
+      return playfield.show();
+    },
+    "playing",
+  );
 }
 
 window.addEventListener("keydown", (event: KeyboardEvent) => {
   if (event.key === "Escape" && screen === "page" && currentPage !== null) {
-    rise(currentPage);
+    const page: Page = currentPage;
+
+    if (page.content?.back?.() === true) {
+      return;
+    }
+
+    rise(() => hidePage(app.ticker, page), pageLeaveDuration);
+    return;
+  }
+
+  if (event.key === "Escape" && screen === "playing" && !playfield.back()) {
+    rise(playfield.hide, playfieldLeaveDuration);
     return;
   }
 
@@ -252,6 +312,7 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
     menu.visible = true;
     buttons.visible = true;
     resetButtons();
+    ocean.resetBeam();
     peek.value = 1;
     peek.velocity = 0;
     showThroughRing();
@@ -312,10 +373,15 @@ document.addEventListener("navigate", (event: Event) => {
   menuOpen = false;
   setButtonsActive(false);
 
+  if (name === "play") {
+    play();
+    return;
+  }
+
   const page: Page | undefined = pages.get(name);
 
   if (page !== undefined) {
-    dive(page, name);
+    openPage(page, name);
     return;
   }
 
