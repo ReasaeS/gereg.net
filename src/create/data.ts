@@ -11,12 +11,12 @@ type Pattern = {
   color: string;
   count: number;
   spread: number; // deg
-  angle: number; // deg
+  heading: number; // deg from straight down
   aim: boolean;
-  spin: number; // deg/s
+  angleDerivatives: Array<number>; // deg/s^n
   rate: number; // shots/s
   speed: number; // units/s
-  accel: number; // units/s²
+  speedDerivatives: Array<number>; // units/s^(n+1)
 };
 
 type Enemy = {
@@ -27,6 +27,24 @@ type Enemy = {
   size: number; // units
   health: number;
   pattern: string | null;
+  spell: string | null;
+};
+
+type Ring = {
+  radius: number; // units
+  points: number;
+  step: number;
+  ticks: number;
+  orb: number; // of radius
+  spin: number; // deg/s
+};
+
+type Spell = {
+  id: string;
+  name: string;
+  color: string;
+  opacity: number;
+  rings: Array<Ring>;
 };
 
 type Background = {
@@ -67,6 +85,7 @@ type Creations = {
   patterns: Array<Pattern>;
   enemies: Array<Enemy>;
   backgrounds: Array<Background>;
+  spells: Array<Spell>;
 };
 
 const storageKey: string = "geregnet.creations";
@@ -84,12 +103,12 @@ function defaultPattern(): Pattern {
     color: "#ff3b3b",
     count: 16,
     spread: 360,
-    angle: 90,
+    heading: 0,
     aim: false,
-    spin: 30,
+    angleDerivatives: [30],
     rate: 2,
     speed: 120,
-    accel: 0,
+    speedDerivatives: new Array(),
   };
 }
 
@@ -102,6 +121,7 @@ function defaultEnemy(pattern: string | null): Enemy {
     size: 28,
     health: 20,
     pattern: pattern,
+    spell: null,
   };
 }
 
@@ -113,6 +133,30 @@ function defaultBackground(): Background {
     top: "#031448",
     bottom: "#01030a",
     scroll: 60,
+  };
+}
+
+function defaultRing(): Ring {
+  return {
+    radius: 150,
+    points: 6,
+    step: 2,
+    ticks: 36,
+    orb: 0.07,
+    spin: 20,
+  };
+}
+
+function defaultSpell(): Spell {
+  return {
+    id: createId(),
+    name: "Seal",
+    color: "#ff6fd8",
+    opacity: 0.6,
+    rings: [
+      defaultRing(),
+      { radius: 90, points: 8, step: 3, ticks: 24, orb: 0.06, spin: -30 },
+    ],
   };
 }
 
@@ -180,6 +224,7 @@ function defaultCreations(): Creations {
     patterns: [pattern],
     enemies: [enemy],
     backgrounds: [background],
+    spells: [defaultSpell()],
   };
 }
 
@@ -194,15 +239,16 @@ function loadCreations(): Creations {
     const parsed: Creations = JSON.parse(saved) as Creations;
     const fallback: Creations = defaultCreations();
     const creations: Creations = {
-      stages: parsed.stages?.length > 0 ? parsed.stages : new Array(),
-      patterns:
-        parsed.patterns?.length > 0 ? parsed.patterns : fallback.patterns,
-      enemies: parsed.enemies?.length > 0 ? parsed.enemies : fallback.enemies,
-      backgrounds:
-        parsed.backgrounds?.length > 0
-          ? parsed.backgrounds
-          : fallback.backgrounds,
+      stages: parsed.stages ?? new Array(),
+      patterns: parsed.patterns ?? fallback.patterns,
+      enemies: parsed.enemies ?? fallback.enemies,
+      backgrounds: parsed.backgrounds ?? fallback.backgrounds,
+      spells: parsed.spells ?? fallback.spells,
     };
+
+    for (const enemy of creations.enemies) {
+      enemy.spell = enemy.spell ?? null;
+    }
 
     for (const item of [
       ...creations.patterns,
@@ -212,15 +258,32 @@ function loadCreations(): Creations {
       item.sprite = item.sprite ?? null;
     }
 
-    for (const pattern of creations.patterns) {
+    for (const pattern of creations.patterns as Array<
+      Pattern & { spin?: number; accel?: number; angle?: number }
+    >) {
       pattern.size = pattern.size ?? 18;
+      pattern.heading =
+        pattern.heading ?? (((pattern.angle ?? 90) - 90 + 540) % 360) - 180;
+      delete pattern.angle;
+      pattern.angleDerivatives =
+        pattern.angleDerivatives ??
+        (pattern.spin !== undefined && pattern.spin !== 0
+          ? [pattern.spin]
+          : []);
+      pattern.speedDerivatives =
+        pattern.speedDerivatives ??
+        (pattern.accel !== undefined && pattern.accel !== 0
+          ? [pattern.accel]
+          : []);
+      delete pattern.spin;
+      delete pattern.accel;
     }
 
     for (const stage of creations.stages) {
       upgradeStage(stage);
     }
 
-    if (creations.stages.length === 0) {
+    if (parsed.stages === undefined) {
       creations.stages.push(
         defaultStage(
           creations.enemies[0]?.id ?? null,
@@ -312,6 +375,8 @@ export {
   defaultPattern,
   defaultEnemy,
   defaultBackground,
+  defaultRing,
+  defaultSpell,
   defaultSpawn,
   defaultKeyframe,
   defaultStage,
@@ -324,6 +389,8 @@ export type {
   Pattern,
   Enemy,
   Background,
+  Ring,
+  Spell,
   Spawn,
   Keyframe,
   Stage,

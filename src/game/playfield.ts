@@ -24,6 +24,7 @@ type Playfield = {
   view: Container;
   show: () => Promise<void>;
   hide: () => Promise<void>;
+  hideDuration: () => number;
   back: () => boolean;
 };
 
@@ -204,7 +205,7 @@ async function createPlayfield(
     );
 
     return tween(app.ticker, enterDuration, (progress: number) => {
-      view.x = -enterDistance * (1 - enterEasing(progress));
+      view.y = -enterDistance * (1 - enterEasing(progress));
       view.alpha = Math.min(progress * 2, 1);
     });
   }
@@ -222,20 +223,37 @@ async function createPlayfield(
     return false;
   }
 
+  function doorTime(): number {
+    return Math.max(selector.rollUpDuration() - rollLead, 0);
+  }
+
   function hide(): Promise<void> {
+    const door: number = doorTime();
+
     active = false;
     selector.setActive(false);
     held.clear();
+    selector.rollUp();
 
-    return tween(app.ticker, leaveDuration, (progress: number) => {
-      view.x = -enterDistance * progress * progress;
-      view.alpha = 1 - progress;
-    }).then(() => {
-      view.visible = false;
-    });
+    return tween(app.ticker, door, () => undefined)
+      .then(() =>
+        tween(app.ticker, leaveDuration, (progress: number) => {
+          view.y = -enterDistance * progress * progress;
+          view.alpha = 1 - progress;
+        }),
+      )
+      .then(() => {
+        view.visible = false;
+      });
   }
 
-  return { view: view, show: show, hide: hide, back: goBack };
+  return {
+    view: view,
+    show: show,
+    hide: hide,
+    hideDuration: () => doorTime() + leaveDuration,
+    back: goBack,
+  };
 }
 
 export { leaveDuration, createPlayfield };

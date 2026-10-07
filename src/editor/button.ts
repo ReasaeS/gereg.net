@@ -6,6 +6,7 @@ type Button = {
   back: Graphics;
   label: Text;
   active: () => boolean;
+  width: number; // px
 };
 
 const fontFamily: Array<string> = [
@@ -25,6 +26,7 @@ function createButton(
   name: string,
   active: () => boolean,
   action: () => void,
+  width: number = buttonWidth,
 ): Button {
   const view: Container = new Container();
   const back: Graphics = new Graphics();
@@ -44,10 +46,16 @@ function createButton(
   view.addChild(back, label);
   view.eventMode = "static";
   view.cursor = "pointer";
-  view.hitArea = new Rectangle(0, 0, buttonWidth, buttonHeight);
+  view.hitArea = new Rectangle(0, 0, width, buttonHeight);
   view.on("pointertap", action);
 
-  return { view: view, back: back, label: label, active: active };
+  return {
+    view: view,
+    back: back,
+    label: label,
+    active: active,
+    width: width,
+  };
 }
 
 function paintButton(button: Button): void {
@@ -58,9 +66,9 @@ function paintButton(button: Button): void {
     .poly([
       buttonSlant,
       0,
-      buttonWidth,
+      button.width,
       0,
-      buttonWidth - buttonSlant,
+      button.width - buttonSlant,
       buttonHeight,
       0,
       buttonHeight,

@@ -9,19 +9,36 @@ import {
   TilingSprite,
 } from "pixi.js";
 import { getTexture } from "./images";
-import type { Background, Enemy, Vector, Pattern, Spawn, Stage } from "./data";
+import type {
+  Background,
+  Enemy,
+  Vector,
+  Pattern,
+  Spawn,
+  Spell,
+  Stage,
+} from "./data";
+import { drawSpell } from "./sigil";
 
-type Resolve = (spawn: Spawn) => [Enemy, Pattern | null] | null;
+type Resolve = (spawn: Spawn) => [Enemy, Pattern | null, Spell | null] | null;
 
 type Preview = {
   view: Container;
   overlay: Container;
   setBackground: (background: Background | null) => void;
   setPattern: (pattern: Pattern | null) => void;
-  setEnemy: (enemy: Enemy | null, pattern: Pattern | null) => void;
+  setEnemy: (
+    enemy: Enemy | null,
+    pattern: Pattern | null,
+    spell: Spell | null,
+  ) => void;
+  setSpell: (spell: Spell | null) => void;
   setStage: (stage: Stage | null, resolve: Resolve) => void;
   seek: (time: number) => void;
+  setPlayerVisible: (visible: boolean) => void;
   stageTime: () => number;
+  patternTime: () => number;
+  seekPattern: (time: number) => void;
   clear: () => void;
   update: (delta: number) => void;
 };
@@ -38,19 +55,21 @@ type Bullet = {
   y: number; // units
   angle: number; // rad
   speed: number; // units/s
-  accel: number; // units/s²
+  derivatives: Array<number>; // units/s^(n+1)
   age: number; // s
 };
 
 type Emitter = {
   timer: number; // s
-  spin: number; // deg
+  time: number; // s
 };
 
 type Actor = {
   enemy: Enemy;
   pattern: Pattern | null;
+  spell: Spell | null;
   view: Container;
+  sigil: Graphics;
   body: Graphics;
   sprite: Sprite;
   health: Graphics;
@@ -84,6 +103,7 @@ const healthWidth: number = 36; // units
 const healthHeight: number = 3; // units
 const seekLookback: number = 8; // s
 const seekStep: number = 1 / 30; // s
+const patternLimit: number = 3600; // s
 
 async function loadBullet(): Promise<BulletLayers> {
   const texture: Texture = await Assets.load<Texture>(bulletPath);
@@ -117,6 +137,18 @@ function drawShape(graphics: Graphics, color: string, size: number): void {
     .fill("#ffe0c8");
 }
 
+function series(derivatives: Array<number>, time: number): number {
+  let term: number = 1;
+  let total: number = 0;
+
+  for (let order = 0; order < derivatives.length; order++) {
+    term *= time / (order + 1);
+    total += derivatives[order]! * term;
+  }
+
+  return total;
+}
+
 function motion(
   x: number,
   y: number,
@@ -141,6 +173,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   const coreLayer: Container = new Container();
   const actorLayer: Container = new Container();
   const overlay: Container = new Container();
+  const sigil: Graphics = new Graphics();
   const backdrop: TilingSprite = new TilingSprite({
     width: previewWidth,
     height: previewHeight,
@@ -149,10 +182,12 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   const mask: Graphics = new Graphics();
   const bullets: Array<Bullet> = new Array();
   const actors: Array<Actor> = new Array();
-  const emitter: Emitter = { timer: 0, spin: 0 };
+  const emitter: Emitter = { timer: 0, time: 0 };
   const layers: BulletLayers = await loadBullet();
   let background: Background | null = null;
   let pattern: Pattern | null = null;
+  let spell: Spell | null = null;
+  let spellTime: number = 0;
   let stage: Stage | null = null;
   let resolve: Resolve = () => null;
   let arrivals: Array<Arrival> = new Array();
@@ -165,11 +200,13 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   player.width = playerSize;
   player.height = playerSize;
   player.position.set(playerX, playerY);
+  sigil.position.set(previewWidth / 2, previewHeight / 2);
   backdrop.visible = false;
   mask.rect(0, 0, previewWidth, previewHeight).fill(0xffffff);
   view.addChild(
     sky,
     backdrop,
+    sigil,
     player,
     actorLayer,
     bulletLayer,
@@ -225,6 +262,13 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     }
 
     drawShape(actor.body, enemy.color, enemy.size);
+
+    if (actor.spell === null) {
+      actor.sigil.clear();
+    } else {
+      drawSpell(actor.sigil, actor.spell, actor.time);
+    }
+
     actor.health
       .clear()
       .rect(-healthWidth / 2, -enemy.size / 2 - 8, healthWidth, healthHeight)
@@ -241,6 +285,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   function addActor(
     enemy: Enemy,
     attack: Pattern | null,
+    seal: Spell | null,
     x: number,
     y: number,
     derivatives: Array<Vector>,
@@ -248,7 +293,9 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     const actor: Actor = {
       enemy: enemy,
       pattern: attack,
+      spell: seal,
       view: new Container(),
+      sigil: new Graphics(),
       body: new Graphics(),
       sprite: new Sprite(),
       health: new Graphics(),
@@ -256,11 +303,11 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       y: y,
       derivatives: derivatives,
       time: 0,
-      emitter: { timer: 0, spin: 0 },
+      emitter: { timer: 0, time: 0 },
     };
 
     actor.sprite.anchor.set(0.5);
-    actor.view.addChild(actor.body, actor.sprite, actor.health);
+    actor.view.addChild(actor.sigil, actor.body, actor.sprite, actor.health);
     actorLayer.addChild(actor.view);
     actors.push(actor);
     dress(actor);
@@ -325,7 +372,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
         y: y,
         angle: base + (offset * Math.PI) / 180,
         speed: source.speed,
-        accel: source.accel,
+        derivatives: [...source.speedDerivatives],
         age: 0,
       });
     }
@@ -338,7 +385,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     y: number,
     delta: number,
   ): void {
-    state.spin += source.spin * delta;
+    state.time += delta;
     state.timer += delta;
 
     const interval: number = 1 / Math.max(source.rate, 0.01);
@@ -348,9 +395,14 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
 
       const aim: number = source.aim
         ? Math.atan2(playerY - y, playerX - x)
-        : (source.angle * Math.PI) / 180;
+        : ((source.heading + 90) * Math.PI) / 180;
 
-      spawn(source, x, y, aim + (state.spin * Math.PI) / 180);
+      spawn(
+        source,
+        x,
+        y,
+        aim + (series(source.angleDerivatives, state.time) * Math.PI) / 180,
+      );
     }
   }
 
@@ -361,9 +413,12 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       const bullet: Bullet = bullets[index]!;
 
       bullet.age += delta;
-      bullet.speed += bullet.accel * delta;
-      bullet.x += Math.cos(bullet.angle) * bullet.speed * delta;
-      bullet.y += Math.sin(bullet.angle) * bullet.speed * delta;
+
+      const speed: number =
+        bullet.speed + series(bullet.derivatives, bullet.age);
+
+      bullet.x += Math.cos(bullet.angle) * speed * delta;
+      bullet.y += Math.sin(bullet.angle) * speed * delta;
 
       const outside: boolean =
         bullet.x < -bulletMargin ||
@@ -378,7 +433,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       }
 
       const rotation: number =
-        bullet.angle - Math.PI / 2 + (bullet.speed < 0 ? Math.PI : 0);
+        bullet.angle - Math.PI / 2 + (speed < 0 ? Math.PI : 0);
 
       bullet.color.position.set(bullet.x, bullet.y);
       bullet.color.rotation = rotation;
@@ -415,6 +470,10 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       }
 
       actor.view.position.set(x, y);
+
+      if (actor.spell !== null) {
+        drawSpell(actor.sigil, actor.spell, actor.time);
+      }
 
       if (
         actor.pattern !== null &&
@@ -481,6 +540,20 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     }
   }
 
+  function seekPattern(value: number): void {
+    const goal: number = Math.min(Math.max(value, 0), patternLimit);
+
+    clearBullets();
+    emitter.timer = 0;
+    emitter.time = Math.max(goal - seekLookback, 0);
+
+    while (pattern !== null && emitter.time < goal) {
+      update(Math.min(seekStep, goal - emitter.time));
+    }
+
+    emitter.time = goal;
+  }
+
   function runStage(delta: number): void {
     if (stage === null) {
       return;
@@ -498,7 +571,9 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       arrivals[nextArrival]!.time <= time
     ) {
       const arrival: Arrival = arrivals[nextArrival]!;
-      const resolved: [Enemy, Pattern | null] | null = resolve(arrival.spawn);
+      const resolved: [Enemy, Pattern | null, Spell | null] | null = resolve(
+        arrival.spawn,
+      );
 
       nextArrival++;
 
@@ -506,6 +581,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
         addActor(
           resolved[0],
           resolved[1],
+          resolved[2],
           arrival.spawn.x * previewWidth,
           arrival.spawn.y * previewHeight,
           arrival.spawn.derivatives,
@@ -517,16 +593,22 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   }
 
   function update(delta: number): void {
-    if (backdrop.visible && background !== null) {
-      backdrop.tilePosition.y += background.scroll * delta;
-    }
-
     if (stage !== null) {
       runStage(delta);
-    } else if (actors.length > 0) {
-      moveActors(delta);
-    } else if (pattern !== null) {
-      fire(pattern, emitter, emitterX, emitterY, delta);
+      backdrop.tilePosition.y = (background?.scroll ?? 0) * time;
+    } else {
+      backdrop.tilePosition.y += (background?.scroll ?? 0) * delta;
+
+      if (actors.length > 0) {
+        moveActors(delta);
+      } else if (pattern !== null) {
+        fire(pattern, emitter, emitterX, emitterY, delta);
+      }
+    }
+
+    if (spell !== null) {
+      spellTime += delta;
+      drawSpell(sigil, spell, spellTime);
     }
 
     moveBullets(delta);
@@ -536,8 +618,19 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     clearActors();
     clearBullets();
     emitter.timer = 0;
-    emitter.spin = 0;
+    emitter.time = 0;
     time = 0;
+    spellTime = 0;
+    backdrop.tilePosition.y = 0;
+  }
+
+  function showSpell(value: Spell | null): void {
+    spell = value;
+    sigil.visible = value !== null;
+
+    if (value !== null) {
+      drawSpell(sigil, value, spellTime);
+    }
   }
 
   drawSky();
@@ -550,6 +643,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       drawSky();
     },
     setPattern: (value: Pattern | null) => {
+      showSpell(null);
       stage = null;
       pattern = value;
 
@@ -557,7 +651,12 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
         clearActors();
       }
     },
-    setEnemy: (value: Enemy | null, attack: Pattern | null) => {
+    setEnemy: (
+      value: Enemy | null,
+      attack: Pattern | null,
+      seal: Spell | null,
+    ) => {
+      showSpell(null);
       stage = null;
       pattern = null;
 
@@ -570,14 +669,23 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
 
       if (actor === undefined || actor.enemy !== value || actors.length > 1) {
         clearActors();
-        addActor(value, attack, previewWidth / 2, hoverY, new Array());
+        addActor(value, attack, seal, previewWidth / 2, hoverY, new Array());
         return;
       }
 
       actor.pattern = attack;
+      actor.spell = seal;
       dress(actor);
     },
+    setSpell: (value: Spell | null) => {
+      stage = null;
+      pattern = null;
+      clearActors();
+      showSpell(value);
+    },
     setStage: (value: Stage | null, lookup: Resolve) => {
+      showSpell(null);
+
       const changed: boolean = value !== stage;
 
       stage = value;
@@ -596,7 +704,12 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       schedule();
     },
     seek: seek,
+    setPlayerVisible: (visible: boolean) => {
+      player.visible = visible;
+    },
     stageTime: () => time,
+    patternTime: () => emitter.time,
+    seekPattern: seekPattern,
     clear: clear,
     update: update,
   };

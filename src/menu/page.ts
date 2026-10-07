@@ -31,6 +31,7 @@ const enterDistance: number = 400; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
 const titleFade: number = 200; // ms
+const leaveLead: number = 150; // ms
 
 type PageContent = {
   view: Container;
@@ -38,6 +39,8 @@ type PageContent = {
   enter?: () => void;
   back?: () => boolean;
   fullscreen?: () => boolean;
+  leave?: () => Promise<void>;
+  leaveTime?: () => number;
 };
 
 type Page = {
@@ -127,16 +130,30 @@ function showPage(ticker: Ticker, page: Page): Promise<void> {
   });
 }
 
-function hidePage(ticker: Ticker, page: Page): Promise<void> {
-  page.content?.setActive(false);
-
-  return tween(ticker, leaveDuration, (progress: number) => {
-    page.offset = enterDistance * progress * progress;
-    page.view.alpha = 1 - progress;
-  }).then(() => {
-    page.view.visible = false;
-  });
+function hideTime(page: Page): number {
+  return (
+    Math.max((page.content?.leaveTime?.() ?? 0) - leaveLead, 0) + leaveDuration
+  );
 }
 
-export { leaveDuration, createPage, showPage, hidePage };
+function hidePage(ticker: Ticker, page: Page): Promise<void> {
+  const content: number = Math.max(
+    (page.content?.leaveTime?.() ?? 0) - leaveLead,
+    0,
+  );
+
+  page.content?.setActive(false);
+  page.content?.leave?.();
+
+  return tween(ticker, content, () => undefined).then(() =>
+    tween(ticker, leaveDuration, (progress: number) => {
+      page.offset = enterDistance * progress * progress;
+      page.view.alpha = 1 - progress;
+    }).then(() => {
+      page.view.visible = false;
+    }),
+  );
+}
+
+export { hideTime, createPage, showPage, hidePage };
 export type { Page, PageContent };

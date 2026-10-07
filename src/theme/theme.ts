@@ -18,6 +18,49 @@ type Theme = {
 
 type ThemeListener = (theme: Theme) => void;
 
+const daysInYear: number = 366;
+const hueStride: number = 139;
+const dailySaturation: number = 0.85;
+const dailyLightness: number = 0.55;
+
+function dayOfYear(date: Date): number {
+  const today: number = Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const start: number = Date.UTC(date.getFullYear(), 0, 1);
+
+  return Math.round((today - start) / 86400000);
+}
+
+function channel(value: number): string {
+  return Math.round(value * 255)
+    .toString(16)
+    .padStart(2, "0");
+}
+
+function dailyColor(date: Date): string {
+  const hue: number = ((dayOfYear(date) * hueStride) % daysInYear) / daysInYear;
+  const chroma: number =
+    (1 - Math.abs(2 * dailyLightness - 1)) * dailySaturation;
+  const sector: number = hue * 6;
+  const second: number = chroma * (1 - Math.abs((sector % 2) - 1));
+  const base: number = dailyLightness - chroma / 2;
+  const [red, green, blue] = [
+    [chroma, second, 0],
+    [second, chroma, 0],
+    [0, chroma, second],
+    [0, second, chroma],
+    [second, 0, chroma],
+    [chroma, 0, second],
+  ][Math.floor(sector) % 6]!;
+
+  return (
+    "#" + channel(red! + base) + channel(green! + base) + channel(blue! + base)
+  );
+}
+
 const theme: Theme = {
   skyTop: "#06205e",
   skyMiddle: "#1a5fc4",
@@ -30,7 +73,7 @@ const theme: Theme = {
   menuSelected: "#061a52",
   highlight: "#ffffff",
   accent: "#ff2a4d",
-  ring: "#3232ff",
+  ring: dailyColor(new Date()),
   nightSea: "#1a2a52",
   rain: "#aabedc",
   bullets: "#1a2a7a",

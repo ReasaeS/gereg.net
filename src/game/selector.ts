@@ -13,6 +13,7 @@ type Selector = {
   view: Container;
   rollDown: () => Promise<void>;
   rollUp: () => Promise<void>;
+  rollUpDuration: () => number;
   close: () => void;
   setActive: (active: boolean) => void;
   setScale: (scale: number) => void;
@@ -58,8 +59,8 @@ const nameSize: number = 20; // px
 const subtitleSize: number = 12; // px
 const subtitleColor: string = "#9fd8ff";
 const highlightSmoothing: number = 0.08; // s
-const downDuration: number = 1400; // ms
-const upDuration: number = 900; // ms
+const downDuration: number = 700; // ms
+const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
 const upKeys: Array<string> = ["ArrowUp", "KeyW"];
 const downKeys: Array<string> = ["ArrowDown", "KeyS"];
@@ -301,6 +302,7 @@ function createSelector(ticker: Ticker): Selector {
       return rollTo(1, downDuration);
     },
     rollUp: () => rollTo(0, upDuration),
+    rollUpDuration: () => upDuration * roll,
     close: () => {
       roll = 0;
       place();

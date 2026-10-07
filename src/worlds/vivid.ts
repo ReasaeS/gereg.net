@@ -105,7 +105,15 @@ const seaHeight: number = 20; // vh
 const abyssColor: string = "#01030a";
 const diveDistance: number = 2.2; // screen heights
 const sceneries: Map<string, Scenery> = new Map([
-  ["config", { glow: null, glowY: 0, moteColor: "#bfe9ff", kelp: false }],
+  [
+    "config",
+    {
+      glow: "#ffb02e",
+      glowY: 0.6,
+      moteColor: "#ffe2a8",
+      kelp: false,
+    },
+  ],
   [
     "play",
     {
@@ -127,9 +135,9 @@ const sceneries: Map<string, Scenery> = new Map([
   [
     "create",
     {
-      glow: "#e8f4ff",
-      glowY: -0.8,
-      moteColor: "#ffffff",
+      glow: "#a35cff",
+      glowY: 0.6,
+      moteColor: "#e0c8ff",
       kelp: false,
     },
   ],
@@ -405,10 +413,14 @@ function createVivid(app: Application): Vivid {
       .clear()
       .rect(-margin, -margin, app.screen.width + margin * 2, height + margin)
       .fill(nightGradient);
-    seaGradient.destroy();
+    const oldSea: FillGradient = seaGradient;
+    const oldNightSea: FillGradient = nightSeaGradient;
+
     seaGradient = seaFill(seaStops, surfaceDepth, total);
-    nightSeaGradient.destroy();
     nightSeaGradient = seaFill(nightSeaStops, surfaceDepth, total);
+    drawSea(app.screen.width, height, 0);
+    oldSea.destroy();
+    oldNightSea.destroy();
   }
 
   function seaFill(
@@ -694,17 +706,19 @@ function createVivid(app: Application): Vivid {
 
     const target: Point | null = beamTarget?.() ?? null;
 
-    if (witch.hovered()) {
-      beamLocal.copyFrom(witch.view.position);
-    } else if (target !== null) {
-      scene.toLocal(target, undefined, beamLocal);
+    if (target !== null) {
+      if (witch.hovered()) {
+        beamLocal.copyFrom(witch.view.position);
+      } else {
+        scene.toLocal(target, undefined, beamLocal);
+      }
     }
 
     lighthouse.update(
       width,
       height,
       height * (1 - seaHeight / 100),
-      target === null && !witch.hovered() ? null : beamLocal,
+      target === null ? null : beamLocal,
       delta,
     );
 

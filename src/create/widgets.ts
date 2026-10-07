@@ -57,6 +57,8 @@ const headerBar: number = 3; // units
 const headerSlant: number = 4; // units
 const chevronSize: number = 3.5; // units
 const thumbnailSize: number = 18; // units
+const fieldColor: string = "#01040f";
+const fieldAlpha: number = 0.85;
 
 function createText(size: number, color: string): Text {
   return new Text({
@@ -441,6 +443,25 @@ function createHeader(
   return { view: view, refresh: refresh, header: true };
 }
 
+function drawField(
+  graphics: Graphics,
+  width: number,
+  height: number,
+  focused: boolean,
+): void {
+  graphics
+    .clear()
+    .rect(0, 0, width, height)
+    .fill({ color: fieldColor, alpha: fieldAlpha })
+    .rect(0, 0, width, height)
+    .stroke({
+      color: focused ? getTheme().accent : getTheme().highlight,
+      width: focused ? 1.5 : 0.75,
+      alpha: focused ? 1 : 0.7,
+      alignment: 1,
+    });
+}
+
 function createSpriteRow(
   name: string,
   get: () => Texture | null,
@@ -499,6 +520,7 @@ export {
   createColors,
   createHeader,
   headerHeight,
+  drawField,
   createSpriteRow,
 };
 export type { Control, Chip, Option };

@@ -6,6 +6,7 @@ import {
   Sprite,
   Text,
   type Texture,
+  type Bounds,
   type FederatedPointerEvent,
   type FederatedWheelEvent,
   type Application,
@@ -15,6 +16,7 @@ import { playerTexture } from "../editor/editor";
 import {
   drawFrame,
   fieldHeight,
+  fieldWidth,
   fieldX,
   fieldY,
   hudHeight,
@@ -34,6 +36,8 @@ import {
   derivativeNames,
   createId,
   defaultBackground,
+  defaultRing,
+  defaultSpell,
   defaultEnemy,
   defaultPattern,
   defaultKeyframe,
@@ -47,7 +51,9 @@ import {
   type Vector,
   type Pattern,
   type Keyframe,
+  type Ring,
   type Spawn,
+  type Spell,
   type Stage,
 } from "./data";
 import {
@@ -64,6 +70,7 @@ import {
   createChoice,
   createColors,
   createSlider,
+  drawField,
   createHeader,
   headerHeight,
   createVector,
@@ -76,7 +83,7 @@ import {
   type Option,
 } from "./widgets";
 import { getTexture, loadTexture, removeUnused, storeImage } from "./images";
-import { createGallery, type Gallery, type Kind } from "./gallery";
+import { createGallery, type Action, type Gallery, type Kind } from "./gallery";
 
 type Item = {
   id: string;
@@ -106,6 +113,7 @@ const actionWidth: number = (rowWidth - actionGap) / 2; // units
 const headingSize: number = 16; // units
 const headingHeight: number = 22; // units
 const maxDelta: number = 0.05; // s
+const nameLength: number = 24;
 const dropColor: string = "#01040f";
 const dropAlpha: number = 0.75;
 const dropBorder: number = 6; // px
@@ -117,6 +125,11 @@ const timelineGap: number = 6; // units
 const timelineHeight: number = 10; // units
 const columnCenter: number = fieldX / 2; // units
 const clockGap: number = 8; // units
+const patternGap: number = 6; // units
+const clockWidth: number = 46; // units
+const fieldPadding: number = 4; // units
+const typingLength: number = 7;
+const caretBlink: number = 1; // s
 const markerWidth: number = 1.5; // units
 const playheadWidth: number = 1; // units
 const clockSize: number = 8; // units
@@ -137,6 +150,13 @@ const positionMin: number = -0.2;
 const positionMax: number = 1.2;
 const derivativeLimit: number = 400; // units/s^n
 const derivativeStep: number = 5; // units/s^n
+const angleLimit: number = 360; // deg/s^n
+const speedLimit: number = 400; // units/s^(n+1)
+const ringMin: number = 10; // units
+const ringMax: number = 220; // units
+const ringShrink: number = 40; // units
+const spinLimit: number = 180; // deg/s
+const speedNames: Array<string> = derivativeNames.slice(1);
 const transportWidth: number = 24; // units
 const iconSize: number = 3.5; // units
 const swapOutDuration: number = 200; // ms
@@ -207,6 +227,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   let active: boolean = false;
   let spawnIndex: number = 0;
   let keyIndex: number = 0;
+  let ringIndex: number = 0;
 
   function selection(name: string): number {
     return tabs.find((value: Tab) => value.name === name)?.selected ?? 0;
@@ -226,6 +247,16 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function background(): Background {
     return creations.backgrounds[selection("background")]!;
+  }
+
+  function spell(): Spell {
+    return creations.spells[selection("spell")]!;
+  }
+
+  function ring(): Ring {
+    ringIndex = Math.min(ringIndex, spell().rings.length - 1);
+
+    return spell().rings[ringIndex]!;
   }
 
   function keyframe(): Keyframe {
@@ -254,15 +285,37 @@ async function createMaker(app: Application): Promise<PageContent> {
     );
   }
 
-  function resolve(value: Spawn): [Enemy, Pattern | null] | null {
+  function spellById(id: string | null): Spell | null {
+    return creations.spells.find((value: Spell) => value.id === id) ?? null;
+  }
+
+  function resolve(value: Spawn): [Enemy, Pattern | null, Spell | null] | null {
     const found: Enemy | null = enemyById(value.enemy);
 
-    return found === null ? null : [found, patternById(found.pattern)];
+    return found === null
+      ? null
+      : [found, patternById(found.pattern), spellById(found.spell)];
   }
 
   function changed(): void {
     saveCreations(creations);
+
+    if (tab.name !== "stage") {
+      preview.clear();
+      tab.show();
+      return;
+    }
+
+    const now: number = preview.stageTime();
+    const previous: number = Math.max(
+      0,
+      ...stage()
+        .keyframes.map((value: Keyframe) => value.time)
+        .filter((value: number) => value <= now),
+    );
+
     tab.show();
+    preview.seek(previous);
   }
 
   function current(): Item {
@@ -390,7 +443,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function section(name: string, list: Array<Control>): Array<Control> {
     const key: number = sections++;
-    const open: () => boolean = () => sectionOpen.get(key) ?? true;
+    const open: () => boolean = () => sectionOpen.get(key) ?? false;
     const header: Control = createHeader(name, open, () => {
       sectionOpen.set(key, !open());
       refresh();
@@ -470,20 +523,28 @@ async function createMaker(app: Application): Promise<PageContent> {
           -180,
           180,
           5,
-          () => pattern().angle,
+          () => pattern().heading,
           (value: number) => {
-            pattern().angle = value;
+            pattern().heading = value;
           },
         ),
-        slider(
-          "Spin",
-          -360,
-          360,
-          5,
-          () => pattern().spin,
-          (value: number) => {
-            pattern().spin = value;
-          },
+        ...derivativeNames.map((name: string, order: number) => ({
+          ...slider(
+            name,
+            -angleLimit,
+            angleLimit,
+            5,
+            () => pattern().angleDerivatives[order] ?? 0,
+            (value: number) => {
+              pattern().angleDerivatives[order] = value;
+            },
+          ),
+          shown: () => pattern().angleDerivatives.length > order,
+        })),
+        derivativeActions(
+          () => pattern().angleDerivatives,
+          derivativeNames,
+          () => 0,
         ),
       ]),
       ...section("Fire", [
@@ -507,20 +568,29 @@ async function createMaker(app: Application): Promise<PageContent> {
             pattern().speed = value;
           },
         ),
-        slider(
-          "Accel",
-          -200,
-          200,
-          5,
-          () => pattern().accel,
-          (value: number) => {
-            pattern().accel = value;
-          },
+        ...speedNames.map((name: string, order: number) => ({
+          ...slider(
+            name,
+            -speedLimit,
+            speedLimit,
+            5,
+            () => pattern().speedDerivatives[order] ?? 0,
+            (value: number) => {
+              pattern().speedDerivatives[order] = value;
+            },
+          ),
+          shown: () => pattern().speedDerivatives.length > order,
+        })),
+        derivativeActions(
+          () => pattern().speedDerivatives,
+          speedNames,
+          () => 0,
         ),
       ]),
     ],
     () => {
-      preview.setBackground(background());
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
       preview.setPattern(pattern());
     },
   );
@@ -575,11 +645,30 @@ async function createMaker(app: Application): Promise<PageContent> {
             enemy().pattern = value;
           },
         ),
+        choice(
+          "Spell",
+          () => [
+            { value: null, label: "None" },
+            ...creations.spells.map((value: Spell) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => enemy().spell,
+          (value: string | null) => {
+            enemy().spell = value;
+          },
+        ),
       ]),
     ],
     () => {
-      preview.setBackground(background());
-      preview.setEnemy(enemy(), patternById(enemy().pattern));
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setEnemy(
+        enemy(),
+        patternById(enemy().pattern),
+        spellById(enemy().spell),
+      );
     },
   );
 
@@ -621,6 +710,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     ],
     () => {
       preview.setBackground(background());
+      preview.setPlayerVisible(false);
       preview.setPattern(null);
     },
   );
@@ -656,20 +746,24 @@ async function createMaker(app: Application): Promise<PageContent> {
     });
   }
 
-  function derivativeActions(): Control {
+  function derivativeActions<T>(
+    list: () => Array<T>,
+    names: Array<string>,
+    blank: () => T,
+  ): Control {
     const row: Container = new Container();
     const width: number = actionWidth;
     const add: Chip = createChip("", width, () => {
-      if (spawn().derivatives.length >= derivativeNames.length) {
+      if (list().length >= names.length) {
         return;
       }
 
-      spawn().derivatives.push({ x: 0, y: 0 });
+      list().push(blank());
       changed();
       refresh();
     });
     const remove: Chip = createChip("", width, () => {
-      spawn().derivatives.pop();
+      list().pop();
       changed();
       refresh();
     });
@@ -681,13 +775,12 @@ async function createMaker(app: Application): Promise<PageContent> {
     return {
       view: row,
       refresh: () => {
-        const count: number = spawn().derivatives.length;
+        const count: number = list().length;
 
-        add.view.visible = count < derivativeNames.length;
+        add.view.visible = count < names.length;
         remove.view.visible = count > 0;
-        add.label.text = "ADD " + (derivativeNames[count] ?? "").toUpperCase();
-        remove.label.text =
-          "REMOVE " + (derivativeNames[count - 1] ?? "").toUpperCase();
+        add.label.text = "ADD " + (names[count] ?? "").toUpperCase();
+        remove.label.text = "REMOVE " + (names[count - 1] ?? "").toUpperCase();
         remove.view.x = add.view.visible ? width + actionGap : 0;
       },
     };
@@ -709,6 +802,147 @@ async function createMaker(app: Application): Promise<PageContent> {
       (value.spawns.length === 1 ? " enemy" : " enemies")
     );
   }
+
+  function selectRing(index: number): void {
+    ringIndex = index;
+    refresh();
+  }
+
+  addTab(
+    "spell",
+    () => creations.spells,
+    [
+      ...section("Look", [
+        colors(
+          "Colour",
+          brightColors,
+          () => spell().color,
+          (value: string) => {
+            spell().color = value;
+          },
+        ),
+        slider(
+          "Opacity",
+          0.1,
+          1,
+          0.05,
+          () => spell().opacity,
+          (value: number) => {
+            spell().opacity = value;
+          },
+        ),
+      ]),
+      ...section("Rings", [
+        actionRow(
+          "Add ring",
+          () => {
+            const source: Ring | undefined = spell().rings[ringIndex];
+
+            spell().rings.push(
+              source === undefined
+                ? defaultRing()
+                : {
+                    ...source,
+                    radius: Math.max(source.radius - ringShrink, ringMin),
+                    spin: -source.spin,
+                  },
+            );
+            changed();
+            selectRing(spell().rings.length - 1);
+          },
+          "Remove ring",
+          () => {
+            if (spell().rings.length <= 1) {
+              return;
+            }
+
+            spell().rings.splice(ringIndex, 1);
+            changed();
+            selectRing(Math.max(ringIndex - 1, 0));
+          },
+        ),
+        choice(
+          "Ring",
+          () =>
+            spell().rings.map((value: Ring, index: number) => ({
+              value: index,
+              label: "Ring " + (index + 1) + "  ·  " + value.radius,
+            })),
+          () => ringIndex,
+          (value: number) => selectRing(value),
+        ),
+      ]),
+      ...section("Shape", [
+        slider(
+          "Radius",
+          ringMin,
+          ringMax,
+          5,
+          () => ring().radius,
+          (value: number) => {
+            ring().radius = value;
+          },
+        ),
+        slider(
+          "Points",
+          0,
+          12,
+          1,
+          () => ring().points,
+          (value: number) => {
+            ring().points = value;
+          },
+        ),
+        slider(
+          "Step",
+          1,
+          5,
+          1,
+          () => ring().step,
+          (value: number) => {
+            ring().step = value;
+          },
+        ),
+        slider(
+          "Ticks",
+          0,
+          72,
+          2,
+          () => ring().ticks,
+          (value: number) => {
+            ring().ticks = value;
+          },
+        ),
+        slider(
+          "Orbs",
+          0,
+          0.2,
+          0.01,
+          () => ring().orb,
+          (value: number) => {
+            ring().orb = value;
+          },
+        ),
+      ]),
+      ...section("Motion", [
+        slider(
+          "Spin",
+          -spinLimit,
+          spinLimit,
+          5,
+          () => ring().spin,
+          (value: number) => {
+            ring().spin = value;
+          },
+        ),
+      ]),
+    ],
+    () => {
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setSpell(spell());
+    },
+  );
 
   addTab(
     "stage",
@@ -879,11 +1113,16 @@ async function createMaker(app: Application): Promise<PageContent> {
           ),
           shown: () => spawn().derivatives.length > order,
         })),
-        derivativeActions(),
+        derivativeActions(
+          () => spawn().derivatives,
+          derivativeNames,
+          () => ({ x: 0, y: 0 }),
+        ),
       ]),
     ],
     () => {
       preview.setBackground(backgroundById(stage().background));
+      preview.setPlayerVisible(true);
       preview.setStage(stage(), resolve);
     },
   );
@@ -1115,6 +1354,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function refresh(): void {
+    if (tab.items()[tab.selected] === undefined) {
+      return;
+    }
+
     heading.text = current().name.toUpperCase();
 
     for (let index = 0; index < tabs.length; index++) {
@@ -1181,7 +1424,77 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => creations,
     (kind: Kind, index: number) => openItem(kind, index),
     (kind: Kind) => createItem(kind),
+    (kind: Kind, index: number, action: Action) => {
+      if (action === "rename") {
+        renameItem(kind, index);
+      } else if (action === "delete") {
+        deleteItem(kind, index);
+      }
+    },
   );
+
+  function listOf(kind: Kind): Array<Item> {
+    return tabs.find((value: Tab) => value.name === kind)!.items();
+  }
+
+  function renameItem(kind: Kind, index: number): void {
+    const item: Item | undefined = listOf(kind)[index];
+    const name: string | null =
+      item === undefined ? null : window.prompt("Name", item.name);
+
+    if (item === undefined || name === null || name.trim() === "") {
+      return;
+    }
+
+    item.name = name.trim().slice(0, nameLength);
+    saveCreations(creations);
+    gallery.refresh();
+  }
+
+  function deleteItem(kind: Kind, index: number): void {
+    const item: Item | undefined = listOf(kind)[index];
+
+    if (item === undefined || !window.confirm('Delete "' + item.name + '"?')) {
+      return;
+    }
+
+    listOf(kind).splice(index, 1);
+
+    for (const enemyItem of creations.enemies) {
+      if (enemyItem.pattern === item.id) {
+        enemyItem.pattern = null;
+      }
+
+      if (enemyItem.spell === item.id) {
+        enemyItem.spell = null;
+      }
+    }
+
+    for (const stageItem of creations.stages) {
+      if (stageItem.background === item.id) {
+        stageItem.background = null;
+      }
+
+      for (const keyframeItem of stageItem.keyframes) {
+        for (const spawnItem of keyframeItem.spawns) {
+          if (spawnItem.enemy === item.id) {
+            spawnItem.enemy = null;
+          }
+        }
+      }
+    }
+
+    for (const value of tabs) {
+      value.selected = Math.max(
+        Math.min(value.selected, value.items().length - 1),
+        0,
+      );
+    }
+
+    saveCreations(creations);
+    cleanup();
+    gallery.refresh();
+  }
   let editing: boolean = false;
   let dropShown: boolean = false;
 
@@ -1205,6 +1518,11 @@ async function createMaker(app: Application): Promise<PageContent> {
         ...defaultEnemy(creations.patterns[0]?.id ?? null),
         name: "Enemy " + (creations.enemies.length + 1),
       });
+    } else if (kind === "spell") {
+      index = creations.spells.push({
+        ...defaultSpell(),
+        name: "Spell " + (creations.spells.length + 1),
+      });
     } else {
       index = creations.backgrounds.push({
         ...defaultBackground(),
@@ -1223,6 +1541,9 @@ async function createMaker(app: Application): Promise<PageContent> {
     tab = next;
     spawnIndex = 0;
     keyIndex = 0;
+    ringIndex = 0;
+    sectionOpen.clear();
+    laidOut = null;
     editing = true;
     gallery.setActive(false);
     preview.clear();
@@ -1273,6 +1594,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function showSelector(animate: boolean = true): void {
+    typing = null;
     editing = false;
     dropShown = false;
     gallery.refresh();
@@ -1377,15 +1699,29 @@ async function createMaker(app: Application): Promise<PageContent> {
   let playing: boolean = true;
   const transport: Container = new Container();
   const playIcon: Graphics = new Graphics();
+  const patternIcon: Graphics = new Graphics();
+  const patternBar: Container = new Container();
+  const patternClock: Text = createText(clockSize, "#ffffff");
+  const clockField: Container = new Container();
+  const clockBox: Graphics = new Graphics();
+  let patternPlaying: boolean = true;
+  let typing: string | null = null;
+  let typingFresh: boolean = false;
+  let caretTime: number = 0;
 
   function drawPlayIcon(): void {
+    drawToggle(playIcon, playing);
+    drawToggle(patternIcon, patternPlaying);
+  }
+
+  function drawToggle(icon: Graphics, running: boolean): void {
     const center: number = transportWidth / 2;
     const middle: number = chipHeight / 2;
 
-    playIcon.clear();
+    icon.clear();
 
-    if (playing) {
-      playIcon
+    if (running) {
+      icon
         .rect(
           center - iconSize * 0.8,
           middle - iconSize,
@@ -1400,7 +1736,7 @@ async function createMaker(app: Application): Promise<PageContent> {
         )
         .fill(0xffffff);
     } else {
-      playIcon
+      icon
         .poly([
           center - iconSize * 0.7,
           middle - iconSize,
@@ -1414,7 +1750,12 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function togglePlaying(): void {
-    playing = !playing;
+    if (tab.name === "pattern") {
+      patternPlaying = !patternPlaying;
+    } else {
+      playing = !playing;
+    }
+
     drawPlayIcon();
   }
 
@@ -1424,6 +1765,85 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   const playChip: Chip = createChip("", transportWidth, togglePlaying);
+  const patternChip: Chip = createChip("", transportWidth, togglePlaying);
+
+  patternChip.view.addChild(patternIcon);
+  patternClock.anchor.set(0, 0.5);
+  patternClock.position.set(fieldPadding, chipHeight / 2);
+  clockField.position.set(transportWidth + patternGap, 0);
+  clockField.addChild(clockBox, patternClock);
+  patternBar.addChild(patternChip.view, clockField);
+  clockField.eventMode = "static";
+  clockField.cursor = "text";
+  clockField.hitArea = new Rectangle(0, 0, clockWidth, chipHeight);
+  clockField.on("pointertap", () => {
+    if (typing === null) {
+      typing = preview.patternTime().toFixed(1);
+      typingFresh = true;
+      patternPlaying = false;
+      drawPlayIcon();
+    }
+  });
+
+  function finishTyping(apply: boolean): void {
+    if (typing === null) {
+      return;
+    }
+
+    const value: number = Number(typing);
+
+    if (apply && typing !== "" && Number.isFinite(value)) {
+      preview.seekPattern(value);
+    }
+
+    typing = null;
+  }
+
+  window.addEventListener("pointerdown", (event: PointerEvent) => {
+    if (typing !== null && event.target === app.canvas) {
+      const bounds: Bounds = clockField.getBounds();
+      const point: Point = app.renderer.events.pointer.global;
+
+      if (!bounds.containsPoint(point.x, point.y)) {
+        finishTyping(true);
+      }
+    }
+  });
+
+  window.addEventListener(
+    "keydown",
+    (event: KeyboardEvent) => {
+      if (typing === null) {
+        return;
+      }
+
+      if (event.key === "Enter") {
+        finishTyping(true);
+      } else if (event.key === "Escape") {
+        finishTyping(false);
+      } else if (event.key === "Backspace") {
+        typing = typingFresh ? "" : typing.slice(0, -1);
+        typingFresh = false;
+      } else if (
+        (/^[0-9]$/.test(event.key) ||
+          (event.key === "." && (typingFresh || !typing.includes(".")))) &&
+        (typingFresh || typing.length < typingLength)
+      ) {
+        typing = (typingFresh ? "" : typing) + event.key;
+        typingFresh = false;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    },
+    true,
+  );
+  patternBar.position.set(
+    fieldX + fieldWidth / 2 - transportWidth,
+    fieldY + fieldHeight + (hudHeight - fieldY - fieldHeight - chipHeight) / 2,
+  );
 
   playChip.view.addChild(playIcon);
   transport.addChild(playChip.view);
@@ -1459,7 +1879,15 @@ async function createMaker(app: Application): Promise<PageContent> {
     timelineLength + timelineGap,
   );
   timeline.position.set(0, fieldY);
-  gameFrame.addChild(backdrop, panelBack, board, controls, timeline, frameMask);
+  gameFrame.addChild(
+    backdrop,
+    panelBack,
+    board,
+    controls,
+    timeline,
+    patternBar,
+    frameMask,
+  );
   gameFrame.mask = frameMask;
   editor.addChild(gameFrame);
   view.addChild(editor, gallery.view, drop);
@@ -1559,10 +1987,23 @@ async function createMaker(app: Application): Promise<PageContent> {
 
     preview.overlay.visible = tab.name === "stage" && !playing;
 
-    if (tab.name !== "stage") {
+    if (
+      tab.name === "stage" ? playing : tab.name !== "pattern" || patternPlaying
+    ) {
       preview.update(delta);
-    } else if (playing) {
-      preview.update(delta);
+    }
+
+    patternBar.visible = tab.name === "pattern";
+    drawField(clockBox, clockWidth, chipHeight, typing !== null);
+
+    if (typing === null) {
+      patternClock.text = preview.patternTime().toFixed(1) + "s";
+      patternClock.tint = 0xffffff;
+    } else {
+      caretTime += delta;
+      patternClock.text =
+        typing + (caretTime % caretBlink < caretBlink / 2 ? "|" : " ") + "s";
+      patternClock.tint = getTheme().accent;
     }
 
     if (timeline.visible) {
@@ -1575,7 +2016,10 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
-    if (tab.name === "stage" && event.code === "Space") {
+    if (
+      (tab.name === "stage" || tab.name === "pattern") &&
+      event.code === "Space"
+    ) {
       togglePlaying();
       event.preventDefault();
       return;
@@ -1584,6 +2028,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function setActive(value: boolean): void {
     active = value;
+    typing = null;
     view.eventMode = value ? "passive" : "none";
     dropShown = false;
     drop.visible = false;
@@ -1617,7 +2062,9 @@ async function createMaker(app: Application): Promise<PageContent> {
     view: view,
     setActive: setActive,
     enter: () => showSelector(false),
-    fullscreen: () => editing,
+    fullscreen: () => true,
+    leave: () => (editing ? Promise.resolve() : gallery.disappear()),
+    leaveTime: () => (editing ? 0 : gallery.disappearTime()),
     back: back,
   };
 }

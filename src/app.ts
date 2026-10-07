@@ -13,16 +13,12 @@ import {
   createPage,
   showPage,
   hidePage,
-  leaveDuration as pageLeaveDuration,
+  hideTime,
   type Page,
   type PageContent,
 } from "./menu/page";
 import { createEditor, playerTexture } from "./editor/editor";
-import {
-  createPlayfield,
-  leaveDuration as playfieldLeaveDuration,
-  type Playfield,
-} from "./game/playfield";
+import { createPlayfield, type Playfield } from "./game/playfield";
 import { createSettings } from "./settings/panel";
 import { createMaker } from "./create/maker";
 import { createGuides } from "./dev/guides";
@@ -267,12 +263,12 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
       return;
     }
 
-    rise(() => hidePage(app.ticker, page), pageLeaveDuration);
+    rise(() => hidePage(app.ticker, page), hideTime(page));
     return;
   }
 
   if (event.key === "Escape" && screen === "playing" && !playfield.back()) {
-    rise(playfield.hide, playfieldLeaveDuration);
+    rise(playfield.hide, playfield.hideDuration());
     return;
   }
 
