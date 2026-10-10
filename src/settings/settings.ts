@@ -6,6 +6,8 @@ type Channel = "master" | "soundtrack" | "sfx" | "dialogue";
 
 type VolumeListener = (channel: Channel, volume: number) => void;
 
+type RateListener = (rate: number) => void;
+
 const skyStorageKey: string = "geregnet.sky";
 const skyListeners: Array<SkyListener> = new Array();
 let sky: Sky = loadSky();
@@ -14,6 +16,47 @@ const volumeStorageKey: string = "geregnet.volume";
 const defaultVolume: number = 0.8;
 const volumeListeners: Array<VolumeListener> = new Array();
 const volumes: Map<Channel, number> = loadVolumes();
+const rates: Array<number> = [30, 60, 120, 144, 240]; // Hz
+const rateStorageKey: string = "geregnet.framerate";
+const defaultRate: number = 60; // Hz
+const rateListeners: Array<RateListener> = new Array();
+let rate: number = loadRate();
+
+function loadRate(): number {
+  try {
+    const saved: number = Number(localStorage.getItem(rateStorageKey));
+
+    return rates.includes(saved) ? saved : defaultRate;
+  } catch {
+    return defaultRate;
+  }
+}
+
+function getRate(): number {
+  return rate;
+}
+
+function setRate(value: number): void {
+  if (value === rate || !rates.includes(value)) {
+    return;
+  }
+
+  rate = value;
+
+  try {
+    localStorage.setItem(rateStorageKey, String(value));
+  } catch {
+    console.warn("Could not save the framerate setting");
+  }
+
+  for (const listener of rateListeners) {
+    listener(value);
+  }
+}
+
+function onRate(listener: RateListener): void {
+  rateListeners.push(listener);
+}
 
 function loadVolumes(): Map<Channel, number> {
   const loaded: Map<Channel, number> = new Map();
@@ -78,9 +121,9 @@ function onVolume(listener: VolumeListener): void {
 
 function loadSky(): Sky {
   try {
-    return localStorage.getItem(skyStorageKey) === "night" ? "night" : "day";
+    return localStorage.getItem(skyStorageKey) === "day" ? "day" : "night";
   } catch {
-    return "day";
+    return "night";
   }
 }
 
@@ -120,5 +163,9 @@ export {
   effectiveVolume,
   setVolume,
   onVolume,
+  rates,
+  getRate,
+  setRate,
+  onRate,
 };
 export type { Sky, Channel };

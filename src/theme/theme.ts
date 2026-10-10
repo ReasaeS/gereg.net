@@ -12,6 +12,7 @@ type Theme = {
   accent: string;
   ring: string;
   nightSea: string;
+  outside: string;
   rain: string;
   bullets: string;
 };
@@ -75,6 +76,7 @@ const theme: Theme = {
   accent: "#ff2a4d",
   ring: dailyColor(new Date()),
   nightSea: "#1a2a52",
+  outside: "#0b1026",
   rain: "#aabedc",
   bullets: "#1a2a7a",
 };

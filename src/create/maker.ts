@@ -13,6 +13,23 @@ import {
   type Ticker,
 } from "pixi.js";
 import { playerTexture } from "../editor/editor";
+import { createBackdrop, type Backdrop } from "./backdrop";
+import { drawSound, importAudio, loadAudio, playSound } from "./sound";
+import { createScene, type Scene } from "./cutscene";
+import {
+  applyTranscript,
+  cleanName,
+  editTranscript,
+  formatTranscript,
+} from "./transcript";
+import { createClock, runClock, type Clock } from "../game/clock";
+import {
+  downKeys,
+  focusKeys,
+  leftKeys,
+  rightKeys,
+  upKeys,
+} from "../game/playfield";
 import {
   drawFrame,
   fieldHeight,
@@ -35,9 +52,14 @@ import {
 import {
   derivativeNames,
   createId,
+  wallAngle,
   defaultBackground,
   defaultRing,
   defaultSpell,
+  defaultSound,
+  defaultEmotion,
+  defaultCharacter,
+  defaultCutscene,
   defaultEnemy,
   defaultPattern,
   defaultKeyframe,
@@ -45,7 +67,14 @@ import {
   loadCreations,
   saveCreations,
   usedSprites,
+  usedFiles,
   type Background,
+  type Difficulty,
+  type Frame,
+  type Wall,
+  type Curve,
+  type Wave,
+  type Rank,
   type Creations,
   type Enemy,
   type Vector,
@@ -54,6 +83,12 @@ import {
   type Ring,
   type Spawn,
   type Spell,
+  type Sound,
+  type Cutscene,
+  type Character,
+  type Emotion,
+  type Waveform,
+  type SoundSource,
   type Stage,
 } from "./data";
 import {
@@ -83,7 +118,33 @@ import {
   type Option,
 } from "./widgets";
 import { getTexture, loadTexture, removeUnused, storeImage } from "./images";
-import { createGallery, type Action, type Gallery, type Kind } from "./gallery";
+import {
+  createGallery,
+  type Action,
+  type Category,
+  type Gallery,
+  type Kind,
+} from "./gallery";
+import {
+  cosmetics,
+  difficulties,
+  frames,
+  defaultName,
+  ranks,
+  type Cosmetic,
+  type Rarity,
+} from "./rarity";
+
+const kindWords: Map<Kind, string> = new Map([
+  ["stage", "Stage"],
+  ["pattern", "Pattern"],
+  ["enemy", "Enemy"],
+  ["background", "Background"],
+  ["spell", "Spell"],
+  ["sound", "Sound"],
+  ["character", "Character"],
+  ["cutscene", "Cutscene"],
+]);
 
 type Item = {
   id: string;
@@ -158,6 +219,14 @@ const ringShrink: number = 40; // units
 const spinLimit: number = 180; // deg/s
 const speedNames: Array<string> = derivativeNames.slice(1);
 const transportWidth: number = 24; // units
+const playtestWidth: number = 98; // units
+const movementKeys: Array<string> = [
+  ...leftKeys,
+  ...rightKeys,
+  ...upKeys,
+  ...downKeys,
+  ...focusKeys,
+];
 const iconSize: number = 3.5; // units
 const swapOutDuration: number = 200; // ms
 const swapInDuration: number = 380; // ms
@@ -193,6 +262,46 @@ const skyColors: Array<string> = [
   "#1e5c2a",
   "#e6c229",
 ];
+const wallOptions: Array<Option<Wall>> = [
+  { value: "top", label: "Top" },
+  { value: "right", label: "Right" },
+  { value: "bottom", label: "Bottom" },
+  { value: "left", label: "Left" },
+];
+const curveOptions: Array<Option<Curve>> = [
+  { value: "polynomial", label: "Polynomial" },
+  { value: "sinusoidal", label: "Sinusoidal" },
+];
+const waveNames: Array<string> = ["wave 1", "wave 2", "wave 3"];
+const waveAmplitude: number = 60; // units
+const angleAmplitude: number = 30; // deg
+const swayLimit: number = 200; // units
+const waveFrequency: number = 0.5; // Hz
+const frequencyMin: number = 0.05; // Hz
+const frequencyMax: number = 5; // Hz
+const frequencyStep: number = 0.05; // Hz
+const phaseLimit: number = 180; // deg
+const gapPhaseShiftLimit: number = 1; // of wall/s
+const phaseShiftLimit: number = 360; // deg/s
+const waveOptions: Array<Option<Waveform>> = [
+  { value: "square", label: "Square" },
+  { value: "sine", label: "Sine" },
+  { value: "sawtooth", label: "Saw" },
+  { value: "triangle", label: "Triangle" },
+  { value: "noise", label: "Noise" },
+];
+const soundDelay: number = 250; // ms
+const sourceOptions: Array<Option<SoundSource>> = [
+  { value: "synth", label: "Synth" },
+  { value: "file", label: "File" },
+];
+const soundNameGap: number = 12; // units
+const pitchMin: number = 40; // Hz
+const pitchMax: number = 2000; // Hz
+const soundPlotWidth: number = 320; // units
+const soundPlotHeight: number = 160; // units
+const lineSpeedMin: number = 5; // chars/s
+const lineSpeedMax: number = 120; // chars/s
 const aimOptions: Array<Option<boolean>> = [
   { value: false, label: "Fixed angle" },
   { value: true, label: "At player" },
@@ -211,12 +320,23 @@ async function createMaker(app: Application): Promise<PageContent> {
   let viewportHeight: number = 1;
   const itemBar: Container = new Container();
   const board: Container = new Container();
+  const soundPlot: Graphics = new Graphics();
+  const soundName: Text = createText(clockSize, "#ffffff");
+  let soundTimer: number | null = null;
+  const scene: Scene = createScene(speak, () => creations.characters);
+  const cardScene: Scene = createScene(
+    () => undefined,
+    () => creations.characters,
+  );
   const gameFrame: Container = new Container();
-  const backdrop: Graphics = new Graphics();
+  const backdrop: Backdrop = createBackdrop(app);
+  const hudFrame: Graphics = new Graphics();
   const panelBack: Graphics = new Graphics();
   const frameMask: Graphics = new Graphics();
   let frameScale: number = 1;
   const preview: Preview = await createPreview(playerTexture());
+  const cardPreview: Preview = await createPreview(playerTexture());
+  const cardTicks: Clock = createClock();
   const creations: Creations = loadCreations();
   const tabs: Array<Tab> = new Array();
   const timeline: Container = new Container();
@@ -228,6 +348,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   let spawnIndex: number = 0;
   let keyIndex: number = 0;
   let ringIndex: number = 0;
+  let emotionIndex: number = 0;
 
   function selection(name: string): number {
     return tabs.find((value: Tab) => value.name === name)?.selected ?? 0;
@@ -249,8 +370,63 @@ async function createMaker(app: Application): Promise<PageContent> {
     return creations.backgrounds[selection("background")]!;
   }
 
+  function sound(): Sound {
+    return creations.sounds[selection("sound")]!;
+  }
+
   function spell(): Spell {
     return creations.spells[selection("spell")]!;
+  }
+
+  function cutscene(): Cutscene {
+    return creations.cutscenes[selection("cutscene")]!;
+  }
+
+  function character(): Character {
+    return creations.characters[selection("character")]!;
+  }
+
+  function scened(): boolean {
+    return tab.name === "cutscene" || tab.name === "character";
+  }
+
+  function showcase(): Cutscene {
+    return {
+      id: "",
+      name: "",
+      voice: null,
+      speed: defaultCutscene(new Array()).speed,
+      lines: [
+        {
+          id: "",
+          character: character().id,
+          emotion: emotion().id,
+          text: emotion().name,
+        },
+      ],
+    };
+  }
+
+  function playScene(): void {
+    scene.play(tab.name === "character" ? showcase() : cutscene(), 0);
+  }
+
+  function emotion(): Emotion {
+    emotionIndex = Math.min(emotionIndex, character().emotions.length - 1);
+
+    return character().emotions[emotionIndex]!;
+  }
+
+  function speak(value: Cutscene): void {
+    const voice: Sound | null = soundById(value.voice);
+
+    if (voice !== null) {
+      playSound(voice);
+    }
+  }
+
+  function soundById(id: string | null): Sound | null {
+    return creations.sounds.find((value: Sound) => value.id === id) ?? null;
   }
 
   function ring(): Ring {
@@ -289,12 +465,24 @@ async function createMaker(app: Application): Promise<PageContent> {
     return creations.spells.find((value: Spell) => value.id === id) ?? null;
   }
 
+  function spellOf(value: Enemy): Spell | null {
+    return value.rank === "regular" ? null : spellById(value.spell);
+  }
+
   function resolve(value: Spawn): [Enemy, Pattern | null, Spell | null] | null {
     const found: Enemy | null = enemyById(value.enemy);
 
     return found === null
       ? null
-      : [found, patternById(found.pattern), spellById(found.spell)];
+      : [found, patternById(found.pattern), spellOf(found)];
+  }
+
+  function rarityOptions<T>(list: Array<Rarity<T>>): () => Array<Option<T>> {
+    return () =>
+      list.map((entry: Rarity<T>) => ({
+        value: entry.value,
+        label: entry.label,
+      }));
   }
 
   function changed(): void {
@@ -323,7 +511,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function cleanup(): void {
-    removeUnused(usedSprites(creations));
+    removeUnused(usedFiles(creations));
   }
 
   async function useImage(file: File | undefined): Promise<void> {
@@ -331,7 +519,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
-    const item: Item = current();
+    const item: Item = tab.name === "character" ? emotion() : current();
 
     if (item.sprite === undefined) {
       return;
@@ -385,6 +573,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     return createSlider(name, min, max, step, get, (value: number) => {
       set(value);
       changed();
+      refresh();
     });
   }
 
@@ -397,6 +586,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     return createChoice(name, options, get, (value: T) => {
       set(value);
       changed();
+      refresh();
     });
   }
 
@@ -441,7 +631,11 @@ async function createMaker(app: Application): Promise<PageContent> {
   const sectionOpen: Map<number, boolean> = new Map();
   let sections: number = 0;
 
-  function section(name: string, list: Array<Control>): Array<Control> {
+  function section(
+    name: string,
+    list: Array<Control>,
+    visible: () => boolean = () => true,
+  ): Array<Control> {
     const key: number = sections++;
     const open: () => boolean = () => sectionOpen.get(key) ?? false;
     const header: Control = createHeader(name, open, () => {
@@ -450,16 +644,146 @@ async function createMaker(app: Application): Promise<PageContent> {
     });
 
     return [
-      header,
+      { ...header, shown: visible },
       ...list.map((control: Control) => {
         const shown: (() => boolean) | undefined = control.shown;
 
         return {
           ...control,
-          shown: () => open() && (shown?.() ?? true),
+          shown: () => visible() && open() && (shown?.() ?? true),
         };
       }),
     ];
+  }
+
+  const cosmeticKeys: Map<Cosmetic, number> = new Map();
+
+  function cosmeticSection(kind: Cosmetic): Array<Control> {
+    cosmeticKeys.set(kind, sections);
+
+    return section("Cosmetic", [
+      choice(
+        "Type",
+        rarityOptions(cosmetics),
+        () => kind,
+        (value: Cosmetic) => convertCosmetic(value),
+      ),
+    ]);
+  }
+
+  function forgetCosmetic(id: string): void {
+    for (const cutsceneItem of creations.cutscenes) {
+      if (cutsceneItem.voice === id) {
+        cutsceneItem.voice = null;
+      }
+    }
+  }
+
+  function rarityKey(kind: Kind, item: Item): string {
+    return kind === "stage"
+      ? (item as Stage).difficulty
+      : kind === "enemy"
+        ? (item as Enemy).rank
+        : kind === "pattern"
+          ? (item as Pattern).frame
+          : kind;
+  }
+
+  function freshName(kind: Kind, item: Item): string {
+    const word: string = kindWords.get(kind)!;
+    const key: string = rarityKey(kind, item);
+    const taken: Set<string> = new Set(
+      listOf(kind)
+        .filter(
+          (other: Item) => other !== item && rarityKey(kind, other) === key,
+        )
+        .map((other: Item) => other.name),
+    );
+    let number: number = 1;
+
+    while (taken.has(word + " " + number)) {
+      number++;
+    }
+
+    return word + " " + number;
+  }
+
+  function renameDefault(kind: Kind, item: Item): void {
+    if (defaultName.test(item.name)) {
+      item.name = freshName(kind, item);
+    }
+  }
+
+  function convertCosmetic(to: Cosmetic): void {
+    const item: Item = current();
+    const from: Kind = tab.name as Kind;
+    let index: number;
+
+    if (from === to) {
+      return;
+    }
+
+    listOf(from).splice(tab.selected, 1);
+
+    for (const stageItem of creations.stages) {
+      if (stageItem.background === item.id) {
+        stageItem.background = null;
+      }
+    }
+
+    for (const enemyItem of creations.enemies) {
+      if (enemyItem.spell === item.id) {
+        enemyItem.spell = null;
+      }
+    }
+
+    forgetCosmetic(item.id);
+
+    if (to === "spell") {
+      index = creations.spells.push({
+        ...defaultSpell(),
+        id: item.id,
+        name: item.name,
+      });
+    } else if (to === "sound") {
+      index = creations.sounds.push({
+        ...defaultSound(),
+        id: item.id,
+        name: item.name,
+      });
+    } else if (to === "character") {
+      index = creations.characters.push({
+        ...defaultCharacter(item.name),
+        id: item.id,
+        name: cleanName(item.name) || "Character",
+      });
+    } else if (to === "cutscene") {
+      index = creations.cutscenes.push({
+        ...defaultCutscene(creations.characters),
+        id: item.id,
+        name: item.name,
+      });
+    } else {
+      index = creations.backgrounds.push({
+        ...defaultBackground(),
+        id: item.id,
+        name: item.name,
+      });
+    }
+
+    for (const value of tabs) {
+      value.selected = Math.max(
+        Math.min(value.selected, value.items().length - 1),
+        0,
+      );
+    }
+
+    renameDefault(to, listOf(to)[index - 1]!);
+    saveCreations(creations);
+    cleanup();
+    showItem(to, index - 1);
+    sectionOpen.set(cosmeticKeys.get(to)!, true);
+    refresh();
   }
 
   addTab(
@@ -498,36 +822,156 @@ async function createMaker(app: Application): Promise<PageContent> {
             pattern().count = value;
           },
         ),
-        slider(
-          "Spread",
-          0,
-          360,
-          5,
-          () => pattern().spread,
-          (value: number) => {
-            pattern().spread = value;
-          },
-        ),
+        {
+          ...slider(
+            "Coverage",
+            0.05,
+            5,
+            0.05,
+            () => pattern().cover,
+            (value: number) => {
+              pattern().cover = value;
+            },
+          ),
+          shown: () => pattern().frame === "objective",
+        },
+        {
+          ...slider(
+            "Spread",
+            0,
+            360,
+            5,
+            () => pattern().spread,
+            (value: number) => {
+              pattern().spread = value;
+            },
+          ),
+          shown: () =>
+            pattern().frame === "subjective" && Math.round(pattern().count) > 1,
+        },
       ]),
+      ...section(
+        "Gaps",
+        [
+          slider(
+            "Frequency",
+            0,
+            8,
+            1,
+            () => pattern().gapFrequency,
+            (value: number) => {
+              pattern().gapFrequency = value;
+            },
+          ),
+          {
+            ...slider(
+              "Offset",
+              -0.5,
+              0.5,
+              0.01,
+              () => pattern().gapShift,
+              (value: number) => {
+                pattern().gapShift = value;
+              },
+            ),
+            shown: () => pattern().gapFrequency > 0,
+          },
+          {
+            ...slider(
+              "Phase shift",
+              -gapPhaseShiftLimit,
+              gapPhaseShiftLimit,
+              0.01,
+              () => pattern().gapPhaseShift,
+              (value: number) => {
+                pattern().gapPhaseShift = value;
+              },
+            ),
+            shown: () => pattern().gapFrequency > 0,
+          },
+          {
+            ...slider(
+              "Width",
+              0.01,
+              1,
+              0.01,
+              () => pattern().gapWidth,
+              (value: number) => {
+                pattern().gapWidth = value;
+              },
+            ),
+            shown: () => pattern().gapFrequency > 0,
+          },
+        ],
+        () => pattern().frame === "objective",
+      ),
       ...section("Aim", [
         choice(
-          "Aim",
-          () => aimOptions,
-          () => pattern().aim,
-          (value: boolean) => {
-            pattern().aim = value;
+          "Frame",
+          rarityOptions(frames),
+          () => pattern().frame,
+          (value: Frame) => {
+            pattern().frame = value;
+            renameDefault("pattern", pattern());
           },
         ),
-        slider(
-          "Angle",
-          -180,
-          180,
-          5,
-          () => pattern().heading,
-          (value: number) => {
-            pattern().heading = value;
-          },
-        ),
+        {
+          ...choice(
+            "Wall",
+            () => wallOptions,
+            () => pattern().wall,
+            (value: Wall) => {
+              const turn: number = wallAngle(value) - wallAngle(pattern().wall);
+              const velocity: Vector = pattern().velocity;
+
+              pattern().velocity = {
+                x: Math.round(
+                  velocity.x * Math.cos(turn) - velocity.y * Math.sin(turn),
+                ),
+                y: Math.round(
+                  velocity.x * Math.sin(turn) + velocity.y * Math.cos(turn),
+                ),
+              };
+              pattern().wall = value;
+            },
+          ),
+          shown: () => pattern().frame === "objective",
+        },
+        {
+          ...choice(
+            "Aim",
+            () => aimOptions,
+            () => pattern().aim,
+            (value: boolean) => {
+              pattern().aim = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective",
+        },
+        {
+          ...slider(
+            "Angle",
+            -180,
+            180,
+            5,
+            () => pattern().heading,
+            (value: number) => {
+              pattern().heading = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective" && !pattern().aim,
+        },
+        {
+          ...choice(
+            "Mode",
+            () => curveOptions,
+            () => pattern().aimCurve,
+            (value: Curve) => {
+              pattern().aimCurve = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective",
+        },
         ...derivativeNames.map((name: string, order: number) => ({
           ...slider(
             name,
@@ -539,12 +983,29 @@ async function createMaker(app: Application): Promise<PageContent> {
               pattern().angleDerivatives[order] = value;
             },
           ),
-          shown: () => pattern().angleDerivatives.length > order,
+          shown: () =>
+            pattern().frame === "subjective" &&
+            pattern().aimCurve === "polynomial" &&
+            pattern().angleDerivatives.length > order,
         })),
-        derivativeActions(
-          () => pattern().angleDerivatives,
-          derivativeNames,
-          () => 0,
+        {
+          ...derivativeActions(
+            () => pattern().angleDerivatives,
+            derivativeNames,
+            () => 0,
+          ),
+          shown: () =>
+            pattern().frame === "subjective" &&
+            pattern().aimCurve === "polynomial",
+        },
+        ...waveRows(
+          () => pattern().aimWaves,
+          (name: string, get: () => number, set: (value: number) => void) =>
+            slider(name, -phaseLimit, phaseLimit, 5, get, set),
+          () => angleAmplitude,
+          () =>
+            pattern().frame === "subjective" &&
+            pattern().aimCurve === "sinusoidal",
         ),
       ]),
       ...section("Fire", [
@@ -558,14 +1019,38 @@ async function createMaker(app: Application): Promise<PageContent> {
             pattern().rate = value;
           },
         ),
-        slider(
-          "Speed",
-          20,
-          400,
-          5,
-          () => pattern().speed,
-          (value: number) => {
-            pattern().speed = value;
+        {
+          ...slider(
+            "Speed",
+            20,
+            400,
+            5,
+            () => pattern().speed,
+            (value: number) => {
+              pattern().speed = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective",
+        },
+        {
+          ...vector(
+            "Speed",
+            -speedLimit,
+            speedLimit,
+            5,
+            () => pattern().velocity,
+            (value: Vector) => {
+              pattern().velocity = value;
+            },
+          ),
+          shown: () => pattern().frame === "objective",
+        },
+        choice(
+          "Mode",
+          () => curveOptions,
+          () => pattern().curve,
+          (value: Curve) => {
+            pattern().curve = value;
           },
         ),
         ...speedNames.map((name: string, order: number) => ({
@@ -579,12 +1064,62 @@ async function createMaker(app: Application): Promise<PageContent> {
               pattern().speedDerivatives[order] = value;
             },
           ),
-          shown: () => pattern().speedDerivatives.length > order,
+          shown: () =>
+            pattern().frame === "subjective" &&
+            pattern().curve === "polynomial" &&
+            pattern().speedDerivatives.length > order,
         })),
-        derivativeActions(
-          () => pattern().speedDerivatives,
-          speedNames,
-          () => 0,
+        {
+          ...derivativeActions(
+            () => pattern().speedDerivatives,
+            speedNames,
+            () => 0,
+          ),
+          shown: () =>
+            pattern().frame === "subjective" &&
+            pattern().curve === "polynomial",
+        },
+        ...speedNames.map((name: string, order: number) => ({
+          ...vector(
+            name,
+            -speedLimit,
+            speedLimit,
+            5,
+            () => pattern().driftDerivatives[order] ?? { x: 0, y: 0 },
+            (value: Vector) => {
+              pattern().driftDerivatives[order] = value;
+            },
+          ),
+          shown: () =>
+            pattern().frame === "objective" &&
+            pattern().curve === "polynomial" &&
+            pattern().driftDerivatives.length > order,
+        })),
+        {
+          ...derivativeActions(
+            () => pattern().driftDerivatives,
+            speedNames,
+            () => ({ x: 0, y: 0 }),
+          ),
+          shown: () =>
+            pattern().frame === "objective" && pattern().curve === "polynomial",
+        },
+        ...waveRows(
+          () => pattern().angleWaves,
+          (name: string, get: () => number, set: (value: number) => void) =>
+            slider(name, -phaseLimit, phaseLimit, 5, get, set),
+          () => angleAmplitude,
+          () =>
+            pattern().frame === "subjective" &&
+            pattern().curve === "sinusoidal",
+        ),
+        ...waveRows(
+          () => pattern().swayWaves,
+          (name: string, get: () => Vector, set: (value: Vector) => void) =>
+            vector(name, -swayLimit, swayLimit, 5, get, set),
+          () => ({ x: waveAmplitude, y: 0 }),
+          () =>
+            pattern().frame === "objective" && pattern().curve === "sinusoidal",
         ),
       ]),
     ],
@@ -621,6 +1156,15 @@ async function createMaker(app: Application): Promise<PageContent> {
         ),
       ]),
       ...section("Combat", [
+        choice(
+          "Rank",
+          rarityOptions(ranks),
+          () => enemy().rank,
+          (value: Rank) => {
+            enemy().rank = value;
+            renameDefault("enemy", enemy());
+          },
+        ),
         slider(
           "Health",
           1,
@@ -645,30 +1189,29 @@ async function createMaker(app: Application): Promise<PageContent> {
             enemy().pattern = value;
           },
         ),
-        choice(
-          "Spell",
-          () => [
-            { value: null, label: "None" },
-            ...creations.spells.map((value: Spell) => ({
-              value: value.id as string | null,
-              label: value.name,
-            })),
-          ],
-          () => enemy().spell,
-          (value: string | null) => {
-            enemy().spell = value;
-          },
-        ),
+        {
+          ...choice(
+            "Spell",
+            () => [
+              { value: null, label: "None" },
+              ...creations.spells.map((value: Spell) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => enemy().spell,
+            (value: string | null) => {
+              enemy().spell = value;
+            },
+          ),
+          shown: () => enemy().rank !== "regular",
+        },
       ]),
     ],
     () => {
       preview.setBackground(null);
       preview.setPlayerVisible(false);
-      preview.setEnemy(
-        enemy(),
-        patternById(enemy().pattern),
-        spellById(enemy().spell),
-      );
+      preview.setEnemy(enemy(), patternById(enemy().pattern), spellOf(enemy()));
     },
   );
 
@@ -676,6 +1219,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     "background",
     () => creations.backgrounds,
     [
+      ...cosmeticSection("background"),
       ...section("Look", [
         spriteRow(),
         colors(
@@ -743,7 +1287,87 @@ async function createMaker(app: Application): Promise<PageContent> {
     return createVector(name, min, max, step, get, (value: Vector) => {
       set(value);
       changed();
+      refresh();
     });
+  }
+
+  function waveRows<T>(
+    list: () => Array<Wave<T>>,
+    amplitude: (name: string, get: () => T, set: (value: T) => void) => Control,
+    blank: () => T,
+    visible: () => boolean,
+    moved: () => void = () => {},
+  ): Array<Control> {
+    return [
+      ...waveNames.flatMap((name: string, order: number) => {
+        const shown: () => boolean = () => visible() && list().length > order;
+
+        return [
+          {
+            ...amplitude(
+              name + " amplitude",
+              () => list()[order]?.amplitude ?? blank(),
+              (value: T) => {
+                list()[order]!.amplitude = value;
+                moved();
+              },
+            ),
+            shown: shown,
+          },
+          {
+            ...slider(
+              name + " frequency",
+              frequencyMin,
+              frequencyMax,
+              frequencyStep,
+              () => list()[order]?.frequency ?? waveFrequency,
+              (value: number) => {
+                list()[order]!.frequency = value;
+                moved();
+              },
+            ),
+            shown: shown,
+          },
+          {
+            ...slider(
+              name + " phase",
+              -phaseLimit,
+              phaseLimit,
+              5,
+              () => list()[order]?.phase ?? 0,
+              (value: number) => {
+                list()[order]!.phase = value;
+                moved();
+              },
+            ),
+            shown: shown,
+          },
+          {
+            ...slider(
+              name + " phase shift",
+              -phaseShiftLimit,
+              phaseShiftLimit,
+              5,
+              () => list()[order]?.phaseShift ?? 0,
+              (value: number) => {
+                list()[order]!.phaseShift = value;
+                moved();
+              },
+            ),
+            shown: shown,
+          },
+        ];
+      }),
+      {
+        ...derivativeActions(list, waveNames, () => ({
+          amplitude: blank(),
+          frequency: waveFrequency,
+          phase: 0,
+          phaseShift: 0,
+        })),
+        shown: visible,
+      },
+    ];
   }
 
   function derivativeActions<T>(
@@ -812,6 +1436,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     "spell",
     () => creations.spells,
     [
+      ...cosmeticSection("spell"),
       ...section("Look", [
         colors(
           "Colour",
@@ -944,11 +1569,392 @@ async function createMaker(app: Application): Promise<PageContent> {
     },
   );
 
+  function hearSound(): void {
+    if (soundTimer !== null) {
+      window.clearTimeout(soundTimer);
+    }
+
+    soundTimer = window.setTimeout(() => {
+      soundTimer = null;
+
+      if (tab.name === "sound") {
+        playSound(sound());
+      }
+    }, soundDelay);
+  }
+
+  function soundSlider(
+    name: string,
+    min: number,
+    max: number,
+    step: number,
+    key: "pitch" | "slide" | "attack" | "sustain" | "decay" | "volume",
+  ): Control {
+    return slider(
+      name,
+      min,
+      max,
+      step,
+      () => sound()[key],
+      (value: number) => {
+        sound()[key] = value;
+        hearSound();
+      },
+    );
+  }
+
+  function randomSound(): void {
+    const value: Sound = sound();
+    const pick: (min: number, max: number) => number = (
+      min: number,
+      max: number,
+    ) => min + Math.random() * (max - min);
+
+    value.wave =
+      waveOptions[Math.floor(Math.random() * waveOptions.length)]!.value;
+    value.pitch = Math.round(pick(pitchMin, pitchMax) / 10) * 10;
+    value.slide = Math.round(pick(pitchMin, pitchMax) / 10) * 10;
+    value.attack = Math.round(pick(0, 0.1) * 100) / 100;
+    value.sustain = Math.round(pick(0, 0.3) * 100) / 100;
+    value.decay = Math.round(pick(0.05, 0.8) * 50) / 50;
+    value.vibratoDepth =
+      Math.random() < 0.5 ? 0 : Math.round(pick(0, 4) * 2) / 2;
+    value.vibratoRate = Math.round(pick(2, 20) * 2) / 2;
+    changed();
+    refresh();
+    playSound(value);
+  }
+
+  addTab(
+    "sound",
+    () => creations.sounds,
+    [
+      ...cosmeticSection("sound"),
+      ...section("Sound", [
+        choice(
+          "Source",
+          () => sourceOptions,
+          () => sound().source,
+          (value: SoundSource) => {
+            sound().source = value;
+            hearSound();
+          },
+        ),
+        {
+          ...actionRow("Play", () => playSound(sound()), "Random", randomSound),
+          shown: () => sound().source === "synth",
+        },
+        {
+          ...actionRow(
+            "Play",
+            () => playSound(sound()),
+            "Import",
+            () => audioPicker.click(),
+          ),
+          shown: () => sound().source === "file",
+        },
+        soundSlider("Volume", 0.05, 1, 0.05, "volume"),
+      ]),
+      ...section(
+        "Tone",
+        [
+          choice(
+            "Wave",
+            () => waveOptions,
+            () => sound().wave,
+            (value: Waveform) => {
+              sound().wave = value;
+              hearSound();
+            },
+          ),
+          soundSlider("Pitch", pitchMin, pitchMax, 10, "pitch"),
+          soundSlider("Slide to", pitchMin, pitchMax, 10, "slide"),
+          slider(
+            "Vibrato depth",
+            0,
+            12,
+            0.5,
+            () => sound().vibratoDepth,
+            (value: number) => {
+              sound().vibratoDepth = value;
+              hearSound();
+            },
+          ),
+          slider(
+            "Vibrato rate",
+            0,
+            30,
+            0.5,
+            () => sound().vibratoRate,
+            (value: number) => {
+              sound().vibratoRate = value;
+              hearSound();
+            },
+          ),
+        ],
+        () => sound().source === "synth",
+      ),
+      ...section(
+        "Envelope",
+        [
+          soundSlider("Attack", 0, 0.5, 0.01, "attack"),
+          soundSlider("Sustain", 0, 1, 0.01, "sustain"),
+          soundSlider("Decay", 0.02, 2, 0.02, "decay"),
+        ],
+        () => sound().source === "synth",
+      ),
+    ],
+    () => {
+      const value: Sound = sound();
+
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setSpell(null);
+      plotSound(value);
+      void loadAudio(value.file).then(() => {
+        if (tab.name === "sound" && sound() === value) {
+          plotSound(value);
+        }
+      });
+    },
+  );
+
+  function plotSound(value: Sound): void {
+    drawSound(
+      soundPlot,
+      value,
+      soundPlotWidth,
+      soundPlotHeight,
+      getTheme().ring,
+    );
+    soundName.text =
+      value.source === "file"
+        ? (value.fileName || "NO FILE").toUpperCase()
+        : "";
+  }
+
+  const audioPicker: HTMLInputElement = document.createElement("input");
+
+  audioPicker.type = "file";
+  audioPicker.accept = "audio/*";
+  audioPicker.addEventListener("change", () => {
+    useAudio(audioPicker.files?.[0]);
+    audioPicker.value = "";
+  });
+
+  async function useAudio(file: File | undefined): Promise<void> {
+    if (file === undefined || tab.name !== "sound") {
+      return;
+    }
+
+    const value: Sound = sound();
+
+    try {
+      value.file = await importAudio(file);
+      value.fileName = file.name;
+      value.source = "file";
+      changed();
+      refresh();
+      cleanup();
+      playSound(value);
+    } catch {
+      window.alert(
+        '"' + file.name + '" is not an audio file this browser can play.',
+      );
+    }
+  }
+
+  function promptText(
+    label: string,
+    value: string,
+    limit: number,
+    set: (value: string) => void,
+  ): void {
+    const typed: string | null = window.prompt(label, value);
+    const name: string = cleanName(typed ?? "").slice(0, limit);
+
+    if (name === "") {
+      return;
+    }
+
+    set(name);
+    changed();
+    refresh();
+  }
+
+  function addEmotion(): void {
+    const emotions: Array<Emotion> = character().emotions;
+
+    emotions.push(defaultEmotion("Emotion " + (emotions.length + 1)));
+    emotionIndex = emotions.length - 1;
+    changed();
+    refresh();
+  }
+
+  function removeEmotion(): void {
+    const emotions: Array<Emotion> = character().emotions;
+    const gone: Emotion = emotion();
+
+    if (emotions.length <= 1) {
+      return;
+    }
+
+    emotions.splice(emotionIndex, 1);
+
+    for (const value of creations.cutscenes.flatMap(
+      (item: Cutscene) => item.lines,
+    )) {
+      if (value.emotion === gone.id) {
+        value.emotion = emotions[0]!.id;
+      }
+    }
+
+    emotionIndex = Math.max(emotionIndex - 1, 0);
+    changed();
+    refresh();
+    cleanup();
+  }
+
+  function buttonRow(name: string, action: () => void): Control {
+    const row: Container = new Container();
+    const button: Chip = createChip(name, rowWidth, action);
+
+    button.view.y = (rowHeight - chipHeight) / 2;
+    row.addChild(button.view);
+
+    return { view: row, refresh: () => undefined };
+  }
+
+  addTab(
+    "cutscene",
+    () => creations.cutscenes,
+    [
+      ...cosmeticSection("cutscene"),
+      ...section("Scene", [
+        choice(
+          "Voice",
+          () => [
+            { value: null, label: "None" },
+            ...creations.sounds.map((value: Sound) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => cutscene().voice,
+          (value: string | null) => {
+            cutscene().voice = value;
+          },
+        ),
+        slider(
+          "Text speed",
+          lineSpeedMin,
+          lineSpeedMax,
+          5,
+          () => cutscene().speed,
+          (value: number) => {
+            cutscene().speed = value;
+          },
+        ),
+      ]),
+      ...section("Transcript", [
+        buttonRow("Edit transcript", () =>
+          editTranscript(
+            formatTranscript(cutscene(), creations.characters),
+            (text: string) => {
+              const problem: string | null = applyTranscript(
+                cutscene(),
+                creations.characters,
+                text,
+              );
+
+              if (problem === null) {
+                changed();
+                refresh();
+              }
+
+              return problem;
+            },
+          ),
+        ),
+      ]),
+    ],
+    () => {
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setSpell(null);
+      playScene();
+    },
+  );
+
+  addTab(
+    "character",
+    () => creations.characters,
+    [
+      ...cosmeticSection("character"),
+      ...section("Character", [
+        colors(
+          "Name colour",
+          brightColors,
+          () => character().color,
+          (value: string) => {
+            character().color = value;
+          },
+        ),
+      ]),
+      ...section("Emotions", [
+        actionRow("Add emotion", addEmotion, "Remove emotion", removeEmotion),
+        choice(
+          "Emotion",
+          () =>
+            character().emotions.map((value: Emotion, index: number) => ({
+              value: index,
+              label: value.name,
+            })),
+          () => emotionIndex,
+          (value: number) => {
+            emotionIndex = value;
+          },
+        ),
+        buttonRow("Rename emotion", () =>
+          promptText("Emotion", emotion().name, nameLength, (value: string) => {
+            emotion().name = value;
+          }),
+        ),
+        createSpriteRow(
+          "Sprite",
+          () => getTexture(emotion().sprite),
+          () => picker.click(),
+          () => {
+            emotion().sprite = null;
+            changed();
+            refresh();
+            cleanup();
+          },
+        ),
+      ]),
+    ],
+    () => {
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setSpell(null);
+      playScene();
+    },
+  );
+
   addTab(
     "stage",
     () => creations.stages,
     [
       ...section("Stage", [
+        choice(
+          "Difficulty",
+          rarityOptions(difficulties),
+          () => stage().difficulty,
+          (value: Difficulty) => {
+            stage().difficulty = value;
+            renameDefault("stage", stage());
+          },
+        ),
         choice(
           "Background",
           () => [
@@ -1031,6 +2037,13 @@ async function createMaker(app: Application): Promise<PageContent> {
 
             keyframe().spawns.push({
               ...source,
+              derivatives: source.derivatives.map((value: Vector) => ({
+                ...value,
+              })),
+              waves: source.waves.map((value: Wave<Vector>) => ({
+                ...value,
+                amplitude: { ...value.amplitude },
+              })),
               id: createId(),
               x: Math.min(source.x + 0.15, 0.95),
             });
@@ -1099,6 +2112,15 @@ async function createMaker(app: Application): Promise<PageContent> {
             placeMarkers();
           },
         ),
+        choice(
+          "Mode",
+          () => curveOptions,
+          () => spawn().curve,
+          (value: Curve) => {
+            spawn().curve = value;
+            placeMarkers();
+          },
+        ),
         ...derivativeNames.map((name: string, order: number) => ({
           ...vector(
             name,
@@ -1111,12 +2133,32 @@ async function createMaker(app: Application): Promise<PageContent> {
               placeMarkers();
             },
           ),
-          shown: () => spawn().derivatives.length > order,
+          shown: () =>
+            spawn().curve === "polynomial" &&
+            spawn().derivatives.length > order,
         })),
-        derivativeActions(
-          () => spawn().derivatives,
-          derivativeNames,
-          () => ({ x: 0, y: 0 }),
+        {
+          ...derivativeActions(
+            () => spawn().derivatives,
+            derivativeNames,
+            () => ({ x: 0, y: 0 }),
+          ),
+          shown: () => spawn().curve === "polynomial",
+        },
+        ...waveRows(
+          () => spawn().waves,
+          (name: string, get: () => Vector, set: (value: Vector) => void) =>
+            vector(
+              name,
+              -derivativeLimit,
+              derivativeLimit,
+              derivativeStep,
+              get,
+              set,
+            ),
+          () => ({ x: waveAmplitude, y: 0 }),
+          () => spawn().curve === "sinusoidal",
+          placeMarkers,
         ),
       ]),
     ],
@@ -1183,14 +2225,17 @@ async function createMaker(app: Application): Promise<PageContent> {
 
       ghosts[index]!.position.set(x, y);
 
-      if (value.derivatives.length > 0) {
+      if (
+        (value.curve === "polynomial" ? value.derivatives : value.waves)
+          .length > 0
+      ) {
         guides.moveTo(x, y);
 
         for (let step = 1; step <= trailSteps; step++) {
           const [pointX, pointY] = motion(
             x,
             y,
-            value.derivatives,
+            value,
             (step / trailSteps) * trailTime,
           );
 
@@ -1423,7 +2468,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     app,
     () => creations,
     (kind: Kind, index: number) => openItem(kind, index),
-    (kind: Kind) => createItem(kind),
+    (category: Category) => createItem(category),
     (kind: Kind, index: number, action: Action) => {
       if (action === "rename") {
         renameItem(kind, index);
@@ -1431,7 +2476,59 @@ async function createMaker(app: Application): Promise<PageContent> {
         deleteItem(kind, index);
       }
     },
+    { show: showCard, update: updateCard },
   );
+
+  function showCard(kind: Kind, index: number): Container | null {
+    const item: Item | undefined = listOf(kind)[index];
+
+    cardPreview.clear();
+    cardPreview.overlay.visible = false;
+    cardPreview.setBackground(null);
+    cardPreview.setPlayerVisible(false);
+
+    if (item === undefined) {
+      return null;
+    }
+
+    if (kind === "cutscene") {
+      cardScene.play(item as Cutscene, 0);
+      return cardScene.view;
+    }
+
+    if (kind === "pattern") {
+      cardPreview.setPattern(item as Pattern);
+    } else if (kind === "enemy") {
+      const value: Enemy = item as Enemy;
+
+      cardPreview.setEnemy(value, patternById(value.pattern), spellOf(value));
+    } else if (kind === "spell") {
+      cardPreview.setSpell(item as Spell);
+    } else if (kind === "background") {
+      cardPreview.setBackground(item as Background);
+      cardPreview.setPattern(null);
+    } else if (kind === "stage") {
+      const value: Stage = item as Stage;
+
+      cardPreview.setBackground(backgroundById(value.background));
+      cardPreview.setPlayerVisible(true);
+      cardPreview.setStage(null, resolve);
+      cardPreview.setStage(value, resolve);
+    } else {
+      return null;
+    }
+
+    return cardPreview.view;
+  }
+
+  function updateCard(delta: number): void {
+    if (cardScene.view.parent !== null) {
+      cardScene.update(delta);
+      return;
+    }
+
+    runClock(cardTicks, delta, cardPreview.update);
+  }
 
   function listOf(kind: Kind): Array<Item> {
     return tabs.find((value: Tab) => value.name === kind)!.items();
@@ -1446,7 +2543,9 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
-    item.name = name.trim().slice(0, nameLength);
+    item.name = (
+      kind === "character" ? cleanName(name) || item.name : name.trim()
+    ).slice(0, nameLength);
     saveCreations(creations);
     gallery.refresh();
   }
@@ -1459,6 +2558,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     listOf(kind).splice(index, 1);
+    forgetCosmetic(item.id);
 
     for (const enemyItem of creations.enemies) {
       if (enemyItem.pattern === item.id) {
@@ -1495,46 +2595,41 @@ async function createMaker(app: Application): Promise<PageContent> {
     cleanup();
     gallery.refresh();
   }
+  const ticks: Clock = createClock();
   let editing: boolean = false;
   let dropShown: boolean = false;
 
-  function createItem(kind: Kind): void {
+  function createItem(category: Category): void {
     const enemyId: string | null = creations.enemies[0]?.id ?? null;
     const backgroundId: string | null = creations.backgrounds[0]?.id ?? null;
     let index: number;
 
-    if (kind === "stage") {
-      index = creations.stages.push({
-        ...defaultStage(enemyId, backgroundId),
-        name: "Stage " + (creations.stages.length + 1),
-      });
-    } else if (kind === "pattern") {
-      index = creations.patterns.push({
-        ...defaultPattern(),
-        name: "Pattern " + (creations.patterns.length + 1),
-      });
-    } else if (kind === "enemy") {
-      index = creations.enemies.push({
-        ...defaultEnemy(creations.patterns[0]?.id ?? null),
-        name: "Enemy " + (creations.enemies.length + 1),
-      });
-    } else if (kind === "spell") {
-      index = creations.spells.push({
-        ...defaultSpell(),
-        name: "Spell " + (creations.spells.length + 1),
-      });
+    if (category === "stage") {
+      index = creations.stages.push(defaultStage(enemyId, backgroundId));
+    } else if (category === "pattern") {
+      index = creations.patterns.push(defaultPattern());
+    } else if (category === "enemy") {
+      index = creations.enemies.push(
+        defaultEnemy(creations.patterns[0]?.id ?? null),
+      );
     } else {
-      index = creations.backgrounds.push({
-        ...defaultBackground(),
-        name: "Background " + (creations.backgrounds.length + 1),
-      });
+      index = creations.backgrounds.push(defaultBackground());
     }
+
+    const kind: Kind = category === "cosmetic" ? "background" : category;
+    const item: Item = listOf(kind)[index - 1]!;
+
+    item.name = freshName(kind, item);
 
     saveCreations(creations);
     openItem(kind, index - 1);
   }
 
-  function openItem(kind: Kind, index: number): void {
+  function showItem(kind: Kind, index: number): void {
+    if (playtesting) {
+      setPlaytesting(false);
+    }
+
     const next: Tab = tabs.find((value: Tab) => value.name === kind)!;
 
     next.selected = index;
@@ -1542,12 +2637,17 @@ async function createMaker(app: Application): Promise<PageContent> {
     spawnIndex = 0;
     keyIndex = 0;
     ringIndex = 0;
+    emotionIndex = 0;
     sectionOpen.clear();
     laidOut = null;
-    editing = true;
-    gallery.setActive(false);
     preview.clear();
     refresh();
+  }
+
+  function openItem(kind: Kind, index: number): void {
+    editing = true;
+    gallery.setActive(false);
+    showItem(kind, index);
     swap(gallery.view, editor, true);
   }
 
@@ -1594,6 +2694,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function showSelector(animate: boolean = true): void {
+    if (playtesting) {
+      setPlaytesting(false);
+    }
+
     typing = null;
     editing = false;
     dropShown = false;
@@ -1705,6 +2809,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   const clockField: Container = new Container();
   const clockBox: Graphics = new Graphics();
   let patternPlaying: boolean = true;
+  let playtesting: boolean = false;
+  const held: Set<string> = new Set();
+  const playtestBar: Container = new Container();
+  const hitsText: Text = createText(clockSize, "#ffffff");
   let typing: string | null = null;
   let typingFresh: boolean = false;
   let caretTime: number = 0;
@@ -1759,6 +2867,52 @@ async function createMaker(app: Application): Promise<PageContent> {
     drawPlayIcon();
   }
 
+  function setPlaytesting(value: boolean): void {
+    playtesting = value;
+    held.clear();
+    preview.setPlaytest(value);
+
+    if (value) {
+      playing = true;
+      patternPlaying = true;
+      drawPlayIcon();
+    } else {
+      tab.show();
+    }
+
+    playtestChip.paint();
+  }
+
+  function playtest(): void {
+    if (tab.name === "sound") {
+      playSound(sound());
+      return;
+    }
+
+    if (scened()) {
+      playScene();
+      return;
+    }
+
+    setPlaytesting(!playtesting);
+  }
+
+  function heldAny(keys: Array<string>): boolean {
+    return keys.some((key: string) => held.has(key));
+  }
+
+  function steer(): void {
+    let x: number = (heldAny(rightKeys) ? 1 : 0) - (heldAny(leftKeys) ? 1 : 0);
+    let y: number = (heldAny(downKeys) ? 1 : 0) - (heldAny(upKeys) ? 1 : 0);
+
+    if (x !== 0 && y !== 0) {
+      x *= Math.SQRT1_2;
+      y *= Math.SQRT1_2;
+    }
+
+    preview.steer(x, y, heldAny(focusKeys));
+  }
+
   function pause(): void {
     playing = false;
     drawPlayIcon();
@@ -1766,6 +2920,12 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   const playChip: Chip = createChip("", transportWidth, togglePlaying);
   const patternChip: Chip = createChip("", transportWidth, togglePlaying);
+  const playtestChip: Chip = createChip(
+    "playtest",
+    playtestWidth,
+    playtest,
+    () => playtesting,
+  );
 
   patternChip.view.addChild(patternIcon);
   patternClock.anchor.set(0, 0.5);
@@ -1845,12 +3005,17 @@ async function createMaker(app: Application): Promise<PageContent> {
     fieldY + fieldHeight + (hudHeight - fieldY - fieldHeight - chipHeight) / 2,
   );
 
+  playtestBar.position.set(panelLeft, panelBottom - chipHeight);
+  hitsText.anchor.set(1, 0.5);
+  hitsText.position.set(rowWidth, chipHeight / 2);
+  playtestBar.addChild(playtestChip.view, hitsText);
+
   playChip.view.addChild(playIcon);
   transport.addChild(playChip.view);
   drawPlayIcon();
 
   timeline.addChild(track, clock, total, transport);
-  drawFrame(backdrop);
+  drawFrame(hudFrame);
   panelBack
     .rect(
       panelLeft - panelPadding,
@@ -1861,7 +3026,14 @@ async function createMaker(app: Application): Promise<PageContent> {
     .fill({ color: panelColor, alpha: panelAlpha });
   frameMask.rect(0, 0, hudWidth, hudHeight).fill(0xffffff);
   board.position.set(fieldX, fieldY);
-  board.addChild(preview.view);
+  board.addChild(preview.view, soundPlot, scene.view);
+  soundPlot.position.set(
+    (fieldWidth - soundPlotWidth) / 2,
+    (fieldHeight - soundPlotHeight) / 2,
+  );
+  soundName.anchor.set(0.5, 0);
+  soundName.position.set(soundPlotWidth / 2, soundPlotHeight + soundNameGap);
+  soundPlot.addChild(soundName);
   controls.position.set(panelLeft, panelTop);
   track.position.set(columnCenter - timelineHeight / 2, 0);
   track.hitArea = new Rectangle(
@@ -1880,16 +3052,17 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   timeline.position.set(0, fieldY);
   gameFrame.addChild(
-    backdrop,
+    hudFrame,
     panelBack,
     board,
     controls,
     timeline,
     patternBar,
+    playtestBar,
     frameMask,
   );
   gameFrame.mask = frameMask;
-  editor.addChild(gameFrame);
+  editor.addChild(backdrop.view, gameFrame);
   view.addChild(editor, gallery.view, drop);
 
   function hasFiles(event: DragEvent): boolean {
@@ -1897,8 +3070,19 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function showDrop(value: boolean): void {
-    dropShown = value && active && editing && current().sprite !== undefined;
-    dropText.text = "DROP IMAGE FOR " + tab.name.toUpperCase() + " SPRITE";
+    dropShown =
+      value &&
+      active &&
+      editing &&
+      (tab.name === "sound" ||
+        tab.name === "character" ||
+        current().sprite !== undefined);
+    dropText.text =
+      tab.name === "sound"
+        ? "DROP AUDIO FILE FOR SOUND"
+        : tab.name === "character"
+          ? "DROP IMAGE FOR EMOTION SPRITE"
+          : "DROP IMAGE FOR " + tab.name.toUpperCase() + " SPRITE";
   }
 
   window.addEventListener("dragover", (event: DragEvent) => {
@@ -1924,7 +3108,9 @@ async function createMaker(app: Application): Promise<PageContent> {
     event.preventDefault();
     showDrop(false);
 
-    if (active && editing) {
+    if (active && editing && tab.name === "sound") {
+      useAudio(event.dataTransfer?.files[0]);
+    } else if (active && editing) {
       useImage(event.dataTransfer?.files[0]);
     }
   });
@@ -1942,8 +3128,9 @@ async function createMaker(app: Application): Promise<PageContent> {
   function layout(): void {
     const width: number = app.screen.width;
     const height: number = app.screen.height;
-    const bottom: number = panelBottom;
+    const bottom: number = panelBottom - chipHeight - sectionGap;
 
+    backdrop.layout();
     frameScale = Math.min(width / hudWidth, height / hudHeight);
     gameFrame.scale.set(frameScale);
     gameFrame.position.set(
@@ -1974,6 +3161,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
 
     if (editing) {
+      backdrop.update(delta);
       animateRows(delta);
       animateScroll(delta);
     }
@@ -1987,10 +3175,30 @@ async function createMaker(app: Application): Promise<PageContent> {
 
     preview.overlay.visible = tab.name === "stage" && !playing;
 
+    soundPlot.visible = tab.name === "sound";
+    scene.view.visible = scened();
+
+    if (scened()) {
+      scene.update(delta);
+    }
+    hitsText.visible = playtesting;
+    hitsText.text = "HITS " + preview.hits();
+
+    if (playtesting) {
+      steer();
+    }
+
     if (
-      tab.name === "stage" ? playing : tab.name !== "pattern" || patternPlaying
+      playtesting ||
+      (tab.name === "stage"
+        ? playing
+        : tab.name !== "pattern" || patternPlaying)
     ) {
-      preview.update(delta);
+      runClock(
+        ticks,
+        Math.min(ticker.deltaMS / 1000, maxDelta),
+        preview.update,
+      );
     }
 
     patternBar.visible = tab.name === "pattern";
@@ -2016,6 +3224,30 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
+    if (event.code === "KeyP" && typing === null) {
+      playtest();
+      event.preventDefault();
+      return;
+    }
+
+    if (playtesting && movementKeys.includes(event.code)) {
+      held.add(event.code);
+      event.preventDefault();
+      return;
+    }
+
+    if (tab.name === "sound" && event.code === "Space") {
+      playSound(sound());
+      event.preventDefault();
+      return;
+    }
+
+    if (scened() && event.code === "Space") {
+      scene.advance();
+      event.preventDefault();
+      return;
+    }
+
     if (
       (tab.name === "stage" || tab.name === "pattern") &&
       event.code === "Space"
@@ -2026,7 +3258,19 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
   });
 
+  window.addEventListener("keyup", (event: KeyboardEvent) => {
+    held.delete(event.code);
+  });
+
+  window.addEventListener("blur", () => {
+    held.clear();
+  });
+
   function setActive(value: boolean): void {
+    if (!value && playtesting) {
+      setPlaytesting(false);
+    }
+
     active = value;
     typing = null;
     view.eventMode = value ? "passive" : "none";
@@ -2041,13 +3285,21 @@ async function createMaker(app: Application): Promise<PageContent> {
       return false;
     }
 
+    if (playtesting) {
+      setPlaytesting(false);
+      return true;
+    }
+
     showSelector();
     return true;
   }
 
   tab.panel.visible = true;
   refresh();
-  Promise.all([...usedSprites(creations)].map(loadTexture)).then(() => {
+  Promise.all([
+    ...[...usedSprites(creations)].map(loadTexture),
+    ...creations.sounds.map((value: Sound) => loadAudio(value.file)),
+  ]).then(() => {
     refresh();
     gallery.refresh();
     cleanup();

@@ -64,21 +64,27 @@ async function shrink(file: Blob): Promise<Blob> {
   return canvas.convertToBlob({ type: "image/png" });
 }
 
-async function storeImage(file: Blob): Promise<string> {
+async function storeBlob(blob: Blob): Promise<string> {
   const id: string = createId();
-  const blob: Blob = await shrink(file);
 
   await run("readwrite", (store: IDBObjectStore) => store.put(blob, id));
 
   return id;
 }
 
+function readBlob(id: string): Promise<Blob | undefined> {
+  return run<Blob | undefined>("readonly", (store: IDBObjectStore) =>
+    store.get(id),
+  );
+}
+
+async function storeImage(file: Blob): Promise<string> {
+  return storeBlob(await shrink(file));
+}
+
 async function readTexture(id: string): Promise<Texture | null> {
   try {
-    const blob: Blob | undefined = await run<Blob | undefined>(
-      "readonly",
-      (store: IDBObjectStore) => store.get(id),
-    );
+    const blob: Blob | undefined = await readBlob(id);
 
     if (blob === undefined) {
       return null;
@@ -147,8 +153,31 @@ async function removeUnused(used: Set<string>): Promise<void> {
       loading.delete(id);
     }
   } catch {
-    console.warn("Could not clean up unused images");
+    console.warn("Could not clean up unused files");
   }
 }
 
-export { storeImage, getTexture, loadTexture, removeUnused };
+async function eraseFiles(): Promise<void> {
+  if (database !== null) {
+    (await database.catch(() => null))?.close();
+    database = null;
+  }
+
+  await new Promise<void>((resolve) => {
+    const request: IDBOpenDBRequest = indexedDB.deleteDatabase(databaseName);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+    request.onblocked = () => resolve();
+  });
+}
+
+export {
+  eraseFiles,
+  storeBlob,
+  readBlob,
+  storeImage,
+  getTexture,
+  loadTexture,
+  removeUnused,
+};

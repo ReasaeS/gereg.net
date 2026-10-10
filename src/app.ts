@@ -22,6 +22,7 @@ import { createPlayfield, type Playfield } from "./game/playfield";
 import { createSettings } from "./settings/panel";
 import { createMaker } from "./create/maker";
 import { createGuides } from "./dev/guides";
+import { resetApp } from "./dev/reset";
 import {
   createLanding,
   setLandingEnabled,
@@ -55,9 +56,11 @@ import {
 import { setPortal, addPortalView, startPortal } from "./effects/portal/portal";
 import { seaHeight, createVivid, type Vivid } from "./worlds/vivid";
 import { createNightSea } from "./worlds/nightsea";
+import { getTheme } from "./theme/theme";
 
-const background: string = "#0b1026";
 const rainEnabled: boolean = true;
+const resetWarning: string =
+  "Reset geregnet to its out of the box state? Everything you have made and every setting will be lost.";
 const revealDuration: number = 500; // ms
 const revealEasing: Easing = cubicBezier(0.3, 0, 0.25, 1);
 const peekSmoothing: number = 0.12; // s
@@ -73,7 +76,7 @@ const app: Application = new Application();
 
 await app.init({
   resizeTo: container,
-  background: background,
+  background: getTheme().outside,
   antialias: true,
   autoDensity: true,
   resolution: window.devicePixelRatio || 1,
@@ -254,6 +257,18 @@ function play(): void {
     "playing",
   );
 }
+
+window.addEventListener("keydown", (event: KeyboardEvent) => {
+  if (!event.altKey || event.code !== "KeyR" || event.repeat) {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (window.confirm(resetWarning)) {
+    void resetApp();
+  }
+});
 
 window.addEventListener("keydown", (event: KeyboardEvent) => {
   if (event.key === "Escape" && screen === "page" && currentPage !== null) {

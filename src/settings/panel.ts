@@ -19,10 +19,14 @@ import {
 } from "../editor/button";
 import {
   channels,
+  getRate,
   getSky,
   getVolume,
+  onRate,
   onSky,
   onVolume,
+  rates,
+  setRate,
   setSky,
   setVolume,
   type Channel,
@@ -60,6 +64,7 @@ const listTop: number = 0.3; // of screen height
 const listBottom: number = 0.9; // of screen height
 const scrollSmoothing: number = 0.1; // s
 const skies: Array<Sky> = ["day", "night"];
+const rateButtonWidth: number = 88; // px
 const channelNames: Map<Channel, string> = new Map([
   ["master", "master volume"],
   ["soundtrack", "soundtrack"],
@@ -112,6 +117,42 @@ function createSkyRow(buttons: Array<Button>): Row {
     view: view,
     label: label,
     adjust: (direction: number) => setSky(direction < 0 ? "day" : "night"),
+    refresh: () => {
+      for (const button of buttons) {
+        paintButton(button);
+      }
+    },
+  };
+}
+
+function createRateRow(buttons: Array<Button>): Row {
+  const [view, label] = createRow("framerate");
+
+  for (let index = 0; index < rates.length; index++) {
+    const value: number = rates[index]!;
+    const button: Button = createButton(
+      String(value),
+      () => getRate() === value,
+      () => setRate(value),
+      rateButtonWidth,
+    );
+
+    button.view.position.set(
+      labelWidth + index * (rateButtonWidth + buttonGap),
+      0,
+    );
+    buttons.push(button);
+    view.addChild(button.view);
+  }
+
+  return {
+    view: view,
+    label: label,
+    adjust: (direction: number) => {
+      const index: number = rates.indexOf(getRate()) + direction;
+
+      setRate(rates[Math.min(Math.max(index, 0), rates.length - 1)]!);
+    },
     refresh: () => {
       for (const button of buttons) {
         paintButton(button);
@@ -215,10 +256,14 @@ function createSettings(app: Application): PageContent {
   const mask: Graphics = new Graphics();
   const marker: Graphics = new Graphics();
   const skyButtons: Array<Button> = new Array();
+  const rateButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
   const scroll: Spring = { value: 0, velocity: 0 };
   const categories: Array<Category> = [
-    { name: "display", rows: [createSkyRow(skyButtons)] },
+    {
+      name: "display",
+      rows: [createSkyRow(skyButtons), createRateRow(rateButtons)],
+    },
     {
       name: "audio",
       rows: channels.map((channel: Channel) => createVolumeRow(channel)),
@@ -415,6 +460,7 @@ function createSettings(app: Application): PageContent {
 
   onSky(refresh);
   onVolume(refresh);
+  onRate(refresh);
   layout();
   setActive(false);
   app.renderer.on("resize", layout);

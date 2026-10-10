@@ -18,6 +18,7 @@ import {
   type Hud,
 } from "./hud";
 import { cubicBezier, tween, type Easing } from "../effects/tween/tween";
+import { createClock, runClock, type Clock } from "./clock";
 import { createSelector, type Selector } from "./selector";
 
 type Playfield = {
@@ -62,6 +63,7 @@ async function createPlayfield(
   const back: Graphics = new Graphics();
   const player: Sprite = new Sprite(texture);
   const hitbox: Graphics = new Graphics();
+  const clock: Clock = createClock();
   const held: Set<string> = new Set();
   let active: boolean = false;
   let rolling: boolean = false;
@@ -147,7 +149,10 @@ async function createPlayfield(
       return;
     }
 
-    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    runClock(clock, Math.min(ticker.deltaMS / 1000, maxDelta), movePlayer);
+  });
+
+  function movePlayer(delta: number): void {
     const focused: boolean = pressed(focusKeys);
     const speed: number = focused ? focusSpeed : playerSpeed;
     let x: number = (pressed(rightKeys) ? 1 : 0) - (pressed(leftKeys) ? 1 : 0);
@@ -170,7 +175,7 @@ async function createPlayfield(
     );
     hitbox.position.copyFrom(player.position);
     hitbox.visible = focused;
-  });
+  }
 
   function openSelector(): Promise<void> {
     active = false;
@@ -256,5 +261,17 @@ async function createPlayfield(
   };
 }
 
-export { leaveDuration, createPlayfield };
+export {
+  leaveDuration,
+  playerSpeed,
+  focusSpeed,
+  hitboxRadius,
+  hitboxColor,
+  leftKeys,
+  rightKeys,
+  upKeys,
+  downKeys,
+  focusKeys,
+  createPlayfield,
+};
 export type { Playfield };

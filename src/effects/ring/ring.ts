@@ -17,7 +17,6 @@ type GlowLayer = {
   alpha: number;
 };
 
-const ringGap: number = 25; // px
 const glowLayerCount: number = 16;
 const nearGlowStrength: number = 0.8;
 const farGlowStrength: number = 0.55;
@@ -58,37 +57,18 @@ function ringPath(
   x: number,
   y: number,
   radius: number,
-  coreWidth: number,
   width: number,
+  alpha: number,
+  color: string,
 ): void {
   const half: number = width / 2;
-  const outer: number = radius + half;
   const inner: number = Math.max(radius - half, 0);
-  const middle: number = (outer + inner) / 2;
-  const cap: number = (outer - inner) / 2;
-  const spread: number = (ringGap + coreWidth) / 2 / radius;
-  const start: number = -Math.PI / 2 + spread;
-  const end: number = (Math.PI * 3) / 2 - spread;
 
-  graphics
-    .moveTo(x + outer * Math.cos(start), y + outer * Math.sin(start))
-    .arc(x, y, outer, start, end)
-    .arc(
-      x + middle * Math.cos(end),
-      y + middle * Math.sin(end),
-      cap,
-      end,
-      end + Math.PI,
-    )
-    .arc(x, y, inner, end, start, true)
-    .arc(
-      x + middle * Math.cos(start),
-      y + middle * Math.sin(start),
-      cap,
-      start + Math.PI,
-      start + Math.PI * 2,
-    )
-    .closePath();
+  graphics.circle(x, y, radius + half).fill({ color: color, alpha: alpha });
+
+  if (inner > 0) {
+    graphics.circle(x, y, inner).cut();
+  }
 }
 
 function createRing(style: RingStyle): Ring {
@@ -110,8 +90,15 @@ function createRing(style: RingStyle): Ring {
 
     for (let index = 0; index < layers.length; index++) {
       const layer: GlowLayer = layers[index]!;
-      ringPath(view, x, y, radius, style.width, style.width + layer.spread * 2);
-      view.fill({ color: style.color, alpha: layer.alpha });
+      ringPath(
+        view,
+        x,
+        y,
+        radius,
+        style.width + layer.spread * 2,
+        layer.alpha,
+        style.color,
+      );
     }
   }
 

@@ -18,19 +18,65 @@ import {
 import { approach, smoothDamp, type Spring } from "../effects/tween/tween";
 import type {
   Background,
+  Character,
   Creations,
+  Cutscene,
   Enemy,
+  Line,
   Keyframe,
   Pattern,
   Spell,
+  Sound,
   Stage,
 } from "./data";
+import { placeAlong, solidSpans, wallAngle } from "./data";
 import { getTexture } from "./images";
 import { getTheme } from "../theme/theme";
-import { drawShape } from "./preview";
-import { drawRing, drawSpell, spellRadius } from "./sigil";
+import { drawShape, previewHeight, previewWidth } from "./preview";
+import { drawSpell, spellRadius } from "./sigil";
+import { drawSound, soundLength } from "./sound";
+import { createBackdrop, type Backdrop } from "./backdrop";
+import { castOf, feelingOf, speakerOf } from "./cutscene";
+import {
+  cosmetics,
+  difficulties,
+  frames,
+  defaultName,
+  ranks,
+  rarityOf,
+  type Rarity,
+} from "./rarity";
 
-type Kind = "stage" | "pattern" | "enemy" | "background" | "spell";
+type Kind =
+  | "stage"
+  | "pattern"
+  | "enemy"
+  | "background"
+  | "spell"
+  | "sound"
+  | "character"
+  | "cutscene";
+
+type Raindrop = {
+  x: number; // px
+  y: number; // px
+  speed: number; // px/s
+  length: number; // px
+};
+
+type Category = "stage" | "cosmetic" | "enemy" | "pattern";
+
+type Entry = {
+  kind: Kind;
+  index: number;
+  item:
+    Stage | Pattern | Enemy | Background | Spell | Sound | Character | Cutscene;
+};
+
+type Live = {
+  show: (kind: Kind, index: number) => Container | null;
+  update: (delta: number) => void;
+};
 
 type Gallery = {
   view: Container;
@@ -57,6 +103,14 @@ type Tile = {
   face: Container;
   cover: Container;
   coverName: Text;
+  coverArt: Graphics;
+  rain: Graphics;
+  drops: Array<Raindrop>;
+  coverFill: number;
+  coverRank: Text;
+  gems: Graphics;
+  rank: Text;
+  rarity: Rarity<unknown> | null;
   turnFrom: number; // rad
   turnTo: number; // rad
   turnProgress: number;
@@ -69,20 +123,18 @@ type Tile = {
   lit: number;
 };
 
-const kinds: Array<Kind> = ["stage", "background", "enemy", "pattern"];
-const kindNames: Map<Kind, string> = new Map([
+const categoryList: Array<Category> = ["stage", "enemy", "pattern", "cosmetic"];
+const categoryNames: Map<Category, string> = new Map([
   ["stage", "stages"],
-  ["pattern", "patterns"],
+  ["cosmetic", "cosmetics"],
   ["enemy", "enemies"],
-  ["background", "cosmetics"],
-  ["spell", "spells"],
+  ["pattern", "patterns"],
 ]);
-const itemNames: Map<Kind, string> = new Map([
+const itemNames: Map<Category, string> = new Map([
   ["stage", "stage"],
-  ["pattern", "pattern"],
+  ["cosmetic", "cosmetic"],
   ["enemy", "enemy"],
-  ["background", "cosmetic"],
-  ["spell", "spell"],
+  ["pattern", "pattern"],
 ]);
 const tileWidth: number = 190; // px
 const tileHeight: number = 300; // px
@@ -106,6 +158,26 @@ const logoWidth: number = 150; // px
 const logoResolution: number = 2;
 const plateHeight: number = 110; // px
 const coverNameGap: number = 30; // px
+const rankSize: number = 10; // px
+const rankTop: number = 60; // px
+const rankGap: number = 22; // px
+const gemSize: number = 5; // px
+const gemSpacing: number = 13; // px
+const gemCategories: Array<Category> = ["stage", "enemy"];
+const rainCount: number = 16;
+const rainMinSpeed: number = 200; // px/s
+const rainMaxSpeed: number = 400; // px/s
+const rainMinLength: number = 11; // px
+const rainMaxLength: number = 14; // px
+const rainWind: number = 100; // px/s
+const rainAlpha: number = 0.7;
+const rainMaxDelta: number = 0.05; // s
+const plateInset: number = 12; // px
+const plateTop: number = tileHeight / 2 - plateHeight / 2; // px
+const plateBottom: number = tileHeight / 2 + plateHeight / 2; // px
+const rainDrift: number = (rainWind * plateHeight) / rainMinSpeed; // px
+const rarityDepth: number = 0.45;
+const rarityLit: number = 0.25;
 const dotLimit: number = 24;
 const galleryWidth: number = 0.8; // of screen width
 const galleryTop: number = 0.22; // of screen height
@@ -117,16 +189,6 @@ const ornamentLength: number = 0.16; // of screen width
 const ornamentGap: number = 30; // px
 const diamondSize: number = 5; // px
 const focusGap: number = 16; // px
-const vignetteAlpha: number = 0.65;
-const sigilAlpha: number = 0.45;
-const sigilOrb: number = 0.07;
-const sigilTicks: number = 4;
-const sigils: Array<Sigil> = [
-  { x: 0.5, y: 0.58, radius: 0.5, points: 6, step: 2, speed: 0.03 },
-  { x: 0.5, y: 0.58, radius: 0.3, points: 8, step: 3, speed: -0.05 },
-  { x: 0.07, y: 0.12, radius: 0.24, points: 5, step: 2, speed: 0.04 },
-  { x: 0.94, y: 0.9, radius: 0.28, points: 7, step: 3, speed: -0.035 },
-];
 const scrollSmoothing: number = 0.08; // s
 const appearDuration: number = 0.45; // s
 const appearStagger: number = 0.05; // s
@@ -140,59 +202,10 @@ const liftMargin: number = 14; // px
 const trim: string = getTheme().highlight;
 const trimLit: string = getTheme().accent;
 const detailColor: string = "#9fd8ff";
-const backdropTop: string = getTheme().skyTop;
-const backdropBottom: string = getTheme().seaDeep;
 const cardFace: string = getTheme().menuSelected;
 const cardInner: string = getTheme().seaDeep;
 const cardBack: string = getTheme().seaMiddle;
 const serifFamily: Array<string> = ["Georgia", "Times New Roman", "serif"];
-const backdropGradient: FillGradient = new FillGradient({
-  type: "linear",
-  start: { x: 0, y: 0 },
-  end: { x: 0, y: 1 },
-  colorStops: [
-    { offset: 0, color: backdropTop },
-    { offset: 1, color: backdropBottom },
-  ],
-});
-const vignetteGradient: FillGradient = new FillGradient({
-  type: "radial",
-  center: { x: 0.5, y: 0.45 },
-  innerRadius: 0,
-  outerCenter: { x: 0.5, y: 0.45 },
-  outerRadius: 0.75,
-  colorStops: [
-    { offset: 0, color: "rgba(0, 0, 0, 0)" },
-    { offset: 0.6, color: "rgba(0, 0, 0, 0.2)" },
-    { offset: 1, color: "rgba(0, 0, 0, " + vignetteAlpha + ")" },
-  ],
-});
-
-type Sigil = {
-  x: number; // of screen width
-  y: number; // of screen height
-  radius: number; // of screen height
-  points: number;
-  step: number;
-  speed: number; // rad/s
-};
-
-function drawSigil(graphics: Graphics, sigil: Sigil, radius: number): void {
-  graphics.clear();
-  drawRing(
-    graphics,
-    {
-      radius: radius,
-      points: sigil.points,
-      step: sigil.step,
-      ticks: sigil.points * sigilTicks,
-      orb: sigilOrb,
-      spin: 0,
-    },
-    getTheme().ring,
-    0,
-  );
-}
 
 function createSerif(size: number, color: string): Text {
   return new Text({
@@ -269,12 +282,13 @@ function isFaceUp(angle: number): boolean {
   return Math.round(angle / Math.PI) % 2 === 1;
 }
 
-function drawCover(cover: Graphics): void {
+function drawCover(cover: Graphics, fill: ColorSource): void {
   const centerY: number = tileHeight / 2;
 
   cover
+    .clear()
     .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
-    .fill(cardBack)
+    .fill(fill)
     .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
     .stroke({ color: trim, width: 2, alignment: 1 })
     .roundRect(6, 6, tileWidth - 12, tileHeight - 12, tileRadius - 4)
@@ -292,10 +306,51 @@ function drawCover(cover: Graphics): void {
   cover.stroke({ color: trim, width: 0.5, alpha: 0.18 });
   cover
     .rect(12, centerY - plateHeight / 2, tileWidth - 24, plateHeight)
-    .fill(cardBack)
+    .fill(fill)
     .rect(12, centerY - plateHeight / 2, tileWidth - 24, 1)
     .rect(12, centerY + plateHeight / 2 - 1, tileWidth - 24, 1)
     .fill({ color: trim, alpha: 0.7 });
+}
+
+function createDrop(fresh: boolean): Raindrop {
+  const length: number =
+    rainMinLength + Math.random() * (rainMaxLength - rainMinLength);
+
+  return {
+    x:
+      plateInset -
+      rainDrift +
+      Math.random() * (tileWidth - plateInset * 2 + rainDrift),
+    y: fresh
+      ? plateTop + Math.random() * (plateHeight + length)
+      : plateTop - Math.random() * plateHeight * 0.5,
+    speed: rainMinSpeed + Math.random() * (rainMaxSpeed - rainMinSpeed),
+    length: length,
+  };
+}
+
+function drawRain(rain: Graphics, drops: Array<Raindrop>, delta: number): void {
+  rain.clear();
+
+  for (let index = 0; index < drops.length; index++) {
+    let drop: Raindrop = drops[index]!;
+
+    drop.x += rainWind * delta;
+    drop.y += drop.speed * delta;
+
+    if (drop.y - drop.length > plateBottom) {
+      drop = createDrop(false);
+      drops[index] = drop;
+    }
+
+    const reach: number = drop.length / Math.hypot(rainWind, drop.speed);
+
+    rain
+      .moveTo(drop.x - rainWind * reach, drop.y - drop.speed * reach)
+      .lineTo(drop.x, drop.y);
+  }
+
+  rain.stroke({ color: getTheme().rain, width: 1, alpha: rainAlpha });
 }
 
 function blend(from: ColorSource, to: ColorSource, amount: number): number {
@@ -381,6 +436,45 @@ function drawPattern(
   const size: number = Math.min(Math.max(pattern.size * 0.5, 4), 14);
   const base: number = ((pattern.heading + 90) * Math.PI) / 180;
 
+  if (pattern.frame === "objective") {
+    const direction: number = wallAngle(pattern.wall);
+    const directionX: number = Math.cos(direction);
+    const directionY: number = Math.sin(direction);
+    const travel: number = Math.atan2(pattern.velocity.y, pattern.velocity.x);
+    const travelX: number = Math.cos(travel);
+    const travelY: number = Math.sin(travel);
+    const span: number =
+      Math.min(width, height) * 0.8 * Math.min(pattern.cover, 1);
+
+    const spans: Array<[number, number]> = solidSpans(pattern);
+
+    for (let index = 0; index < count; index++) {
+      const along: number | null = placeAlong(spans, (index + 0.5) / count);
+
+      if (along === null) {
+        break;
+      }
+
+      const offset: number = -span / 2 + along * span;
+      const x: number = width / 2 - directionX * radius - directionY * offset;
+      const y: number = height / 2 - directionY * radius + directionX * offset;
+
+      dots
+        .moveTo(x, y)
+        .lineTo(x + travelX * radius * 0.6, y + travelY * radius * 0.6)
+        .stroke({ color: pattern.color, width: 1, alpha: 0.5 })
+        .circle(
+          x + travelX * radius * 0.6,
+          y + travelY * radius * 0.6,
+          size / 2,
+        )
+        .fill(pattern.color);
+    }
+
+    art.addChild(dots);
+    return;
+  }
+
   for (let index = 0; index < count; index++) {
     const offset: number =
       count === 1
@@ -447,19 +541,125 @@ function drawSpellArt(
   art.addChild(graphics);
 }
 
+function drawSoundArt(
+  art: Container,
+  sound: Sound,
+  width: number,
+  height: number,
+): void {
+  const graphics: Graphics = new Graphics();
+
+  drawSound(graphics, sound, width * 0.8, height * 0.6, getTheme().ring);
+  graphics.position.set(width * 0.1, height * 0.2);
+  art.addChild(graphics);
+}
+
+function drawCharacterArt(
+  art: Container,
+  character: Character,
+  width: number,
+  height: number,
+): void {
+  const texture: Texture | null = getTexture(
+    character.emotions[0]?.sprite ?? null,
+  );
+
+  drawBackground(art, null, width, height);
+
+  if (texture === null) {
+    const figure: Graphics = new Graphics();
+    const head: number = height * 0.14;
+
+    figure
+      .circle(width / 2, height * 0.38, head)
+      .fill({ color: character.color, alpha: 0.8 })
+      .roundRect(
+        width / 2 - head * 1.6,
+        height * 0.38 + head * 1.3,
+        head * 3.2,
+        height,
+        head,
+      )
+      .fill({ color: character.color, alpha: 0.8 });
+    art.addChild(figure);
+    return;
+  }
+
+  const portrait: Sprite = new Sprite(texture);
+
+  portrait.anchor.set(0.5, 1);
+  portrait.scale.set((height * 0.9) / texture.height);
+  portrait.position.set(width / 2, height);
+  art.addChild(portrait);
+}
+
+function drawCutsceneArt(
+  art: Container,
+  cutscene: Cutscene,
+  cast: Array<Character>,
+  width: number,
+  height: number,
+): void {
+  const box: Graphics = new Graphics();
+  const speakers: Array<Character> = castOf(cutscene, cast);
+  const lines: number = Math.min(cutscene.lines.length, 2);
+
+  drawBackground(art, null, width, height);
+
+  for (const character of speakers.slice(0, 1)) {
+    const said: Line | undefined = cutscene.lines.find(
+      (value: Line) => value.character === character?.id,
+    );
+    const texture: Texture | null =
+      said === undefined
+        ? null
+        : getTexture(feelingOf(character, said)?.sprite ?? null);
+
+    if (texture === null) {
+      continue;
+    }
+
+    const portrait: Sprite = new Sprite(texture);
+
+    portrait.anchor.set(0.5, 1);
+    portrait.scale.set((height * 0.7) / texture.height);
+    portrait.position.set(width * 0.25, height * 0.7);
+    art.addChild(portrait);
+  }
+
+  box
+    .rect(width * 0.08, height * 0.58, width * 0.84, height * 0.3)
+    .fill({ color: "#01040f", alpha: 0.82 })
+    .stroke({ color: "#ffffff", width: 1, alignment: 1 });
+
+  for (let order = 0; order < lines; order++) {
+    box
+      .rect(
+        width * 0.13,
+        height * (0.65 + order * 0.1),
+        width * (order === 0 ? 0.6 : 0.4),
+        height * 0.04,
+      )
+      .fill({
+        color: speakerOf(cast, cutscene.lines[order]!)?.color ?? "#ffffff",
+        alpha: 0.8,
+      });
+  }
+
+  art.addChild(box);
+}
+
 function createGallery(
   app: Application,
   creations: () => Creations,
   open: (kind: Kind, index: number) => void,
-  create: (kind: Kind) => void,
+  create: (category: Category) => void,
   act: (kind: Kind, index: number, action: Action) => void,
+  live: Live,
 ): Gallery {
   const view: Container = new Container();
   const categories: Container = new Container();
-  const backdrop: Graphics = new Graphics();
-  const circles: Container = new Container();
-  const vignette: Graphics = new Graphics();
-  const sigilViews: Array<Graphics> = sigils.map(() => new Graphics());
+  const backdrop: Backdrop = createBackdrop(app);
   const ornament: Graphics = new Graphics();
   const tabs: Array<Text> = new Array();
   const grid: Container = new Container();
@@ -468,7 +668,7 @@ function createGallery(
   const tiles: Array<Tile> = new Array();
   const logo: Texture | null = tintedLogo(app);
   const scroll: Spring = { value: 0, velocity: 0 };
-  let kind: Kind = "stage";
+  let category: Category = "stage";
   let selected: number = 0;
   let onTabs: boolean = true;
   let target: number = 0;
@@ -479,31 +679,95 @@ function createGallery(
   let revealed: number | null = null;
   let appearDirection: number = 1;
   let vanished: (() => void) | null = null;
+  let liveTile: Tile | null = null;
+  let liveView: Container | null = null;
 
-  function items(): Array<Stage | Pattern | Enemy | Background | Spell> {
+  function entries(): Array<Entry> {
     const source: Creations = creations();
+    const list: Array<Entry> = new Array();
 
-    if (kind === "stage") {
-      return source.stages;
+    function add(
+      kind: Kind,
+      items: Array<
+        | Stage
+        | Pattern
+        | Enemy
+        | Background
+        | Spell
+        | Sound
+        | Character
+        | Cutscene
+      >,
+    ): void {
+      for (let index = 0; index < items.length; index++) {
+        list.push({ kind: kind, index: index, item: items[index]! });
+      }
     }
 
-    if (kind === "pattern") {
-      return source.patterns;
+    if (category === "stage") {
+      add("stage", source.stages);
+    } else if (category === "pattern") {
+      add("pattern", source.patterns);
+    } else if (category === "enemy") {
+      add("enemy", source.enemies);
+    } else {
+      add("background", source.backgrounds);
+      add("spell", source.spells);
+      add("sound", source.sounds);
+      add("cutscene", source.cutscenes);
+      add("character", source.characters);
     }
 
-    if (kind === "enemy") {
-      return source.enemies;
+    return list.sort(compare);
+  }
+
+  function compare(first: Entry, second: Entry): number {
+    const tier: number =
+      (rarity(first).tier - rarity(second).tier) *
+      (category === "stage" ? -1 : 1);
+    const firstDefault: RegExpExecArray | null = defaultName.exec(
+      first.item.name,
+    );
+    const secondDefault: RegExpExecArray | null = defaultName.exec(
+      second.item.name,
+    );
+
+    if (tier !== 0) {
+      return tier;
     }
 
-    if (kind === "spell") {
-      return source.spells;
+    if (firstDefault !== null && secondDefault !== null) {
+      return Number(firstDefault[2]) - Number(secondDefault[2]);
     }
 
-    return source.backgrounds;
+    if (firstDefault !== null || secondDefault !== null) {
+      return firstDefault !== null ? 1 : -1;
+    }
+
+    return first.item.name.localeCompare(second.item.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  }
+
+  function rarity(entry: Entry): Rarity<unknown> {
+    if (entry.kind === "stage") {
+      return rarityOf(difficulties, (entry.item as Stage).difficulty);
+    }
+
+    if (entry.kind === "enemy") {
+      return rarityOf(ranks, (entry.item as Enemy).rank);
+    }
+
+    if (entry.kind === "pattern") {
+      return rarityOf(frames, (entry.item as Pattern).frame);
+    }
+
+    return rarityOf(cosmetics, entry.kind);
   }
 
   function count(): number {
-    return items().length + 1;
+    return entries().length + 1;
   }
 
   function backgroundById(id: string | null): Background | null {
@@ -528,10 +792,12 @@ function createGallery(
       return;
     }
 
+    const entry: Entry | undefined = entries()[index - 1];
+
     if (index === 0) {
-      create(kind);
-    } else {
-      open(kind, index - 1);
+      create(category);
+    } else if (entry !== undefined) {
+      open(entry.kind, entry.index);
     }
   }
 
@@ -572,14 +838,28 @@ function createGallery(
   function drawTile(index: number): void {
     const tile: Tile = tiles[index]!;
     const lit: number = tile.lit;
+    const tone: string | null = tile.rarity?.color ?? null;
     const border: number = blend(trim, trimLit, lit);
+    const body: number =
+      tone === null
+        ? new Color(cardBack).toNumber()
+        : blend(tone, "#000000", rarityDepth);
+    const face: number =
+      tone === null
+        ? blend(cardFace, getTheme().skyTop, lit)
+        : blend(body, tone, rarityLit * lit);
+
+    if (tile.coverFill !== body) {
+      tile.coverFill = body;
+      drawCover(tile.coverArt, body);
+    }
 
     tile.back
       .clear()
       .roundRect(-6, -6, tileWidth + 12, tileHeight + 12, tileRadius + 6)
       .stroke({ color: trimLit, width: 6, alpha: 0.3 * lit })
       .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
-      .fill(blend(cardFace, getTheme().skyTop, lit))
+      .fill(face)
       .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
       .stroke({ color: border, width: 2, alignment: 1 })
       .roundRect(5, 5, tileWidth - 10, tileHeight - 10, tileRadius - 4)
@@ -599,6 +879,37 @@ function createGallery(
     }
 
     tile.back.fill(border);
+    tile.gems.clear();
+
+    if (tile.rarity !== null) {
+      const color: string = tile.rarity.color;
+      const tier: number = tile.rarity.tier;
+
+      for (const graphics of [tile.back, tile.gems]) {
+        graphics
+          .roundRect(8, 8, tileWidth - 16, tileHeight - 16, tileRadius - 5)
+          .stroke({ color: color, width: 1, alpha: 0.8 });
+
+        if (!gemCategories.includes(category)) {
+          continue;
+        }
+
+        for (let gem = 0; gem < tier; gem++) {
+          diamond(
+            graphics,
+            tileWidth / 2 + (gem - (tier - 1) / 2) * gemSpacing,
+            0,
+            gemSize,
+          );
+        }
+
+        graphics.fill(color).stroke({ color: cardBack, width: 1.5 });
+      }
+
+      tile.rank.tint = color;
+      tile.coverRank.tint = color;
+    }
+
     tile.name.tint = border;
     tile.coverName.tint = border;
     tile.detail.tint = blend(detailColor, "#ffffff", lit);
@@ -664,15 +975,44 @@ function createGallery(
     const tile: Container = new Container();
     const back: Graphics = new Graphics();
     const art: Container = new Container();
+    const artMask: Graphics = new Graphics()
+      .rect(artInset, artTop, tileWidth - artInset * 2, artHeight)
+      .fill(0xffffff);
     const name: Text = createSerif(nameSize, "#ffffff");
     const detail: Text = createSerif(detailSize, "#ffffff");
     const face: Container = new Container();
     const cover: Container = new Container();
     const coverArt: Graphics = new Graphics();
     const coverName: Text = createSerif(nameSize, "#ffffff");
+    const coverRank: Text = createSerif(rankSize, "#ffffff");
+    const rank: Text = createSerif(rankSize, "#ffffff");
+    const gems: Graphics = new Graphics();
 
-    drawCover(coverArt);
-    cover.addChild(coverArt, coverName);
+    const rain: Graphics = new Graphics();
+    const rainMask: Graphics = new Graphics()
+      .rect(
+        plateInset,
+        plateTop + 1,
+        tileWidth - plateInset * 2,
+        plateHeight - 2,
+      )
+      .fill(0xffffff);
+    const drops: Array<Raindrop> = new Array();
+
+    for (let drop = 0; drop < rainCount; drop++) {
+      drops.push(createDrop(true));
+    }
+
+    drawCover(coverArt, cardBack);
+    rain.mask = rainMask;
+    cover.addChild(coverArt, rain, rainMask, gems, coverName, coverRank);
+    coverRank.anchor.set(0.5);
+    coverRank.position.set(
+      tileWidth / 2,
+      tileHeight / 2 + plateHeight / 2 + coverNameGap + rankGap,
+    );
+    rank.anchor.set(0.5, 0);
+    rank.position.set(tileWidth / 2, artTop + artHeight + rankTop);
     coverName.anchor.set(0.5);
     coverName.position.set(
       tileWidth / 2,
@@ -688,6 +1028,7 @@ function createGallery(
       cover.addChild(emblem);
     }
     art.position.set(artInset, artTop);
+    art.mask = artMask;
     name.anchor.set(0.5, 0);
     name.position.set(tileWidth / 2, artTop + artHeight + 16);
     detail.anchor.set(0.5, 0);
@@ -726,8 +1067,10 @@ function createGallery(
         button.view.on("pointertap", (event: FederatedPointerEvent) => {
           event.stopPropagation();
 
-          if (active && button.enabled) {
-            act(kind, index - 1, action);
+          const entry: Entry | undefined = entries()[index - 1];
+
+          if (active && button.enabled && entry !== undefined) {
+            act(entry.kind, entry.index, action);
           }
         });
         row.addChild(button.view);
@@ -737,7 +1080,7 @@ function createGallery(
     );
 
     row.position.set(artInset, tileHeight - actionHeight - actionBottom);
-    face.addChild(back, art, name, detail, row);
+    face.addChild(back, art, artMask, name, detail, rank, row);
     tile.addChild(face, cover);
     tile.eventMode = "static";
     tile.cursor = "pointer";
@@ -763,6 +1106,14 @@ function createGallery(
       face: face,
       cover: cover,
       coverName: coverName,
+      coverArt: coverArt,
+      rain: rain,
+      drops: drops,
+      coverFill: new Color(cardBack).toNumber(),
+      coverRank: coverRank,
+      gems: gems,
+      rank: rank,
+      rarity: null,
       turnFrom: index === 0 ? Math.PI : 0,
       turnTo: index === 0 ? Math.PI : 0,
       turnProgress: 1,
@@ -790,8 +1141,71 @@ function createGallery(
     button.view.alpha = button.enabled ? 1 : actionDisabled;
   }
 
+  function release(): void {
+    if (liveTile !== null) {
+      for (const child of liveTile.art.children) {
+        child.visible = true;
+      }
+    }
+
+    liveView?.removeFromParent();
+    liveTile = null;
+    liveView = null;
+  }
+
+  function mount(tile: Tile, index: number): void {
+    const entry: Entry | undefined = entries()[index - 1];
+    const width: number = tileWidth - artInset * 2;
+
+    liveTile = tile;
+    liveView = entry === undefined ? null : live.show(entry.kind, entry.index);
+
+    if (entry === undefined || liveView === null) {
+      return;
+    }
+
+    const scale: number = Math.max(
+      width / previewWidth,
+      artHeight / previewHeight,
+    );
+
+    for (const child of tile.art.children) {
+      child.visible = false;
+    }
+
+    liveView.scale.set(scale);
+    liveView.position.set(
+      (width - previewWidth * scale) / 2,
+      entry.kind === "cutscene"
+        ? artHeight - previewHeight * scale
+        : (artHeight - previewHeight * scale) / 2,
+    );
+    tile.art.addChild(liveView);
+  }
+
+  function animateLive(delta: number): void {
+    const target: Tile | null =
+      revealed === null || revealed === 0 ? null : (tiles[revealed] ?? null);
+
+    if (target !== liveTile) {
+      release();
+
+      if (target !== null) {
+        mount(target, revealed!);
+      }
+    }
+
+    if (liveView !== null && liveTile?.face.visible === true) {
+      live.update(delta);
+    }
+  }
+
   function describe(tile: Tile, index: number): void {
     const width: number = tileWidth - artInset * 2;
+
+    if (tile === liveTile) {
+      release();
+    }
 
     tile.actions.visible = index !== 0;
 
@@ -811,7 +1225,10 @@ function createGallery(
       plus.anchor.set(0.5);
       plus.position.set(width / 2, artHeight / 2);
       tile.art.addChild(ring, plus);
-      tile.name.text = "NEW " + itemNames.get(kind)!.toUpperCase();
+      tile.name.text = "NEW " + itemNames.get(category)!.toUpperCase();
+      tile.rarity = null;
+      tile.rank.text = "";
+      tile.coverRank.text = "";
       fit(tile.name);
       tile.coverName.text = tile.name.text;
       fit(tile.coverName);
@@ -819,15 +1236,27 @@ function createGallery(
       return;
     }
 
-    const item: Stage | Pattern | Enemy | Background | Spell =
-      items()[index - 1]!;
+    const entry: Entry = entries()[index - 1]!;
+    const item:
+      | Stage
+      | Pattern
+      | Enemy
+      | Background
+      | Spell
+      | Sound
+      | Character
+      | Cutscene = entry.item;
+
+    tile.rarity = rarity(entry);
+    tile.rank.text = tile.rarity.label.toUpperCase();
+    tile.coverRank.text = tile.rank.text;
 
     tile.name.text = item.name.toUpperCase();
     fit(tile.name);
     tile.coverName.text = tile.name.text;
     fit(tile.coverName);
 
-    if (kind === "stage") {
+    if (entry.kind === "stage") {
       const stage: Stage = item as Stage;
 
       drawBackground(
@@ -841,12 +1270,12 @@ function createGallery(
         "s  ·  " +
         stage.keyframes.length +
         (stage.keyframes.length === 1 ? " keyframe" : " keyframes");
-    } else if (kind === "pattern") {
+    } else if (entry.kind === "pattern") {
       const pattern: Pattern = item as Pattern;
 
       drawPattern(tile.art, pattern, width, artHeight);
       tile.detail.text = pattern.count + " bullets  ·  " + pattern.rate + "/s";
-    } else if (kind === "enemy") {
+    } else if (entry.kind === "enemy") {
       const enemy: Enemy = item as Enemy;
 
       drawEnemy(tile.art, enemy, width, artHeight);
@@ -854,7 +1283,41 @@ function createGallery(
         enemy.health +
         " hp  ·  " +
         (patternById(enemy.pattern)?.name ?? "No pattern");
-    } else if (kind === "spell") {
+    } else if (entry.kind === "sound") {
+      const sound: Sound = item as Sound;
+
+      drawSoundArt(tile.art, sound, width, artHeight);
+      tile.detail.text =
+        (sound.source === "file" ? "file" : sound.wave) +
+        "  ·  " +
+        soundLength(sound).toFixed(2) +
+        "s";
+    } else if (entry.kind === "character") {
+      const character: Character = item as Character;
+
+      drawCharacterArt(tile.art, character, width, artHeight);
+      tile.detail.text =
+        character.emotions.length +
+        (character.emotions.length === 1 ? " emotion" : " emotions");
+    } else if (entry.kind === "cutscene") {
+      const cutscene: Cutscene = item as Cutscene;
+
+      const speakers: number = castOf(cutscene, creations().characters).length;
+
+      drawCutsceneArt(
+        tile.art,
+        cutscene,
+        creations().characters,
+        width,
+        artHeight,
+      );
+      tile.detail.text =
+        speakers +
+        (speakers === 1 ? " character" : " characters") +
+        "  ·  " +
+        cutscene.lines.length +
+        (cutscene.lines.length === 1 ? " line" : " lines");
+    } else if (entry.kind === "spell") {
       const spell: Spell = item as Spell;
 
       drawSpellArt(tile.art, spell, width, artHeight);
@@ -865,7 +1328,7 @@ function createGallery(
       tile.detail.text = "Scroll " + (item as Background).scroll;
     }
 
-    if (kind === "stage") {
+    if (entry.kind === "stage") {
       const stage: Stage = item as Stage;
       const used: Set<string> = new Set();
 
@@ -950,7 +1413,13 @@ function createGallery(
     }
 
     while (tiles.length > count()) {
-      tiles.pop()!.view.destroy({ children: true });
+      const tile: Tile = tiles.pop()!;
+
+      if (tile === liveTile) {
+        release();
+      }
+
+      tile.view.destroy({ children: true });
     }
 
     for (let index = 0; index < tiles.length; index++) {
@@ -961,12 +1430,12 @@ function createGallery(
     select(selected);
   }
 
-  function showKind(next: Kind): void {
-    if (next === kind) {
+  function showKind(next: Category): void {
+    if (next === category) {
       return;
     }
 
-    kind = next;
+    category = next;
     selected = 0;
     revealed = null;
     target = 0;
@@ -974,11 +1443,11 @@ function createGallery(
     appear();
   }
 
-  for (let index = 0; index < kinds.length; index++) {
-    const value: Kind = kinds[index]!;
+  for (let index = 0; index < categoryList.length; index++) {
+    const value: Category = categoryList[index]!;
     const tab: Text = createSerif(tabSize, "#ffffff");
 
-    tab.text = kindNames.get(value)!.toUpperCase();
+    tab.text = categoryNames.get(value)!.toUpperCase();
     tab.anchor.set(0.5);
     tab.eventMode = "static";
     tab.cursor = "pointer";
@@ -988,7 +1457,7 @@ function createGallery(
   }
 
   function paintTabs(): void {
-    const current: Text | undefined = tabs[kinds.indexOf(kind)];
+    const current: Text | undefined = tabs[categoryList.indexOf(category)];
 
     for (const tab of tabs) {
       tab.tint = tab === current ? trimLit : trim;
@@ -1065,26 +1534,7 @@ function createGallery(
       Math.round(app.screen.width / 2),
       Math.round(app.screen.height * headerY),
     );
-    backdrop
-      .clear()
-      .rect(0, 0, app.screen.width, app.screen.height)
-      .fill(backdropGradient);
-
-    for (let index = 0; index < sigils.length; index++) {
-      const sigil: Sigil = sigils[index]!;
-      const graphics: Graphics = sigilViews[index]!;
-
-      drawSigil(graphics, sigil, sigil.radius * app.screen.height);
-      graphics.position.set(
-        sigil.x * app.screen.width,
-        sigil.y * app.screen.height,
-      );
-    }
-
-    vignette
-      .clear()
-      .rect(0, 0, app.screen.width, app.screen.height)
-      .fill(vignetteGradient);
+    backdrop.layout();
     paintTabs();
     mask
       .clear()
@@ -1103,9 +1553,7 @@ function createGallery(
   grid.addChild(list, mask);
   list.mask = mask;
   categories.addChild(ornament);
-  circles.addChild(...sigilViews);
-  circles.alpha = sigilAlpha;
-  view.addChild(backdrop, circles, vignette, categories, grid);
+  view.addChild(backdrop.view, categories, grid);
   view.eventMode = "none";
   grid.eventMode = "static";
   grid.on("wheel", (event: FederatedWheelEvent) => {
@@ -1123,14 +1571,22 @@ function createGallery(
       return;
     }
 
-    for (let index = 0; index < sigils.length; index++) {
-      sigilViews[index]!.rotation +=
-        (sigils[index]!.speed * ticker.deltaMS) / 1000;
-    }
+    backdrop.update(ticker.deltaMS / 1000);
 
     smoothDamp(scroll, target, scrollSmoothing, ticker.deltaMS / 1000);
     list.y = -scroll.value;
     animateTiles(ticker.deltaMS / 1000);
+    animateLive(Math.min(ticker.deltaMS / 1000, rainMaxDelta));
+
+    for (const tile of tiles) {
+      if (tile.cover.visible) {
+        drawRain(
+          tile.rain,
+          tile.drops,
+          Math.min(ticker.deltaMS / 1000, rainMaxDelta),
+        );
+      }
+    }
 
     if (appearDirection > 0 && appearTime < appearEnd()) {
       appearTime += ticker.deltaMS / 1000;
@@ -1179,7 +1635,8 @@ function createGallery(
     } else if (event.code === "Enter" || event.code === "Space") {
       choose(selected);
     } else if (event.code.startsWith("Digit")) {
-      const next: Kind | undefined = kinds[Number(event.code.slice(5)) - 1];
+      const next: Category | undefined =
+        categoryList[Number(event.code.slice(5)) - 1];
 
       if (next === undefined) {
         return;
@@ -1195,11 +1652,11 @@ function createGallery(
 
   function moveTab(direction: number): void {
     const index: number = Math.min(
-      Math.max(kinds.indexOf(kind) + direction, 0),
-      kinds.length - 1,
+      Math.max(categoryList.indexOf(category) + direction, 0),
+      categoryList.length - 1,
     );
 
-    showKind(kinds[index]!);
+    showKind(categoryList[index]!);
   }
 
   function setActive(value: boolean): void {
@@ -1222,4 +1679,4 @@ function createGallery(
 }
 
 export { createGallery };
-export type { Gallery, Kind, Action };
+export type { Gallery, Live, Kind, Category, Action };
