@@ -105,6 +105,15 @@ type Actor = {
   emitter: Emitter;
 };
 
+type Sky = {
+  view: Container;
+  fill: Graphics;
+  tiles: TilingSprite;
+  gradient: FillGradient | null;
+  background: Background | null;
+  painted: string;
+};
+
 type Arrival = {
   time: number; // s
   spawn: Spawn;
@@ -143,6 +152,7 @@ const still: Path = {
 };
 const stillSpeed: number = 1; // units/s
 const edgeOffset: number = 8; // units
+const fadeTime: number = 1; // s
 
 async function loadBullet(): Promise<BulletLayers> {
   const texture: Texture = await Assets.load<Texture>(bulletPath);
@@ -296,18 +306,75 @@ function motion(
   return [x, y];
 }
 
-async function createPreview(playerTexture: Texture): Promise<Preview> {
+function createSky(): Sky {
+  const sky: Sky = {
+    view: new Container(),
+    fill: new Graphics(),
+    tiles: new TilingSprite({ width: previewWidth, height: previewHeight }),
+    gradient: null,
+    background: null,
+    painted: "",
+  };
+
+  sky.tiles.visible = false;
+  sky.view.addChild(sky.fill, sky.tiles);
+
+  return sky;
+}
+
+function skyKey(background: Background | null): string {
+  return background === null
+    ? ""
+    : (getTexture(background.sprite) === null ? "" : background.sprite) +
+        background.top +
+        background.bottom;
+}
+
+function paintSky(sky: Sky): void {
+  const background: Background | null = sky.background;
+  const texture: Texture | null = getTexture(background?.sprite ?? null);
+
+  sky.painted = skyKey(background);
+  sky.tiles.visible = texture !== null;
+
+  if (texture !== null) {
+    sky.tiles.texture = texture;
+    sky.tiles.tileScale.set(previewWidth / texture.width);
+  }
+
+  sky.gradient?.destroy();
+  sky.gradient = null;
+  sky.fill.clear();
+
+  if (background === null) {
+    sky.fill.rect(0, 0, previewWidth, previewHeight).fill("#01040f");
+    return;
+  }
+
+  sky.gradient = new FillGradient({
+    type: "linear",
+    start: { x: 0, y: 0 },
+    end: { x: 0, y: 1 },
+    colorStops: [
+      { offset: 0, color: background.top },
+      { offset: 1, color: background.bottom },
+    ],
+  });
+  sky.fill.rect(0, 0, previewWidth, previewHeight).fill(sky.gradient);
+}
+
+async function createPreview(
+  playerTexture: Texture,
+  findBackground: (id: string | null) => Background | null,
+): Promise<Preview> {
   const view: Container = new Container();
-  const sky: Graphics = new Graphics();
+  const base: Sky = createSky();
+  const cover: Sky = createSky();
   const bulletLayer: Container = new Container();
   const coreLayer: Container = new Container();
   const actorLayer: Container = new Container();
   const overlay: Container = new Container();
   const sigil: Graphics = new Graphics();
-  const backdrop: TilingSprite = new TilingSprite({
-    width: previewWidth,
-    height: previewHeight,
-  });
   const player: Sprite = new Sprite(playerTexture);
   const hitbox: Graphics = new Graphics();
   const input: Vector = { x: 0, y: 0 };
@@ -317,7 +384,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   const actors: Array<Actor> = new Array();
   const emitter: Emitter = { timer: 0, time: 0 };
   const layers: BulletLayers = await loadBullet();
-  let background: Background | null = null;
+  let blend: number = 0;
   let pattern: Pattern | null = null;
   let spell: Spell | null = null;
   let spellTime: number = 0;
@@ -326,7 +393,6 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   let arrivals: Array<Arrival> = new Array();
   let nextArrival: number = 0;
   let time: number = 0;
-  let gradient: FillGradient | null = null;
   let playtest: boolean = false;
   let focused: boolean = false;
   let hitCount: number = 0;
@@ -343,11 +409,11 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     .stroke({ color: "#ffffff", width: 1 });
   hitbox.visible = false;
   sigil.position.set(previewWidth / 2, previewHeight / 2);
-  backdrop.visible = false;
+  cover.view.visible = false;
   mask.rect(0, 0, previewWidth, previewHeight).fill(0xffffff);
   view.addChild(
-    sky,
-    backdrop,
+    base.view,
+    cover.view,
     sigil,
     player,
     actorLayer,
@@ -359,35 +425,40 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
   );
   view.mask = mask;
 
-  function drawSky(): void {
-    const texture: Texture | null = getTexture(background?.sprite ?? null);
+  function spellBackground(): Background | null {
+    for (let index = actors.length - 1; index >= 0; index--) {
+      const found: Background | null = findBackground(
+        actors[index]!.spell?.background ?? null,
+      );
 
-    backdrop.visible = texture !== null;
-
-    if (texture !== null) {
-      backdrop.texture = texture;
-      backdrop.tileScale.set(previewWidth / texture.width);
+      if (found !== null) {
+        return found;
+      }
     }
 
-    gradient?.destroy();
-    gradient = null;
-    sky.clear();
+    return spell === null ? null : findBackground(spell.background);
+  }
 
-    if (background === null) {
-      sky.rect(0, 0, previewWidth, previewHeight).fill("#01040f");
-      return;
+  function fade(delta: number): void {
+    const target: Background | null = spellBackground();
+
+    if (target !== null && target === cover.background) {
+      blend = Math.min(blend + delta / fadeTime, 1);
+
+      if (cover.painted !== skyKey(target)) {
+        paintSky(cover);
+      }
+    } else {
+      blend = Math.max(blend - delta / fadeTime, 0);
+
+      if (blend === 0 && target !== null) {
+        cover.background = target;
+        paintSky(cover);
+      }
     }
 
-    gradient = new FillGradient({
-      type: "linear",
-      start: { x: 0, y: 0 },
-      end: { x: 0, y: 1 },
-      colorStops: [
-        { offset: 0, color: background.top },
-        { offset: 1, color: background.bottom },
-      ],
-    });
-    sky.rect(0, 0, previewWidth, previewHeight).fill(gradient);
+    cover.view.alpha = blend;
+    cover.view.visible = blend > 0;
   }
 
   function dress(actor: Actor): void {
@@ -853,6 +924,7 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
 
     clearActors();
     clearBullets();
+    blend = 0;
     time = Math.max(goal - seekLookback, 0);
     schedule();
 
@@ -990,9 +1062,9 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
 
     if (stage !== null) {
       runStage(delta);
-      backdrop.tilePosition.y = (background?.scroll ?? 0) * time;
+      base.tiles.tilePosition.y = (base.background?.scroll ?? 0) * time;
     } else {
-      backdrop.tilePosition.y += (background?.scroll ?? 0) * delta;
+      base.tiles.tilePosition.y += (base.background?.scroll ?? 0) * delta;
 
       if (actors.length > 0) {
         moveActors(delta);
@@ -1006,6 +1078,9 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
       drawSpell(sigil, spell, spellTime);
     }
 
+    cover.tiles.tilePosition.y += (cover.background?.scroll ?? 0) * delta;
+    fade(delta);
+
     if (playtest) {
       collide();
     }
@@ -1018,7 +1093,9 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     emitter.time = 0;
     time = 0;
     spellTime = 0;
-    backdrop.tilePosition.y = 0;
+    blend = 0;
+    cover.view.visible = false;
+    base.tiles.tilePosition.y = 0;
   }
 
   function showSpell(value: Spell | null): void {
@@ -1030,14 +1107,15 @@ async function createPreview(playerTexture: Texture): Promise<Preview> {
     }
   }
 
-  drawSky();
+  paintSky(base);
 
   return {
     view: view,
     overlay: overlay,
     setBackground: (value: Background | null) => {
-      background = value;
-      drawSky();
+      base.background = value;
+      paintSky(base);
+      paintSky(cover);
     },
     setPattern: (value: Pattern | null) => {
       showSpell(null);

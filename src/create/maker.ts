@@ -334,8 +334,11 @@ async function createMaker(app: Application): Promise<PageContent> {
   const panelBack: Graphics = new Graphics();
   const frameMask: Graphics = new Graphics();
   let frameScale: number = 1;
-  const preview: Preview = await createPreview(playerTexture());
-  const cardPreview: Preview = await createPreview(playerTexture());
+  const preview: Preview = await createPreview(playerTexture(), backgroundById);
+  const cardPreview: Preview = await createPreview(
+    playerTexture(),
+    backgroundById,
+  );
   const cardTicks: Clock = createClock();
   const creations: Creations = loadCreations();
   const tabs: Array<Tab> = new Array();
@@ -1454,6 +1457,20 @@ async function createMaker(app: Application): Promise<PageContent> {
           () => spell().opacity,
           (value: number) => {
             spell().opacity = value;
+          },
+        ),
+        choice(
+          "Background",
+          () => [
+            { value: null, label: "None" },
+            ...creations.backgrounds.map((value: Background) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => spell().background,
+          (value: string | null) => {
+            spell().background = value;
           },
         ),
       ]),

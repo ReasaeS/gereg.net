@@ -77,6 +77,7 @@ type Spell = {
   color: string;
   opacity: number;
   rings: Array<Ring>;
+  background: string | null;
 };
 
 type Waveform = "square" | "sine" | "sawtooth" | "triangle" | "noise";
@@ -334,6 +335,7 @@ function defaultSpell(): Spell {
       defaultRing(),
       { radius: 90, points: 8, step: 3, ticks: 24, orb: 0.06, spin: -30 },
     ],
+    background: null,
   };
 }
 
@@ -625,6 +627,10 @@ function loadCreations(): Creations {
       Character & { side?: unknown }
     >) {
       delete character.side;
+    }
+
+    for (const spell of creations.spells) {
+      spell.background = spell.background ?? null;
     }
 
     for (const enemy of creations.enemies) {
