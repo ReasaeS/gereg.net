@@ -228,8 +228,10 @@ const speedNames: Array<string> = derivativeNames.slice(1);
 const transportWidth: number = 24; // units
 const playtestWidth: number = 98; // units
 const shotKeys: Array<string> = ["KeyZ"];
+const bombKeys: Array<string> = ["KeyX"];
 const movementKeys: Array<string> = [
   ...shotKeys,
+  ...bombKeys,
   ...leftKeys,
   ...rightKeys,
   ...upKeys,
@@ -3155,7 +3157,13 @@ async function createMaker(app: Application): Promise<PageContent> {
       y *= Math.SQRT1_2;
     }
 
-    preview.steer(x, y, heldAny(focusKeys), heldAny(shotKeys));
+    preview.steer(
+      x,
+      y,
+      heldAny(focusKeys),
+      heldAny(shotKeys),
+      heldAny(bombKeys),
+    );
   }
 
   function pause(): void {
@@ -3427,7 +3435,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       scene.update(delta);
     }
     hitsText.visible = playtesting;
-    hitsText.text = "HITS " + preview.hits();
+    hitsText.text = "HITS " + preview.hits() + "  BOMBS " + preview.bombs();
 
     if (playtesting) {
       steer();

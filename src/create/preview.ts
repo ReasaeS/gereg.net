@@ -28,6 +28,12 @@ import { placeAlong, solidSpans } from "./data";
 import { drawSigil } from "./sigil";
 import { hitboxColor, hitboxRadius } from "../game/playfield";
 import { archetype } from "../game/archetype";
+import {
+  createBomb,
+  deathbombWindow,
+  startBombs,
+  type Bomb,
+} from "../game/bomb";
 
 type Path = Pick<Spawn, "curve" | "derivatives" | "waves">;
 
@@ -50,8 +56,15 @@ type Preview = {
   clear: () => void;
   update: (delta: number) => void;
   setPlaytest: (on: boolean) => void;
-  steer: (x: number, y: number, focused: boolean, shooting: boolean) => void;
+  steer: (
+    x: number,
+    y: number,
+    focused: boolean,
+    shooting: boolean,
+    bombing: boolean,
+  ) => void;
   hits: () => number;
+  bombs: () => number;
 };
 
 type BulletLayers = {
@@ -486,6 +499,7 @@ async function createPreview(
   const overlay: Container = new Container();
   const bossHud: BossHud = createBossHud();
   const squad: Squad = createSquad(droneTexture, previewWidth, previewHeight);
+  const bomb: Bomb = createBomb(previewWidth, previewHeight);
   const sigil: Graphics = new Graphics();
   const player: Sprite = new Sprite(playerTexture);
   const hitbox: Graphics = new Graphics();
@@ -511,6 +525,10 @@ async function createPreview(
   let shooting: boolean = false;
   let hitCount: number = 0;
   let grace: number = 0;
+  let bombing: boolean = false;
+  let bombHeld: boolean = false;
+  let dying: number = 0;
+  let blink: number = 0;
 
   coreLayer.blendMode = "add";
   player.anchor.set(0.5);
@@ -536,6 +554,7 @@ async function createPreview(
     actorLayer,
     bulletLayer,
     coreLayer,
+    bomb.view,
     hitbox,
     bossHud.view,
     overlay,
@@ -1341,8 +1360,43 @@ async function createPreview(
     hitbox.position.copyFrom(player.position);
     hitbox.visible = focused;
     grace = Math.max(grace - delta, 0);
+    blink += delta;
     player.alpha =
-      grace > 0 && Math.floor(grace * blinkRate) % 2 === 0 ? blinkAlpha : 1;
+      (grace > 0 || bomb.invincible()) &&
+      Math.floor(blink * blinkRate) % 2 === 0
+        ? blinkAlpha
+        : 1;
+  }
+
+  function useBomb(delta: number): void {
+    if (bombing && !bombHeld && bomb.trigger(player.x, player.y)) {
+      dying = 0;
+    }
+
+    bombHeld = bombing;
+    bomb.update(delta, player.x, player.y);
+
+    if (dying > 0) {
+      dying -= delta;
+
+      if (dying <= 0) {
+        dying = 0;
+        hitCount++;
+        grace = hitGrace;
+        bomb.setStock(startBombs);
+      }
+    }
+  }
+
+  function bombActors(delta: number): void {
+    for (const actor of actors) {
+      if (
+        !actor.dead &&
+        bomb.covers(actor.view.x, actor.view.y, actor.enemy.size / 2)
+      ) {
+        damage(actor, bomb.damage() * delta);
+      }
+    }
   }
 
   function collide(): void {
@@ -1355,15 +1409,17 @@ async function createPreview(
         (bullet.shownX - player.x) ** 2 + (bullet.shownY - player.y) ** 2 <
         reach * reach;
 
-      if (bullet.age === Infinity) {
+      if (
+        bullet.age === Infinity ||
+        bomb.covers(bullet.shownX, bullet.shownY, bullet.radius)
+      ) {
         bullet.color.destroy();
         bullet.core?.destroy();
         continue;
       }
 
-      if (touching && grace <= 0) {
-        hitCount++;
-        grace = hitGrace;
+      if (touching && grace <= 0 && dying <= 0 && !bomb.invincible()) {
+        dying = deathbombWindow;
         bullet.color.destroy();
         bullet.core?.destroy();
         continue;
@@ -1382,6 +1438,11 @@ async function createPreview(
     grace = 0;
     focused = false;
     shooting = false;
+    bombing = false;
+    bombHeld = false;
+    dying = 0;
+    bomb.clear();
+    bomb.setStock(startBombs);
     squad.clear();
     squad.view.visible = on;
     input.x = 0;
@@ -1426,7 +1487,9 @@ async function createPreview(
 
     if (playtest) {
       squad.update(delta, player.x, player.y, focused, shooting, targets());
+      useBomb(delta);
       hitActors();
+      bombActors(delta);
       collide();
     }
 
@@ -1437,6 +1500,7 @@ async function createPreview(
     clearActors();
     clearBullets();
     squad.clear();
+    bomb.clear();
     emitter.timer = 0;
     emitter.time = 0;
     time = 0;
@@ -1546,13 +1610,21 @@ async function createPreview(
     clear: clear,
     update: update,
     setPlaytest: setPlaytest,
-    steer: (x: number, y: number, focus: boolean, shoot: boolean) => {
+    steer: (
+      x: number,
+      y: number,
+      focus: boolean,
+      shoot: boolean,
+      bombKey: boolean,
+    ) => {
       input.x = x;
       input.y = y;
       focused = focus;
       shooting = shoot;
+      bombing = bombKey;
     },
     hits: () => hitCount,
+    bombs: () => bomb.stock(),
   };
 }
 

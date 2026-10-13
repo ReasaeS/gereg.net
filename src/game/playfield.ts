@@ -22,6 +22,7 @@ import { createClock, runClock, type Clock } from "./clock";
 import { createSelector, type Selector } from "./selector";
 import { createSquad, minPower, type Squad } from "./drones";
 import { archetype } from "./archetype";
+import { createBomb, startBombs, type Bomb } from "./bomb";
 
 type Playfield = {
   view: Container;
@@ -49,6 +50,7 @@ const upKeys: Array<string> = ["ArrowUp", "KeyW"];
 const downKeys: Array<string> = ["ArrowDown", "KeyS"];
 const focusKeys: Array<string> = ["ShiftLeft", "ShiftRight"];
 const shotKeys: Array<string> = ["KeyZ"];
+const bombKeys: Array<string> = ["KeyX"];
 
 async function createPlayfield(
   app: Application,
@@ -66,10 +68,12 @@ async function createPlayfield(
   const player: Sprite = new Sprite(texture);
   const hitbox: Graphics = new Graphics();
   const squad: Squad = createSquad(droneTexture, fieldWidth, fieldHeight);
+  const bomb: Bomb = createBomb(fieldWidth, fieldHeight);
   const clock: Clock = createClock();
   const held: Set<string> = new Set();
   let active: boolean = false;
   let rolling: boolean = false;
+  let bombHeld: boolean = false;
 
   function pressed(keys: Array<string>): boolean {
     return keys.some((key: string) => held.has(key));
@@ -79,6 +83,10 @@ async function createPlayfield(
     player.position.set(fieldWidth / 2, fieldHeight * playerStartY);
     held.clear();
     squad.clear();
+    bomb.clear();
+    bomb.setStock(startBombs);
+    bombHeld = false;
+    hud.stats.bombs = startBombs;
     hud.stats.power = minPower;
     squad.setPower(hud.stats.power);
     hud.refresh();
@@ -113,7 +121,15 @@ async function createPlayfield(
   player.height = playerSize;
   fieldMask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
   field.position.set(fieldX, fieldY);
-  field.addChild(back, fieldMask, squad.shotLayer, player, squad.view, hitbox);
+  field.addChild(
+    back,
+    fieldMask,
+    squad.shotLayer,
+    player,
+    squad.view,
+    bomb.view,
+    hitbox,
+  );
   field.mask = fieldMask;
   gameMask.rect(0, 0, hudWidth, hudHeight).fill(0xffffff);
   game.addChild(hud.view, selector.view, field, gameMask);
@@ -184,6 +200,14 @@ async function createPlayfield(
     hitbox.visible = focused;
     squad.setPower(hud.stats.power);
     squad.update(delta, player.x, player.y, focused, pressed(shotKeys));
+
+    if (pressed(bombKeys) && !bombHeld && bomb.trigger(player.x, player.y)) {
+      hud.stats.bombs = bomb.stock();
+      hud.refresh();
+    }
+
+    bombHeld = pressed(bombKeys);
+    bomb.update(delta, player.x, player.y);
   }
 
   function openSelector(): Promise<void> {
@@ -280,6 +304,7 @@ export {
   downKeys,
   focusKeys,
   shotKeys,
+  bombKeys,
   createPlayfield,
 };
 export type { Playfield };

@@ -31,6 +31,7 @@ import {
 } from "../game/drones";
 import {
   downKeys,
+  bombKeys,
   focusKeys,
   hitboxColor,
   hitboxRadius,
@@ -45,6 +46,7 @@ import {
   type Archetype,
   type ArchetypeId,
 } from "../game/archetype";
+import { createBomb, type Bomb } from "../game/bomb";
 
 type Power = {
   view: Container;
@@ -95,13 +97,15 @@ function createPower(
   const field: Container = new Container();
   const back: Graphics = new Graphics();
   const mask: Graphics = new Graphics();
+  const bombMask: Graphics = new Graphics();
   const frame: Graphics = new Graphics();
   const player: Sprite = new Sprite(playerTexture);
   const hitbox: Graphics = new Graphics();
   const squad: Squad = createSquad(droneTexture, fieldWidth, fieldHeight);
+  const bomb: Bomb = createBomb(fieldWidth, fieldHeight);
   const panel: Container = new Container();
   const hint: Text = new Text({
-    text: "ARROWS  MOVE   ·   SHIFT  FOCUS   ·   Z  SHOOT",
+    text: "ARROWS  MOVE   ·   SHIFT  FOCUS   ·   Z  SHOOT   ·   X  BOMB",
     style: {
       fontFamily: fontFamily,
       fontSize: hintSize,
@@ -113,6 +117,7 @@ function createPower(
   const held: Set<string> = new Set();
   let power: number = maxPower;
   let active: boolean = false;
+  let bombHeld: boolean = false;
 
   function changed(): void {
     saveDrones();
@@ -148,7 +153,7 @@ function createPower(
       },
     },
     createSlider(
-      "Power",
+      "Power preview",
       minPower,
       maxPower,
       0.05,
@@ -278,6 +283,13 @@ function createPower(
     hitbox.position.copyFrom(player.position);
     hitbox.visible = focused;
     squad.update(delta, player.x, player.y, focused, pressed(shotKeys));
+
+    if (pressed(bombKeys) && !bombHeld) {
+      bomb.trigger(player.x, player.y);
+    }
+
+    bombHeld = pressed(bombKeys);
+    bomb.update(delta, player.x, player.y);
   }
 
   function setActive(value: boolean): void {
@@ -291,6 +303,7 @@ function createPower(
 
   back.rect(0, 0, fieldWidth, fieldHeight).fill(fieldColor);
   mask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
+  bombMask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
   frame
     .rect(0, 0, fieldWidth, fieldHeight)
     .stroke({ color: frameColor, width: frameWidth, alignment: 0 });
@@ -308,11 +321,15 @@ function createPower(
     squad.shotLayer,
     player,
     squad.view,
+    bomb.view,
     hitbox,
     mask,
+    bombMask,
     frame,
   );
   squad.shotLayer.mask = mask;
+  bomb.view.mask = bombMask;
+  bomb.setStock(Infinity);
   hint.anchor.set(0.5, 0);
   reset.view.x = rowWidth - resetWidth;
   summary.anchor.set(0.5);
@@ -339,6 +356,7 @@ function createPower(
         ...downKeys,
         ...focusKeys,
         ...shotKeys,
+        ...bombKeys,
       ].includes(code)
     ) {
       return;

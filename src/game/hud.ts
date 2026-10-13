@@ -8,6 +8,7 @@ import {
 } from "pixi.js";
 import { getTheme } from "../theme/theme";
 import { maxPower, minPower } from "./drones";
+import { startBombs } from "./bomb";
 
 type Stats = {
   hiScore: number;
@@ -162,7 +163,7 @@ async function createHud(): Promise<Hud> {
     hiScore: 0,
     score: 0,
     lives: 2,
-    bombs: 3,
+    bombs: startBombs,
     power: minPower,
     maxPower: maxPower,
     graze: 0,
