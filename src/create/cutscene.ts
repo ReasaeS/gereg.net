@@ -1,8 +1,8 @@
 import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
-import type { Character, Cutscene, Emotion, Line } from "./data";
+import type { Character, Cutscene, Emotion, Line } from "./types";
 import { getTexture } from "./images";
-import { createText } from "./widgets";
-import { fieldHeight, fieldWidth } from "../game/hud";
+import { createText } from "../ui/text";
+import { fieldHeight, fieldWidth } from "../game/field";
 
 type Scene = {
   view: Container;

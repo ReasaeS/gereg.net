@@ -1,4 +1,4 @@
-import type { Difficulty, Frame, Rank } from "./data";
+import type { Difficulty, Frame, Rank } from "./types";
 
 type Cosmetic = "background" | "sigil" | "sound" | "character" | "cutscene";
 

@@ -1,30 +1,30 @@
 import {
-  BufferImageSource,
   Container,
   Graphics,
   Point,
   Sprite,
   Text,
-  Texture,
   type Application,
   type FederatedPointerEvent,
   type Ticker,
 } from "pixi.js";
 import {
-  createPixels,
   inside,
   getPixel,
   setPixel,
   drawLine,
   floodFill,
-  isEmpty,
-  encodePixels,
-  decodePixels,
   exportPixels,
   importPixels,
-  type Pixels,
 } from "./pixels";
-import { drawDroneDefault, drawGameDefault, drawMenuDefault } from "./default";
+import {
+  drawings,
+  droneTexture,
+  playerTexture,
+  saveDrawing,
+  spriteSize,
+  type Drawing,
+} from "./drawings";
 import { createPower, type Power } from "./power";
 import {
   buttonWidth,
@@ -33,20 +33,11 @@ import {
   createButton,
   paintButton,
   type Button,
-} from "./button";
+} from "../ui/button";
+import { createText } from "../ui/text";
+import { createGlide, type Glide } from "../ui/motion";
 
 type Tool = "pencil" | "eraser" | "fill" | "picker";
-
-type Drawing = {
-  name: string;
-  storageKey: string;
-  pixels: Pixels;
-  source: BufferImageSource;
-  texture: Texture;
-  undo: Array<Uint8Array>;
-  redo: Array<Uint8Array>;
-  drawDefault: (pixels: Pixels) => void;
-};
 
 type Editor = {
   view: Container;
@@ -54,17 +45,7 @@ type Editor = {
   fullscreen?: () => boolean;
 };
 
-const spriteSize: number = 32; // px
-const gameStorageKey: string = "geregnet.playerSprite";
-const menuStorageKey: string = "geregnet.menuSprite";
-const droneStorageKey: string = "geregnet.droneSprite";
 const maxUndo: number = 100;
-const fontFamily: Array<string> = [
-  "Barlow Condensed",
-  "Arial Black",
-  "Impact",
-  "sans-serif",
-];
 const tabGap: number = 14; // px
 const boardHeight: number = 0.62; // of screen height
 const boardWidth: number = 0.42; // of screen width
@@ -124,91 +105,12 @@ const palette: Array<string> = [
   "#ff4fbf",
 ];
 
-function createDrawing(
-  name: string,
-  storageKey: string,
-  drawDefault: (pixels: Pixels) => void,
-): Drawing {
-  const pixels: Pixels = createPixels(spriteSize);
-  const source: BufferImageSource = new BufferImageSource({
-    resource: pixels.data,
-    width: spriteSize,
-    height: spriteSize,
-    scaleMode: "nearest",
-  });
-
-  return {
-    name: name,
-    storageKey: storageKey,
-    pixels: pixels,
-    source: source,
-    texture: new Texture({ source: source }),
-    undo: new Array(),
-    redo: new Array(),
-    drawDefault: drawDefault,
-  };
-}
-
-const drawings: Array<Drawing> = [
-  createDrawing("in game", gameStorageKey, drawGameDefault),
-  createDrawing("menu", menuStorageKey, drawMenuDefault),
-  createDrawing("drone", droneStorageKey, drawDroneDefault),
-];
-let drawing: Drawing = drawings[0]!;
-
 function toColor(hex: string): number {
   return ((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0;
 }
 
-function load(target: Drawing): void {
-  target.drawDefault(target.pixels);
-
-  try {
-    const saved: string | null = localStorage.getItem(target.storageKey);
-
-    if (saved !== null && !decodePixels(target.pixels, saved)) {
-      target.drawDefault(target.pixels);
-    }
-
-    if (isEmpty(target.pixels)) {
-      target.drawDefault(target.pixels);
-    }
-  } catch {
-    console.warn("Could not load the " + target.name + " sprite");
-  }
-
-  target.source.update();
-}
-
-function save(): void {
-  try {
-    localStorage.setItem(drawing.storageKey, encodePixels(drawing.pixels));
-  } catch {
-    console.warn("Could not save the " + drawing.name + " sprite");
-  }
-}
-
-function playerTexture(): Texture {
-  return drawings[0]!.texture;
-}
-
-function menuTexture(): Texture {
-  return drawings[1]!.texture;
-}
-
-function menuPixels(): Pixels {
-  return drawings[1]!.pixels;
-}
-
-function droneTexture(): Texture {
-  return drawings[2]!.texture;
-}
-
-for (let index = 0; index < drawings.length; index++) {
-  load(drawings[index]!);
-}
-
 function createEditor(app: Application): Editor {
+  let drawing: Drawing = drawings[0]!;
   const view: Container = new Container();
   const board: Container = new Container();
   const checker: Graphics = new Graphics();
@@ -223,16 +125,7 @@ function createEditor(app: Application): Editor {
   const small: Sprite = new Sprite(drawing.texture);
   const large: Sprite = new Sprite(drawing.texture);
   const local: Point = new Point();
-  const status: Text = new Text({
-    text: "",
-    style: {
-      fontFamily: fontFamily,
-      fontSize: statusSize,
-      fontStyle: "italic",
-      fontWeight: "900",
-      fill: statusColor,
-    },
-  });
+  const status: Text = createText(statusSize, statusColor);
   let statusTime: number = 0;
   const buttons: Array<Button> = new Array();
   const tabs: Container = new Container();
@@ -249,6 +142,29 @@ function createEditor(app: Application): Editor {
   let swatchSize: number = swatchMaxSize;
   let powering: boolean = false;
   const power: Power = createPower(app, playerTexture(), droneTexture());
+  const drawingParts: Array<Container> = [board, tools, swatches, preview];
+  const mode: Glide = createGlide(0, (amount: number) => {
+    for (const part of drawingParts) {
+      part.alpha = 1 - amount;
+      part.visible = amount < 1;
+    }
+
+    power.view.alpha = amount;
+    power.view.visible = amount > 0;
+  });
+  const gridFade: Glide = createGlide(1, (alpha: number) => {
+    grid.alpha = alpha;
+  });
+  const canvasFade: Glide = createGlide(1, (alpha: number) => {
+    canvas.alpha = alpha;
+    small.alpha = alpha;
+    large.alpha = alpha;
+  });
+  const chosenX: Glide = createGlide(0, drawSelection);
+  const chosenY: Glide = createGlide(0, drawSelection);
+  const hoverFade: Glide = createGlide(0, drawSelection);
+  let hoverSwatch: number = -1;
+  let chosenPlaced: boolean = false;
 
   function refresh(): void {
     drawing.source.update();
@@ -257,8 +173,12 @@ function createEditor(app: Application): Editor {
       paintButton(buttons[index]!);
     }
 
-    drawSelection();
-    grid.visible = showGrid;
+    placeSelection();
+    gridFade.set(showGrid ? 1 : 0);
+  }
+
+  function save(): void {
+    saveDrawing(drawing);
   }
 
   function remember(): void {
@@ -442,26 +362,58 @@ function createEditor(app: Application): Editor {
     hover.stroke({ color: hoverColor, width: 2, alpha: 0.8 });
   }
 
+  function placeSelection(): void {
+    const index: number = palette.findIndex(
+      (hex: string) => toColor(hex) === color,
+    );
+
+    if (index < 0) {
+      return;
+    }
+
+    const column: number = index % paletteColumns;
+    const row: number = Math.floor(index / paletteColumns);
+
+    if (chosenPlaced) {
+      chosenX.set(column);
+      chosenY.set(row);
+    } else {
+      chosenPlaced = true;
+      chosenX.snap(column);
+      chosenY.snap(row);
+    }
+
+    drawSelection();
+  }
+
   function drawSelection(): void {
+    const step: number = swatchSize + swatchGap;
+
     selection.clear();
 
-    for (let index = 0; index < palette.length; index++) {
-      if (toColor(palette[index]!) !== color) {
-        continue;
-      }
-
-      const column: number = index % paletteColumns;
-      const row: number = Math.floor(index / paletteColumns);
-
+    if (hoverSwatch >= 0 && hoverFade.value() > 0) {
       selection
         .rect(
-          column * (swatchSize + swatchGap) - 2,
-          row * (swatchSize + swatchGap) - 2,
-          swatchSize + 4,
-          swatchSize + 4,
+          (hoverSwatch % paletteColumns) * step - 1,
+          Math.floor(hoverSwatch / paletteColumns) * step - 1,
+          swatchSize + 2,
+          swatchSize + 2,
         )
-        .stroke({ color: hoverColor, width: 3 });
+        .stroke({
+          color: hoverColor,
+          width: 2,
+          alpha: hoverFade.value() * 0.5,
+        });
     }
+
+    selection
+      .rect(
+        chosenX.value() * step - 2,
+        chosenY.value() * step - 2,
+        swatchSize + 4,
+        swatchSize + 4,
+      )
+      .stroke({ color: hoverColor, width: 3 });
   }
 
   function selectDrawing(index: number): void {
@@ -474,6 +426,8 @@ function createEditor(app: Application): Editor {
     stroking = false;
     drawing = next;
     showPower(false);
+    canvasFade.snap(0);
+    canvasFade.set(1);
     canvas.texture = drawing.texture;
     small.texture = drawing.texture;
     large.texture = drawing.texture;
@@ -485,11 +439,10 @@ function createEditor(app: Application): Editor {
     powering = value;
     stroking = false;
     hover.clear();
-    board.visible = !value;
-    tools.visible = !value;
-    swatches.visible = !value;
-    preview.visible = !value;
-    power.view.visible = value;
+    board.eventMode = value ? "none" : "passive";
+    tools.eventMode = value ? "none" : "passive";
+    swatches.eventMode = value ? "none" : "passive";
+    mode.set(value ? 1 : 0);
     power.setActive(active && value);
     refresh();
   }
@@ -571,6 +524,12 @@ function createEditor(app: Application): Editor {
       );
       swatch.eventMode = "static";
       swatch.cursor = "pointer";
+      swatch.on("pointerover", () => {
+        hoverSwatch = index;
+        hoverFade.set(1);
+        drawSelection();
+      });
+      swatch.on("pointerout", () => hoverFade.set(0));
       swatch.on("pointertap", () => {
         color = value;
 
@@ -665,7 +624,7 @@ function createEditor(app: Application): Editor {
   board.addChild(checker, canvas, grid, hover, frame);
   status.anchor.set(0.5, 0);
   status.alpha = 0;
-  power.view.visible = false;
+  mode.snap(0);
   view.addChild(board, tabs, tools, swatches, preview, status, power.view);
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
@@ -767,5 +726,5 @@ function createEditor(app: Application): Editor {
   return { view: view, setActive: setActive, fullscreen: () => true };
 }
 
-export { createEditor, playerTexture, menuTexture, menuPixels, droneTexture };
+export { createEditor };
 export type { Editor };

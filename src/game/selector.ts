@@ -8,6 +8,9 @@ import {
 } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
 import { levels, type Level } from "./levels";
+import { downKeys, upKeys } from "./input";
+import { createText, screenResolution } from "../ui/text";
+import { createGlide, mix, type Glide } from "../ui/motion";
 
 type Selector = {
   view: Container;
@@ -24,14 +27,9 @@ type Entry = {
   view: Container;
   name: Text;
   title: Text;
+  lit: Glide;
 };
 
-const fontFamily: Array<string> = [
-  "Barlow Condensed",
-  "Arial Black",
-  "Impact",
-  "sans-serif",
-];
 const doorX: number = 424; // units
 const doorY: number = 8; // units
 const doorWidth: number = 208; // units
@@ -59,25 +57,11 @@ const nameSize: number = 20; // px
 const subtitleSize: number = 12; // px
 const subtitleColor: string = "#9fd8ff";
 const highlightSmoothing: number = 0.08; // s
+const selectShift: number = 4; // units
 const downDuration: number = 700; // ms
 const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
-const upKeys: Array<string> = ["ArrowUp", "KeyW"];
-const downKeys: Array<string> = ["ArrowDown", "KeyS"];
 const chooseKeys: Array<string> = ["Enter", "Space", "KeyZ"];
-
-function createText(size: number, color: string): Text {
-  return new Text({
-    text: "",
-    style: {
-      fontFamily: fontFamily,
-      fontSize: size,
-      fontStyle: "italic",
-      fontWeight: "900",
-      fill: color,
-    },
-  });
-}
 
 function drawDoor(door: Graphics): void {
   door.clear();
@@ -132,11 +116,7 @@ function createSelector(ticker: Ticker): Selector {
 
   function paint(): void {
     for (let index = 0; index < entries.length; index++) {
-      const entry: Entry = entries[index]!;
-      const chosen: boolean = index === selected;
-
-      entry.name.tint = chosen ? getTheme().menuSelected : 0xffffff;
-      entry.title.tint = chosen ? getTheme().menuSelected : 0xffffff;
+      entries[index]!.lit.set(index === selected ? 1 : 0);
     }
   }
 
@@ -206,7 +186,17 @@ function createSelector(ticker: Ticker): Selector {
       choose();
     });
     door.addChild(entry);
-    entries.push({ view: entry, name: name, title: title });
+    entries.push({
+      view: entry,
+      name: name,
+      title: title,
+      lit: createGlide(0, (amount: number) => {
+        name.tint = mix(0xffffff, getTheme().menuSelected, amount);
+        title.tint = mix(0xffffff, getTheme().menuSelected, amount);
+        name.x = entryInset + entrySlant + 6 + amount * selectShift;
+        title.x = name.x;
+      }),
+    });
     texts.push(name, title);
   }
 
@@ -290,7 +280,7 @@ function createSelector(ticker: Ticker): Selector {
 
   function setScale(scale: number): void {
     for (let index = 0; index < texts.length; index++) {
-      texts[index]!.resolution = scale * (window.devicePixelRatio || 1);
+      texts[index]!.resolution = screenResolution(scale);
     }
   }
 

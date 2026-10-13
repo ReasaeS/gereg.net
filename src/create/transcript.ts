@@ -1,14 +1,7 @@
-import {
-  createId,
-  defaultCharacter,
-  defaultEmotion,
-  type Character,
-  type Cutscene,
-  type Emotion,
-  type Line,
-} from "./data";
+import type { Character, Cutscene, Emotion, Line } from "./types";
+import { createId, defaultCharacter, defaultEmotion } from "./defaults";
 import { feelingOf, speakerOf } from "./cutscene";
-import { fontFamily } from "./widgets";
+import { fontFamily } from "../ui/text";
 import { getTheme } from "../theme/theme";
 
 type Parsed = {

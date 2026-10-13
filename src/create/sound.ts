@@ -1,5 +1,5 @@
 import type { Graphics } from "pixi.js";
-import type { Sound } from "./data";
+import type { Sound } from "./types";
 import { effectiveVolume } from "../settings/settings";
 import { readBlob, storeBlob } from "./images";
 

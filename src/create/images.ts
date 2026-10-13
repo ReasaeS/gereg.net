@@ -1,5 +1,5 @@
 import { ImageSource, Texture } from "pixi.js";
-import { createId } from "./data";
+import { createId } from "./defaults";
 
 const databaseName: string = "geregnet";
 const storeName: string = "images";

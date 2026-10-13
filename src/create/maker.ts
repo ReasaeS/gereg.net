@@ -8,11 +8,10 @@ import {
   type Texture,
   type Bounds,
   type FederatedPointerEvent,
-  type FederatedWheelEvent,
   type Application,
   type Ticker,
 } from "pixi.js";
-import { droneTexture, playerTexture } from "../editor/editor";
+import { droneTexture, playerTexture } from "../editor/drawings";
 import { createBackdrop, type Backdrop } from "./backdrop";
 import { drawSound, importAudio, loadAudio, playSound } from "./sound";
 import { createScene, type Scene } from "./cutscene";
@@ -24,12 +23,14 @@ import {
 } from "./transcript";
 import { createClock, runClock, type Clock } from "../game/clock";
 import {
-  downKeys,
+  bombKeys,
+  createKeyboard,
   focusKeys,
-  leftKeys,
-  rightKeys,
-  upKeys,
-} from "../game/playfield";
+  playKeys,
+  shotKeys,
+  steering,
+  type Keyboard,
+} from "../game/input";
 import {
   drawFrame,
   fieldHeight,
@@ -37,73 +38,77 @@ import {
   fieldX,
   fieldY,
   hudHeight,
+  hudScale,
   hudWidth,
-} from "../game/hud";
+} from "../game/field";
 import type { PageContent } from "../menu/page";
 import { getTheme } from "../theme/theme";
 import {
   approach,
   cubicBezier,
-  smoothDamp,
-  type Spring,
+  frameDelta,
   tween,
   type Easing,
 } from "../effects/tween/tween";
+import type {
+  Background,
+  Bar,
+  Character,
+  Creations,
+  Curve,
+  Cutscene,
+  Difficulty,
+  Emotion,
+  Enemy,
+  Keyframe,
+  Pattern,
+  Rank,
+  Ring,
+  Sigil,
+  Sound,
+  SoundSource,
+  Spawn,
+  Spell,
+  Stage,
+  Vector,
+  Wall,
+  Wave,
+  Waveform,
+} from "./types";
+import { wallAngle } from "./geometry";
 import {
-  derivativeNames,
   createId,
-  wallAngle,
   defaultBackground,
-  defaultRing,
-  defaultSigil,
-  defaultSpell,
-  repairSpells,
-  limitBars,
-  defaultSound,
-  defaultEmotion,
+  defaultBar,
   defaultCharacter,
   defaultCutscene,
+  defaultEmotion,
   defaultEnemy,
-  defaultBar,
-  defaultPattern,
   defaultKeyframe,
+  defaultPattern,
+  defaultRing,
+  defaultSigil,
+  defaultSound,
+  defaultSpell,
   defaultStage,
+  derivativeNames,
+  limitBars,
+  repairSpells,
+} from "./defaults";
+import {
   loadCreations,
   saveCreations,
-  usedSprites,
   usedFiles,
-  type Background,
-  type Difficulty,
-  type Wall,
-  type Curve,
-  type Wave,
-  type Rank,
-  type Creations,
-  type Enemy,
-  type Bar,
-  type Vector,
-  type Pattern,
-  type Keyframe,
-  type Ring,
-  type Spawn,
-  type Sigil,
-  type Spell,
-  type Sound,
-  type Cutscene,
-  type Character,
-  type Emotion,
-  type Waveform,
-  type SoundSource,
-  type Stage,
-} from "./data";
+  usedSprites,
+} from "./storage";
 import {
   createPreview,
-  drawShape,
-  motion,
   previewHeight,
   previewWidth,
   type Preview,
 } from "./preview";
+import { drawShape } from "./shape";
+import { motion } from "./kinematics";
 import {
   chipHeight,
   createChip,
@@ -111,17 +116,17 @@ import {
   createColors,
   createSlider,
   drawField,
-  createHeader,
-  headerHeight,
   createVector,
   createSpriteRow,
-  createText,
   rowHeight,
   rowWidth,
   type Chip,
   type Control,
   type Option,
-} from "./widgets";
+} from "../ui/widgets";
+import { createRows, createSection, type Rows } from "../ui/rows";
+import { createText, screenResolution, sharpen } from "../ui/text";
+import { createGlide, type Glide } from "../ui/motion";
 import { getTexture, loadTexture, removeUnused, storeImage } from "./images";
 import {
   createGallery,
@@ -180,7 +185,6 @@ const actionGap: number = 6; // units
 const actionWidth: number = (rowWidth - actionGap) / 2; // units
 const headingSize: number = 16; // units
 const headingHeight: number = 22; // units
-const maxDelta: number = 0.05; // s
 const nameLength: number = 24;
 const dropColor: string = "#01040f";
 const dropAlpha: number = 0.75;
@@ -205,13 +209,6 @@ const keyframeSize: number = 4; // units
 const markerAlpha: number = 0.75;
 const markerPadding: number = 6; // units
 const guideAlpha: number = 0.35;
-const rowSmoothing: number = 0.06; // s
-const scrollSmoothing: number = 0.08; // s
-const scrollBarWidth: number = 2; // units
-const scrollBarGap: number = 3; // units
-const scrollBarMinimum: number = 12; // units
-const headerSlant: number = 4; // units
-const rowFade: number = 0.15; // s
 const trailTime: number = 4; // s
 const trailSteps: number = 48;
 const positionMin: number = -0.2;
@@ -227,18 +224,8 @@ const spinLimit: number = 180; // deg/s
 const speedNames: Array<string> = derivativeNames.slice(1);
 const transportWidth: number = 24; // units
 const playtestWidth: number = 98; // units
-const shotKeys: Array<string> = ["KeyZ"];
-const bombKeys: Array<string> = ["KeyX"];
-const movementKeys: Array<string> = [
-  ...shotKeys,
-  ...bombKeys,
-  ...leftKeys,
-  ...rightKeys,
-  ...upKeys,
-  ...downKeys,
-  ...focusKeys,
-];
 const iconSize: number = 3.5; // units
+const iconPop: number = 0.4;
 const swapOutDuration: number = 200; // ms
 const swapInDuration: number = 380; // ms
 const swapLead: number = 100; // ms
@@ -321,14 +308,7 @@ const aimOptions: Array<Option<boolean>> = [
 async function createMaker(app: Application): Promise<PageContent> {
   const view: Container = new Container();
   const controls: Container = new Container();
-  const scrollArea: Container = new Container();
-  const scrollContent: Container = new Container();
-  const scrollMask: Graphics = new Graphics();
-  const scrollBar: Graphics = new Graphics();
-  const scroll: Spring = { value: 0, velocity: 0 };
-  let scrollTarget: number = 0;
-  let contentHeight: number = 0;
-  let viewportHeight: number = 1;
+  const rows: Rows = createRows();
   const itemBar: Container = new Container();
   const board: Container = new Container();
   const soundPlot: Graphics = new Graphics();
@@ -655,7 +635,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
     panel.y = 0;
     panel.visible = false;
-    scrollContent.addChild(panel);
+    rows.content.addChild(panel);
     tabs.push({
       name: name,
       items: items,
@@ -676,22 +656,17 @@ async function createMaker(app: Application): Promise<PageContent> {
   ): Array<Control> {
     const key: number = sections++;
     const open: () => boolean = () => sectionOpen.get(key) ?? false;
-    const header: Control = createHeader(name, open, () => {
-      sectionOpen.set(key, !open());
-      refresh();
-    });
 
-    return [
-      { ...header, shown: visible },
-      ...list.map((control: Control) => {
-        const shown: (() => boolean) | undefined = control.shown;
-
-        return {
-          ...control,
-          shown: () => visible() && open() && (shown?.() ?? true),
-        };
-      }),
-    ];
+    return createSection(
+      name,
+      list,
+      open,
+      () => {
+        sectionOpen.set(key, !open());
+        refresh();
+      },
+      visible,
+    );
   }
 
   const cosmeticKeys: Map<Cosmetic, number> = new Map();
@@ -2574,69 +2549,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   heading.y = headingHeight / 2;
   itemBar.addChild(heading);
 
-  scrollArea.y = headingHeight + sectionGap;
-  scrollContent.mask = scrollMask;
-  scrollArea.addChild(scrollContent, scrollMask, scrollBar);
-  scrollArea.eventMode = "static";
-  scrollArea.on("wheel", (event: FederatedWheelEvent) => {
-    scrollTarget = Math.min(
-      Math.max(scrollTarget + event.deltaY / frameScale, 0),
-      maxScroll(),
-    );
-  });
-  controls.addChild(itemBar, scrollArea);
+  rows.view.y = headingHeight + sectionGap;
+  controls.addChild(itemBar, rows.view);
 
-  function maxScroll(): number {
-    return Math.max(contentHeight - viewportHeight, 0);
-  }
-
-  function animateScroll(delta: number): void {
-    scrollTarget = Math.min(scrollTarget, maxScroll());
-    smoothDamp(scroll, scrollTarget, scrollSmoothing, delta);
-    scrollContent.y = -scroll.value;
-    scrollBar.clear();
-
-    if (maxScroll() <= 0) {
-      return;
-    }
-
-    const length: number = Math.max(
-      (viewportHeight / contentHeight) * viewportHeight,
-      scrollBarMinimum,
-    );
-    const offset: number =
-      (scroll.value / maxScroll()) * (viewportHeight - length);
-
-    scrollBar
-      .rect(rowWidth + scrollBarGap, 0, scrollBarWidth, viewportHeight)
-      .fill({ color: getTheme().menuSelected, alpha: 0.6 })
-      .rect(rowWidth + scrollBarGap, offset, scrollBarWidth, length)
-      .fill(getTheme().highlight);
-  }
-
-  const rowTargets: Map<Control, number> = new Map();
   let laidOut: Tab | null = null;
-
-  function rowSpacing(control: Control): number {
-    return control.header === true ? headerHeight : rowHeight;
-  }
-
-  function animateRows(delta: number): void {
-    const blend: number = 1 - Math.exp(-delta / rowSmoothing);
-
-    for (const control of tab.controls) {
-      const target: number | undefined = rowTargets.get(control);
-      const view: Container = control.view;
-
-      if (target !== undefined) {
-        view.y += (target - view.y) * blend;
-        view.alpha = approach(view.alpha, 1, delta / rowFade);
-      } else if (view.visible) {
-        view.alpha = approach(view.alpha, 0, delta / rowFade);
-        view.visible = view.alpha > 0;
-      }
-    }
-  }
 
   function refresh(): void {
     if (tab.items()[tab.selected] === undefined) {
@@ -2651,49 +2567,13 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     const snap: boolean = laidOut !== tab;
-    let rowY: number = 0;
 
     if (snap) {
-      scrollTarget = 0;
-      scroll.value = 0;
-      scroll.velocity = 0;
+      rows.top();
     }
 
     laidOut = tab;
-
-    for (let index = 0; index < tab.controls.length; index++) {
-      const control: Control = tab.controls[index]!;
-      const shown: boolean = control.shown?.() ?? true;
-
-      control.view.eventMode = shown
-        ? control.header === true
-          ? "static"
-          : "passive"
-        : "none";
-
-      if (shown) {
-        if (snap || !control.view.visible) {
-          control.view.y = rowY;
-        }
-
-        if (snap) {
-          control.view.alpha = 1;
-        }
-
-        control.view.visible = true;
-        rowTargets.set(control, rowY);
-        rowY += rowSpacing(control);
-        control.refresh();
-      } else {
-        rowTargets.delete(control);
-
-        if (snap) {
-          control.view.visible = false;
-        }
-      }
-    }
-
-    contentHeight = rowY;
+    rows.place(tab.controls, snap);
     layout();
     timeline.visible = tab.name === "stage";
     tab.show();
@@ -3057,12 +2937,38 @@ async function createMaker(app: Application): Promise<PageContent> {
   const clockBox: Graphics = new Graphics();
   let patternPlaying: boolean = true;
   let playtesting: boolean = false;
-  const held: Set<string> = new Set();
   const playtestBar: Container = new Container();
   const hitsText: Text = createText(clockSize, "#ffffff");
   let typing: string | null = null;
   let typingFresh: boolean = false;
+  const keyboard: Keyboard = createKeyboard(
+    () => active && editing && playtesting,
+  );
   let caretTime: number = 0;
+
+  const fieldFocus: Glide = createGlide(0, () => undefined);
+  const iconStates: Map<Graphics, boolean> = new Map();
+  const iconPops: Map<Graphics, Glide> = new Map();
+
+  function popIcon(icon: Graphics, running: boolean): void {
+    let pop: Glide | undefined = iconPops.get(icon);
+
+    if (pop === undefined) {
+      pop = createGlide(1, (scale: number) => {
+        icon.scale.set(scale);
+      });
+      iconPops.set(icon, pop);
+      icon.pivot.set(transportWidth / 2, chipHeight / 2);
+      icon.position.set(transportWidth / 2, chipHeight / 2);
+    }
+
+    if (iconStates.has(icon) && iconStates.get(icon) !== running) {
+      pop.snap(iconPop);
+      pop.set(1);
+    }
+
+    iconStates.set(icon, running);
+  }
 
   function drawPlayIcon(): void {
     drawToggle(playIcon, playing);
@@ -3073,6 +2979,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     const center: number = transportWidth / 2;
     const middle: number = chipHeight / 2;
 
+    popIcon(icon, running);
     icon.clear();
 
     if (running) {
@@ -3116,7 +3023,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function setPlaytesting(value: boolean): void {
     playtesting = value;
-    held.clear();
+    keyboard.clear();
     preview.setPlaytest(value);
 
     if (value) {
@@ -3144,25 +3051,15 @@ async function createMaker(app: Application): Promise<PageContent> {
     setPlaytesting(!playtesting);
   }
 
-  function heldAny(keys: Array<string>): boolean {
-    return keys.some((key: string) => held.has(key));
-  }
-
   function steer(): void {
-    let x: number = (heldAny(rightKeys) ? 1 : 0) - (heldAny(leftKeys) ? 1 : 0);
-    let y: number = (heldAny(downKeys) ? 1 : 0) - (heldAny(upKeys) ? 1 : 0);
-
-    if (x !== 0 && y !== 0) {
-      x *= Math.SQRT1_2;
-      y *= Math.SQRT1_2;
-    }
+    const input: Vector = steering(keyboard.pressed);
 
     preview.steer(
-      x,
-      y,
-      heldAny(focusKeys),
-      heldAny(shotKeys),
-      heldAny(bombKeys),
+      input.x,
+      input.y,
+      keyboard.pressed(focusKeys),
+      keyboard.pressed(shotKeys),
+      keyboard.pressed(bombKeys),
     );
   }
 
@@ -3368,35 +3265,20 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
   });
 
-  function sharpen(target: Container, resolution: number): void {
-    if (target instanceof Text && target.resolution !== resolution) {
-      target.resolution = resolution;
-    }
-
-    for (const child of target.children) {
-      sharpen(child, resolution);
-    }
-  }
-
   function layout(): void {
     const width: number = app.screen.width;
     const height: number = app.screen.height;
     const bottom: number = panelBottom - chipHeight - sectionGap;
 
     backdrop.layout();
-    frameScale = Math.min(width / hudWidth, height / hudHeight);
+    frameScale = hudScale(width, height);
     gameFrame.scale.set(frameScale);
     gameFrame.position.set(
       Math.round(width / 2 - (hudWidth * frameScale) / 2),
       Math.round(height / 2 - (hudHeight * frameScale) / 2),
     );
-    viewportHeight = bottom - panelTop - scrollArea.y;
-    scrollMask
-      .clear()
-      .rect(-headerSlant, 0, rowWidth + headerSlant * 2, viewportHeight)
-      .fill(0xffffff);
-    scrollArea.hitArea = new Rectangle(0, 0, rowWidth, viewportHeight);
-    sharpen(gameFrame, frameScale * (window.devicePixelRatio || 1));
+    rows.setViewport(bottom - panelTop - rows.view.y);
+    sharpen(gameFrame, screenResolution(frameScale));
     dropBack
       .clear()
       .rect(0, 0, width, height)
@@ -3411,12 +3293,11 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
-    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    const delta: number = frameDelta(ticker);
 
     if (editing) {
       backdrop.update(delta);
-      animateRows(delta);
-      animateScroll(delta);
+      rows.animate(delta);
     }
 
     drop.alpha = approach(drop.alpha, dropShown ? 1 : 0, delta / dropFade);
@@ -3447,15 +3328,12 @@ async function createMaker(app: Application): Promise<PageContent> {
         ? playing
         : tab.name !== "pattern" || patternPlaying)
     ) {
-      runClock(
-        ticks,
-        Math.min(ticker.deltaMS / 1000, maxDelta),
-        preview.update,
-      );
+      runClock(ticks, frameDelta(ticker), preview.update);
     }
 
     patternBar.visible = tab.name === "pattern";
-    drawField(clockBox, clockWidth, chipHeight, typing !== null);
+    fieldFocus.set(typing !== null ? 1 : 0);
+    drawField(clockBox, clockWidth, chipHeight, fieldFocus.value());
 
     if (typing === null) {
       patternClock.text = preview.patternTime().toFixed(1) + "s";
@@ -3483,9 +3361,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
-    if (playtesting && movementKeys.includes(event.code)) {
-      held.add(event.code);
-      event.preventDefault();
+    if (playtesting && playKeys.includes(event.code)) {
       return;
     }
 
@@ -3509,14 +3385,6 @@ async function createMaker(app: Application): Promise<PageContent> {
       event.preventDefault();
       return;
     }
-  });
-
-  window.addEventListener("keyup", (event: KeyboardEvent) => {
-    held.delete(event.code);
-  });
-
-  window.addEventListener("blur", () => {
-    held.clear();
   });
 
   function setActive(value: boolean): void {

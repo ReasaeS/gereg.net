@@ -9,33 +9,38 @@ import {
   Texture,
   TilingSprite,
 } from "pixi.js";
-import { createSquad, type Squad, type Target } from "../game/drones";
+import type { Squad, Target } from "../game/drones";
 import { getTexture } from "./images";
 import type {
   Background,
   Bar,
   Curve,
   Enemy,
-  Vector,
   Pattern,
-  Spawn,
   Sigil,
+  Spawn,
   Spell,
   Stage,
+  Vector,
   Wave,
-} from "./data";
-import { placeAlong, solidSpans } from "./data";
+} from "./types";
+import { placeAlong, solidSpans } from "./geometry";
 import { drawSigil } from "./sigil";
-import { hitboxColor, hitboxRadius } from "../game/playfield";
-import { archetype } from "../game/archetype";
+import { drawShape } from "./shape";
 import {
-  createBomb,
-  deathbombWindow,
-  startBombs,
-  type Bomb,
-} from "../game/bomb";
-
-type Path = Pick<Spawn, "curve" | "derivatives" | "waves">;
+  drift,
+  motion,
+  series,
+  sway,
+  swayVector,
+  velocity,
+  type Path,
+} from "./kinematics";
+import { fieldHeight, fieldWidth } from "../game/field";
+import { fontFamily } from "../ui/text";
+import { hitboxRadius } from "../game/player";
+import { deathbombWindow, startBombs, type Bomb } from "../game/bomb";
+import { createPilot, type Pilot } from "../game/pilot";
 
 type Resolve = (spawn: Spawn) => Enemy | null;
 
@@ -149,8 +154,8 @@ type Arrival = {
   spawn: Spawn;
 };
 
-const previewWidth: number = 384; // units
-const previewHeight: number = 448; // units
+const previewWidth: number = fieldWidth; // units
+const previewHeight: number = fieldHeight; // units
 const bulletPath: string = "./sprites/bullets/orb.png";
 const maxBullets: number = 6000;
 const bulletMargin: number = 48; // units
@@ -161,7 +166,6 @@ const emitterX: number = previewWidth / 2; // units
 const emitterY: number = 140; // units
 const playerX: number = previewWidth / 2; // units
 const playerY: number = 400; // units
-const playerSize: number = 32; // units
 const bulletHitbox: number = 0.25; // of size
 const hitGrace: number = 1; // s
 const blinkRate: number = 12; // Hz
@@ -185,12 +189,6 @@ const hurryTime: number = 10; // s
 const spellTop: number = 24; // units
 const spellPadding: number = 4; // units
 const tagPadding: number = 3; // units
-const hudFont: Array<string> = [
-  "Barlow Condensed",
-  "Arial Black",
-  "Impact",
-  "sans-serif",
-];
 const seekLookback: number = 8; // s
 const seekStep: number = 1 / 30; // s
 const patternLimit: number = 3600; // s
@@ -220,140 +218,6 @@ async function loadBullet(): Promise<BulletLayers> {
       frame: new Rectangle(half, 0, half, texture.height),
     }),
   };
-}
-
-function drawShape(graphics: Graphics, color: string, size: number): void {
-  const radius: number = size / 2;
-
-  graphics
-    .clear()
-    .ellipse(-radius * 0.7, -radius * 0.2, radius * 0.6, radius * 0.35)
-    .ellipse(radius * 0.7, -radius * 0.2, radius * 0.6, radius * 0.35)
-    .fill({ color: "#ffffff", alpha: 0.55 })
-    .circle(0, 0, radius * 0.5)
-    .fill(color)
-    .circle(0, -radius * 0.55, radius * 0.3)
-    .fill("#ffe0c8");
-}
-
-function series(derivatives: Array<number>, time: number): number {
-  let term: number = 1;
-  let total: number = 0;
-
-  for (let order = 0; order < derivatives.length; order++) {
-    term *= time / (order + 1);
-    total += derivatives[order]! * term;
-  }
-
-  return total;
-}
-
-function drift(derivatives: Array<Vector>, time: number): [number, number] {
-  let term: number = 1;
-  let x: number = 0;
-  let y: number = 0;
-
-  for (let order = 0; order < derivatives.length; order++) {
-    term *= time / (order + 1);
-    x += derivatives[order]!.x * term;
-    y += derivatives[order]!.y * term;
-  }
-
-  return [x, y];
-}
-
-function phaseAt(wave: Wave<unknown>, clock: number): number {
-  return ((wave.phase + wave.phaseShift * clock) * Math.PI) / 180;
-}
-
-function oscillation(wave: Wave<unknown>, time: number, clock: number): number {
-  return (
-    Math.sin(Math.PI * 2 * wave.frequency * time + phaseAt(wave, clock)) -
-    Math.sin(phaseAt(wave, clock - time))
-  );
-}
-
-function slope(wave: Wave<unknown>, time: number): number {
-  return (
-    (Math.PI * 2 * wave.frequency + (wave.phaseShift * Math.PI) / 180) *
-    Math.cos(Math.PI * 2 * wave.frequency * time + phaseAt(wave, time))
-  );
-}
-
-function sway(
-  waves: Array<Wave<number>>,
-  time: number,
-  clock: number = time,
-): number {
-  let total: number = 0;
-
-  for (const wave of waves) {
-    total += wave.amplitude * oscillation(wave, time, clock);
-  }
-
-  return total;
-}
-
-function swayVector(
-  waves: Array<Wave<Vector>>,
-  time: number,
-  clock: number = time,
-): [number, number] {
-  let x: number = 0;
-  let y: number = 0;
-
-  for (const wave of waves) {
-    x += wave.amplitude.x * oscillation(wave, time, clock);
-    y += wave.amplitude.y * oscillation(wave, time, clock);
-  }
-
-  return [x, y];
-}
-
-function velocity(path: Path, time: number): [number, number] {
-  let term: number = 1;
-  let x: number = 0;
-  let y: number = 0;
-
-  if (path.curve === "sinusoidal") {
-    for (const wave of path.waves) {
-      x += wave.amplitude.x * slope(wave, time);
-      y += wave.amplitude.y * slope(wave, time);
-    }
-
-    return [x, y];
-  }
-
-  for (let order = 0; order < path.derivatives.length; order++) {
-    x += path.derivatives[order]!.x * term;
-    y += path.derivatives[order]!.y * term;
-    term *= time / (order + 1);
-  }
-
-  return [x, y];
-}
-
-function motion(
-  x: number,
-  y: number,
-  path: Path,
-  time: number,
-): [number, number] {
-  let term: number = 1;
-
-  if (path.curve === "sinusoidal") {
-    const [swayX, swayY] = swayVector(path.waves, time);
-
-    return [x + swayX, y + swayY];
-  }
-
-  for (let order = 0; order < path.derivatives.length; order++) {
-    term *= time / (order + 1);
-    x += path.derivatives[order]!.x * term;
-    y += path.derivatives[order]!.y * term;
-  }
-
-  return [x, y];
 }
 
 function createSky(): Sky {
@@ -418,7 +282,7 @@ function hudText(size: number, color: string): Text {
     text: "",
     resolution: hudResolution,
     style: {
-      fontFamily: hudFont,
+      fontFamily: fontFamily,
       fontSize: size,
       fontStyle: "italic",
       fontWeight: "900",
@@ -498,11 +362,17 @@ async function createPreview(
   const actorLayer: Container = new Container();
   const overlay: Container = new Container();
   const bossHud: BossHud = createBossHud();
-  const squad: Squad = createSquad(droneTexture, previewWidth, previewHeight);
-  const bomb: Bomb = createBomb(previewWidth, previewHeight);
+  const pilot: Pilot = createPilot(
+    playerTexture,
+    droneTexture,
+    previewWidth,
+    previewHeight,
+  );
+  const squad: Squad = pilot.squad;
+  const bomb: Bomb = pilot.bomb;
+  const player: Sprite = pilot.player;
+  const hitbox: Graphics = pilot.hitbox;
   const sigil: Graphics = new Graphics();
-  const player: Sprite = new Sprite(playerTexture);
-  const hitbox: Graphics = new Graphics();
   const input: Vector = { x: 0, y: 0 };
   const mask: Graphics = new Graphics();
   const bullets: Array<Bullet> = new Array();
@@ -526,20 +396,11 @@ async function createPreview(
   let hitCount: number = 0;
   let grace: number = 0;
   let bombing: boolean = false;
-  let bombHeld: boolean = false;
   let dying: number = 0;
   let blink: number = 0;
 
   coreLayer.blendMode = "add";
-  player.anchor.set(0.5);
-  player.width = playerSize;
-  player.height = playerSize;
-  player.position.set(playerX, playerY);
-  hitbox
-    .circle(0, 0, hitboxRadius)
-    .fill(hitboxColor)
-    .stroke({ color: "#ffffff", width: 1 });
-  hitbox.visible = false;
+  pilot.reset(playerX, playerY);
   squad.view.visible = false;
   sigil.position.set(previewWidth / 2, previewHeight / 2);
   cover.view.visible = false;
@@ -1345,20 +1206,10 @@ async function createPreview(
   }
 
   function movePlayer(delta: number): void {
-    const speed: number = focused ? archetype().focusSpeed : archetype().speed;
+    if (pilot.update(delta, input, focused, shooting, bombing, targets())) {
+      dying = 0;
+    }
 
-    player.position.set(
-      Math.min(
-        Math.max(player.x + input.x * speed * delta, playerSize / 2),
-        previewWidth - playerSize / 2,
-      ),
-      Math.min(
-        Math.max(player.y + input.y * speed * delta, playerSize / 2),
-        previewHeight - playerSize / 2,
-      ),
-    );
-    hitbox.position.copyFrom(player.position);
-    hitbox.visible = focused;
     grace = Math.max(grace - delta, 0);
     blink += delta;
     player.alpha =
@@ -1366,15 +1217,6 @@ async function createPreview(
       Math.floor(blink * blinkRate) % 2 === 0
         ? blinkAlpha
         : 1;
-  }
-
-  function useBomb(delta: number): void {
-    if (bombing && !bombHeld && bomb.trigger(player.x, player.y)) {
-      dying = 0;
-    }
-
-    bombHeld = bombing;
-    bomb.update(delta, player.x, player.y);
 
     if (dying > 0) {
       dying -= delta;
@@ -1439,18 +1281,13 @@ async function createPreview(
     focused = false;
     shooting = false;
     bombing = false;
-    bombHeld = false;
     dying = 0;
-    bomb.clear();
+    pilot.reset(playerX, playerY);
     bomb.setStock(startBombs);
-    squad.clear();
     squad.view.visible = on;
     input.x = 0;
     input.y = 0;
     player.alpha = 1;
-    player.position.set(playerX, playerY);
-    hitbox.position.copyFrom(player.position);
-    hitbox.visible = false;
 
     if (on) {
       player.visible = true;
@@ -1486,8 +1323,6 @@ async function createPreview(
     fade(delta);
 
     if (playtest) {
-      squad.update(delta, player.x, player.y, focused, shooting, targets());
-      useBomb(delta);
       hitActors();
       bombActors(delta);
       collide();
@@ -1628,5 +1463,5 @@ async function createPreview(
   };
 }
 
-export { previewWidth, previewHeight, createPreview, drawShape, motion };
+export { previewWidth, previewHeight, createPreview };
 export type { Preview };

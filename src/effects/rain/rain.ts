@@ -8,6 +8,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { loadSprites, type SpriteLayers } from "./rainsprites";
+import { frameDelta } from "../tween/tween";
 import { getTheme, onTheme, type Theme } from "../../theme/theme";
 import {
   dropCount,
@@ -40,7 +41,6 @@ const spriteMinAlpha: number = 0.25;
 const spriteMaxAlpha: number = 0.45;
 const spritePath: string = "./sprites/bullets/";
 const spriteScale: number = 1;
-const maxDelta: number = 0.05; // s
 
 type SpriteKind = {
   name: string;
@@ -421,7 +421,7 @@ async function createRain(app: Application): Promise<RainLayers> {
   }
 
   app.ticker.add((ticker: Ticker) => {
-    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    const delta: number = frameDelta(ticker);
     const width: number = app.screen.width;
     const height: number = app.screen.height;
     const count: number = dropCount(config, width, height);

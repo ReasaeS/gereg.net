@@ -6,13 +6,8 @@ import {
   type Easing,
 } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
+import { createShadowText } from "../ui/text";
 
-const fontFamily: Array<string> = [
-  "Barlow Condensed",
-  "Arial Black",
-  "Impact",
-  "sans-serif",
-];
 const titleSize: number = 150; // px
 const hintSize: number = 40; // px
 const titleColor: string = "#ffffff";
@@ -51,24 +46,7 @@ type Page = {
 };
 
 function createText(text: string, size: number, color: string): Text {
-  return new Text({
-    text: text,
-    style: {
-      fontFamily: fontFamily,
-      fontSize: size,
-      fontStyle: "italic",
-      fontWeight: "900",
-      fill: color,
-      padding: shadowDistance * 2,
-      dropShadow: {
-        color: shadowColor,
-        alpha: 0.85,
-        blur: 0,
-        distance: shadowDistance,
-        angle: Math.PI / 3,
-      },
-    },
-  });
+  return createShadowText(text, size, color, shadowColor, shadowDistance);
 }
 
 function createPage(

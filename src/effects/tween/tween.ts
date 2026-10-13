@@ -8,6 +8,7 @@ type Spring = {
 };
 
 const bisectSteps: number = 24;
+const maxDelta: number = 0.05; // s
 
 function cubicBezier(x1: number, y1: number, x2: number, y2: number): Easing {
   function sample(first: number, second: number, time: number): number {
@@ -99,6 +100,10 @@ function springStep(
   spring.value += spring.velocity * delta;
 }
 
+function frameDelta(ticker: Ticker): number {
+  return Math.min(ticker.deltaMS / 1000, maxDelta);
+}
+
 function tween(
   ticker: Ticker,
   duration: number,
@@ -123,5 +128,15 @@ function tween(
   });
 }
 
-export { cubicBezier, ease, easeOut, approach, smoothDamp, springStep, tween };
+export {
+  maxDelta,
+  cubicBezier,
+  ease,
+  easeOut,
+  approach,
+  smoothDamp,
+  springStep,
+  frameDelta,
+  tween,
+};
 export type { Easing, Spring };

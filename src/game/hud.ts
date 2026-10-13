@@ -9,6 +9,8 @@ import {
 import { getTheme } from "../theme/theme";
 import { maxPower, minPower } from "./drones";
 import { startBombs } from "./bomb";
+import { drawFrame } from "./field";
+import { createText, screenResolution } from "../ui/text";
 
 type Stats = {
   hiScore: number;
@@ -34,26 +36,10 @@ type Row = {
   stars: Graphics | null;
 };
 
-const fontFamily: Array<string> = [
-  "Barlow Condensed",
-  "Arial Black",
-  "Impact",
-  "sans-serif",
-];
 const logoPath: string = "./logo.svg";
 const logoResolution: number = 2;
-const hudWidth: number = 640; // units
-const hudHeight: number = 480; // units
-const fieldX: number = 32; // units
-const fieldY: number = 16; // units
-const fieldWidth: number = 384; // units
-const fieldHeight: number = 448; // units
 const panelX: number = 440; // units
 const panelRight: number = 624; // units
-const frameColor: string = "#030c2a";
-const stripeColor: string = "#0a2160";
-const stripeGap: number = 14; // units
-const stripeWidth: number = 5; // units
 const badgeY: number = 22; // units
 const badgeHeight: number = 24; // units
 const badgeSlant: number = 8; // units
@@ -78,19 +64,6 @@ const rowLayout: Array<[string, number]> = [
   ["Point", 248],
 ];
 
-function createText(size: number, color: string): Text {
-  return new Text({
-    text: "",
-    style: {
-      fontFamily: fontFamily,
-      fontSize: size,
-      fontStyle: "italic",
-      fontWeight: "900",
-      fill: color,
-    },
-  });
-}
-
 function drawStars(
   graphics: Graphics,
   count: number,
@@ -111,25 +84,6 @@ function drawStars(
     }
 
     graphics.poly(points).fill(color).stroke({ color: "#ffffff", width: 1 });
-  }
-}
-
-function drawFrame(frame: Graphics): void {
-  frame.clear().rect(0, 0, hudWidth, hudHeight).fill(frameColor);
-
-  for (let x = -hudHeight; x < hudWidth; x += stripeGap) {
-    frame
-      .poly([
-        x,
-        hudHeight,
-        x + stripeWidth,
-        hudHeight,
-        x + stripeWidth + hudHeight,
-        0,
-        x + hudHeight,
-        0,
-      ])
-      .fill(stripeColor);
   }
 }
 
@@ -216,7 +170,7 @@ async function createHud(): Promise<Hud> {
 
   function setScale(scale: number): void {
     for (let index = 0; index < texts.length; index++) {
-      texts[index]!.resolution = scale * (window.devicePixelRatio || 1);
+      texts[index]!.resolution = screenResolution(scale);
     }
   }
 
@@ -260,14 +214,5 @@ async function createHud(): Promise<Hud> {
   return { view: view, stats: stats, refresh: refresh, setScale: setScale };
 }
 
-export {
-  hudWidth,
-  hudHeight,
-  fieldX,
-  fieldY,
-  fieldWidth,
-  fieldHeight,
-  drawFrame,
-  createHud,
-};
+export { createHud };
 export type { Hud, Stats };

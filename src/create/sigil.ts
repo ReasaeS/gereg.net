@@ -1,5 +1,5 @@
 import type { Graphics } from "pixi.js";
-import type { Ring, Sigil } from "./data";
+import type { Ring, Sigil } from "./types";
 
 const ringInner: number = 0.9;
 const ringCore: number = 0.42;

@@ -10,20 +10,17 @@ import {
 } from "pixi.js";
 import {
   cubicBezier,
+  frameDelta,
   springStep,
   tween,
   type Easing,
   type Spring,
 } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
+import { createShadowText } from "../ui/text";
+import { downKeys, upKeys } from "../game/input";
 
 const fontPath: string = "./fonts/BarlowCondensed-BlackItalic.ttf";
-const fontFamily: Array<string> = [
-  "Barlow Condensed",
-  "Arial Black",
-  "Impact",
-  "sans-serif",
-];
 const fontSize: number = 132; // px
 const menuLeft: number = 52; // vw
 const menuTop: number = 20; // vh
@@ -41,7 +38,6 @@ const highlightPadding: number = 30; // px
 const selectScale: number = 1.14;
 const springFrequency: number = 4.5; // Hz
 const springDamping: number = 0.45;
-const maxDelta: number = 0.05; // s
 const enterDuration: number = 420; // ms
 const enterStagger: number = 70; // ms
 const enterDistance: number = 1200; // px
@@ -124,24 +120,13 @@ function confirm(): void {
 
 function createItem(name: string, index: number): MenuItem {
   const view: Container = new Container();
-  const label: Text = new Text({
-    text: name.toUpperCase(),
-    style: {
-      fontFamily: fontFamily,
-      fontSize: fontSize,
-      fontStyle: "italic",
-      fontWeight: "900",
-      fill: 0xffffff,
-      padding: shadowDistance * 2,
-      dropShadow: {
-        color: shadowColor,
-        alpha: 0.85,
-        blur: 0,
-        distance: shadowDistance,
-        angle: Math.PI / 3,
-      },
-    },
-  });
+  const label: Text = createShadowText(
+    name.toUpperCase(),
+    fontSize,
+    "#ffffff",
+    shadowColor,
+    shadowDistance,
+  );
   const item: MenuItem = {
     name: name,
     view: view,
@@ -281,9 +266,9 @@ async function createButtons(app: Application): Promise<Container> {
       return;
     }
 
-    if (event.code === "ArrowDown" || event.code === "KeyS") {
+    if (downKeys.includes(event.code)) {
       select(selected + 1);
-    } else if (event.code === "ArrowUp" || event.code === "KeyW") {
+    } else if (upKeys.includes(event.code)) {
       select(selected - 1);
     } else if (event.code === "Enter" || event.code === "Space") {
       confirm();
@@ -295,7 +280,7 @@ async function createButtons(app: Application): Promise<Container> {
   });
 
   app.ticker.add((ticker: Ticker) => {
-    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    const delta: number = frameDelta(ticker);
     const screenWidth: number = app.screen.width;
     const screenHeight: number = app.screen.height;
     const scale: number = Math.min(

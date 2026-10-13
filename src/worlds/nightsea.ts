@@ -6,6 +6,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { seaHeight } from "./vivid";
+import { frameDelta } from "../effects/tween/tween";
 import { onTheme, type Theme } from "../theme/theme";
 
 type Reflection = {
@@ -28,7 +29,6 @@ const reflectionMinAlpha: number = 0.05;
 const reflectionMaxAlpha: number = 0.18;
 const reflectionMinSpeed: number = 4; // px/s
 const reflectionMaxSpeed: number = 14; // px/s
-const maxDelta: number = 0.05; // s
 
 function mix(from: number, to: number, amount: number): number {
   return from + (to - from) * amount;
@@ -68,7 +68,7 @@ function createNightSea(app: Application): Container {
   view.addChild(water, surface);
 
   app.ticker.add((ticker: Ticker) => {
-    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    const delta: number = frameDelta(ticker);
     const width: number = app.screen.width;
     const height: number = app.screen.height;
     const top: number = height * (1 - seaHeight / 100);

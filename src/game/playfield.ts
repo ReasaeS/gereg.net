@@ -1,28 +1,39 @@
 import {
   Container,
   Graphics,
-  Sprite,
   type Application,
   type Texture,
   type Ticker,
 } from "pixi.js";
-import { getTheme } from "../theme/theme";
+import { createHud, type Hud } from "./hud";
 import {
-  createHud,
   fieldHeight,
   fieldWidth,
   fieldX,
   fieldY,
   hudHeight,
+  hudScale,
   hudWidth,
-  type Hud,
-} from "./hud";
-import { cubicBezier, tween, type Easing } from "../effects/tween/tween";
+} from "./field";
+import {
+  cubicBezier,
+  frameDelta,
+  tween,
+  type Easing,
+} from "../effects/tween/tween";
 import { createClock, runClock, type Clock } from "./clock";
 import { createSelector, type Selector } from "./selector";
-import { createSquad, minPower, type Squad } from "./drones";
-import { archetype } from "./archetype";
-import { createBomb, startBombs, type Bomb } from "./bomb";
+import { minPower } from "./drones";
+import { startBombs } from "./bomb";
+import { createPilot, type Pilot } from "./pilot";
+import {
+  bombKeys,
+  createKeyboard,
+  focusKeys,
+  shotKeys,
+  steering,
+  type Keyboard,
+} from "./input";
 
 type Playfield = {
   view: Container;
@@ -32,25 +43,13 @@ type Playfield = {
   back: () => boolean;
 };
 
-const fieldScreen: number = 1; // of screen size
 const fieldColor: string = "#01040f";
-const playerSize: number = 32; // units
 const playerStartY: number = 0.85; // of field height
-const hitboxRadius: number = 3; // units
-const hitboxColor: string = "#ff2a4d";
-const maxDelta: number = 0.05; // s
 const enterDuration: number = 450; // ms
 const enterDistance: number = 400; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
 const rollLead: number = 200; // ms
-const leftKeys: Array<string> = ["ArrowLeft", "KeyA"];
-const rightKeys: Array<string> = ["ArrowRight", "KeyD"];
-const upKeys: Array<string> = ["ArrowUp", "KeyW"];
-const downKeys: Array<string> = ["ArrowDown", "KeyS"];
-const focusKeys: Array<string> = ["ShiftLeft", "ShiftRight"];
-const shotKeys: Array<string> = ["KeyZ"];
-const bombKeys: Array<string> = ["KeyX"];
 
 async function createPlayfield(
   app: Application,
@@ -65,47 +64,34 @@ async function createPlayfield(
   const fieldMask: Graphics = new Graphics();
   const gameMask: Graphics = new Graphics();
   const back: Graphics = new Graphics();
-  const player: Sprite = new Sprite(texture);
-  const hitbox: Graphics = new Graphics();
-  const squad: Squad = createSquad(droneTexture, fieldWidth, fieldHeight);
-  const bomb: Bomb = createBomb(fieldWidth, fieldHeight);
+  const pilot: Pilot = createPilot(
+    texture,
+    droneTexture,
+    fieldWidth,
+    fieldHeight,
+  );
   const clock: Clock = createClock();
-  const held: Set<string> = new Set();
   let active: boolean = false;
   let rolling: boolean = false;
-  let bombHeld: boolean = false;
-
-  function pressed(keys: Array<string>): boolean {
-    return keys.some((key: string) => held.has(key));
-  }
+  const keyboard: Keyboard = createKeyboard(() => active);
 
   function reset(): void {
-    player.position.set(fieldWidth / 2, fieldHeight * playerStartY);
-    held.clear();
-    squad.clear();
-    bomb.clear();
-    bomb.setStock(startBombs);
-    bombHeld = false;
+    pilot.reset(fieldWidth / 2, fieldHeight * playerStartY);
+    keyboard.clear();
+    pilot.bomb.setStock(startBombs);
     hud.stats.bombs = startBombs;
     hud.stats.power = minPower;
-    squad.setPower(hud.stats.power);
+    pilot.squad.setPower(hud.stats.power);
     hud.refresh();
   }
 
   function draw(): void {
     back.clear().rect(0, 0, fieldWidth, fieldHeight).fill(fieldColor);
-    hitbox
-      .clear()
-      .circle(0, 0, hitboxRadius + 1)
-      .fill(getTheme().highlight)
-      .circle(0, 0, hitboxRadius)
-      .fill(hitboxColor);
+    pilot.redraw();
   }
 
   function layout(): void {
-    const scale: number =
-      Math.min(app.screen.width / hudWidth, app.screen.height / hudHeight) *
-      fieldScreen;
+    const scale: number = hudScale(app.screen.width, app.screen.height);
 
     game.scale.set(scale);
     game.position.set(
@@ -116,20 +102,9 @@ async function createPlayfield(
     selector.setScale(scale);
   }
 
-  player.anchor.set(0.5);
-  player.width = playerSize;
-  player.height = playerSize;
   fieldMask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
   field.position.set(fieldX, fieldY);
-  field.addChild(
-    back,
-    fieldMask,
-    squad.shotLayer,
-    player,
-    squad.view,
-    bomb.view,
-    hitbox,
-  );
+  field.addChild(back, fieldMask, ...pilot.layers());
   field.mask = fieldMask;
   gameMask.rect(0, 0, hudWidth, hudHeight).fill(0xffffff);
   game.addChild(hud.view, selector.view, field, gameMask);
@@ -143,26 +118,6 @@ async function createPlayfield(
 
   app.renderer.on("resize", layout);
 
-  window.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (!active || event.altKey || event.ctrlKey || event.metaKey) {
-      return;
-    }
-
-    held.add(event.code);
-
-    if (event.code.startsWith("Arrow") || event.code === "Space") {
-      event.preventDefault();
-    }
-  });
-
-  window.addEventListener("keyup", (event: KeyboardEvent) => {
-    held.delete(event.code);
-  });
-
-  window.addEventListener("blur", () => {
-    held.clear();
-  });
-
   app.ticker.add((ticker: Ticker) => {
     if (!view.visible) {
       return;
@@ -172,49 +127,31 @@ async function createPlayfield(
       return;
     }
 
-    runClock(clock, Math.min(ticker.deltaMS / 1000, maxDelta), movePlayer);
+    runClock(clock, frameDelta(ticker), movePlayer);
   });
 
   function movePlayer(delta: number): void {
-    const focused: boolean = pressed(focusKeys);
-    const speed: number = focused ? archetype().focusSpeed : archetype().speed;
-    let x: number = (pressed(rightKeys) ? 1 : 0) - (pressed(leftKeys) ? 1 : 0);
-    let y: number = (pressed(downKeys) ? 1 : 0) - (pressed(upKeys) ? 1 : 0);
+    pilot.squad.setPower(hud.stats.power);
 
-    if (x !== 0 && y !== 0) {
-      x *= Math.SQRT1_2;
-      y *= Math.SQRT1_2;
-    }
-
-    player.position.set(
-      Math.min(
-        Math.max(player.x + x * speed * delta, playerSize / 2),
-        fieldWidth - playerSize / 2,
-      ),
-      Math.min(
-        Math.max(player.y + y * speed * delta, playerSize / 2),
-        fieldHeight - playerSize / 2,
-      ),
-    );
-    hitbox.position.copyFrom(player.position);
-    hitbox.visible = focused;
-    squad.setPower(hud.stats.power);
-    squad.update(delta, player.x, player.y, focused, pressed(shotKeys));
-
-    if (pressed(bombKeys) && !bombHeld && bomb.trigger(player.x, player.y)) {
-      hud.stats.bombs = bomb.stock();
+    if (
+      pilot.update(
+        delta,
+        steering(keyboard.pressed),
+        keyboard.pressed(focusKeys),
+        keyboard.pressed(shotKeys),
+        keyboard.pressed(bombKeys),
+      )
+    ) {
+      hud.stats.bombs = pilot.bomb.stock();
       hud.refresh();
     }
-
-    bombHeld = pressed(bombKeys);
-    bomb.update(delta, player.x, player.y);
   }
 
   function openSelector(): Promise<void> {
     active = false;
     rolling = true;
-    held.clear();
-    hitbox.visible = false;
+    keyboard.clear();
+    pilot.hitbox.visible = false;
 
     return selector.rollDown().then(() => {
       rolling = false;
@@ -236,7 +173,7 @@ async function createPlayfield(
     reset();
     hud.refresh();
     selector.close();
-    hitbox.visible = false;
+    pilot.hitbox.visible = false;
     view.visible = true;
     tween(app.ticker, enterDuration - rollLead, () => undefined).then(
       openSelector,
@@ -270,7 +207,7 @@ async function createPlayfield(
 
     active = false;
     selector.setActive(false);
-    held.clear();
+    keyboard.clear();
     selector.rollUp();
 
     return tween(app.ticker, door, () => undefined)
@@ -294,17 +231,5 @@ async function createPlayfield(
   };
 }
 
-export {
-  leaveDuration,
-  hitboxRadius,
-  hitboxColor,
-  leftKeys,
-  rightKeys,
-  upKeys,
-  downKeys,
-  focusKeys,
-  shotKeys,
-  bombKeys,
-  createPlayfield,
-};
+export { createPlayfield };
 export type { Playfield };

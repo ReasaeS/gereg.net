@@ -23,18 +23,21 @@ import type {
   Creations,
   Cutscene,
   Enemy,
-  Line,
   Keyframe,
+  Line,
   Pattern,
   Sigil,
-  Spell,
   Sound,
+  Spell,
   Stage,
-} from "./data";
-import { placeAlong, solidSpans, wallAngle } from "./data";
+} from "./types";
+import { placeAlong, solidSpans, wallAngle } from "./geometry";
 import { getTexture } from "./images";
 import { getTheme } from "../theme/theme";
-import { drawShape, previewHeight, previewWidth } from "./preview";
+import { createGlide, mix, type Glide } from "../ui/motion";
+import { downKeys, leftKeys, rightKeys, upKeys } from "../game/input";
+import { previewHeight, previewWidth } from "./preview";
+import { drawShape } from "./shape";
 import { drawSigil, sigilRadius } from "./sigil";
 import { drawSound, soundLength } from "./sound";
 import { createBackdrop, type Backdrop } from "./backdrop";
@@ -107,6 +110,7 @@ type TileButton = {
   hovered: boolean;
   enabled: boolean;
   width: number; // px
+  glow: Glide | null;
 };
 
 type Tile = {
@@ -195,6 +199,7 @@ const galleryTop: number = 0.22; // of screen height
 const galleryBottom: number = 0.97; // of screen height
 const headerY: number = 0.11; // of screen height
 const tabSize: number = 26; // px
+const tabHover: number = 1.06;
 const tabGap: number = 56; // px
 const ornamentLength: number = 0.16; // of screen width
 const ornamentGap: number = 30; // px
@@ -1067,6 +1072,7 @@ function createGallery(
           hovered: false,
           enabled: true,
           width: width,
+          glow: null,
         };
 
         button.label.text = action.toUpperCase();
@@ -1148,17 +1154,26 @@ function createGallery(
     };
   }
 
-  function paintAction(button: TileButton): void {
-    const lit: boolean = button.hovered && button.enabled;
+  function drawAction(button: TileButton, lit: number): void {
     const width: number = button.width;
 
     button.back
       .clear()
       .rect(0, 0, width, actionHeight)
-      .fill({ color: trimLit, alpha: lit ? 0.22 : 0 })
+      .fill({ color: trimLit, alpha: lit * 0.22 })
       .rect(0, 0, width, actionHeight)
-      .stroke({ color: lit ? trimLit : trim, width: 0.75, alignment: 1 });
-    button.label.tint = lit ? trimLit : getTheme().menuText;
+      .stroke({ color: mix(trim, trimLit, lit), width: 0.75, alignment: 1 });
+    button.label.tint = mix(getTheme().menuText, trimLit, lit);
+  }
+
+  function paintAction(button: TileButton): void {
+    const lit: number = button.hovered && button.enabled ? 1 : 0;
+
+    button.glow ??= createGlide(lit, (amount: number) =>
+      drawAction(button, amount),
+    );
+    button.glow.set(lit);
+    drawAction(button, button.glow.value());
     button.view.alpha = button.enabled ? 1 : actionDisabled;
   }
 
@@ -1495,6 +1510,11 @@ function createGallery(
     appear();
   }
 
+  const tabGlows: Map<Text, Glide> = new Map();
+  const markX: Glide = createGlide(0, drawOrnament);
+  const markWidth: Glide = createGlide(0, drawOrnament);
+  let markPlaced: boolean = false;
+
   for (let index = 0; index < categoryList.length; index++) {
     const value: Category = categoryList[index]!;
     const tab: Text = createSerif(tabSize, "#ffffff");
@@ -1504,6 +1524,13 @@ function createGallery(
     tab.eventMode = "static";
     tab.cursor = "pointer";
     tab.on("pointertap", () => showKind(value));
+
+    const hover: Glide = createGlide(1, (scale: number) => {
+      tab.scale.set(scale);
+    });
+
+    tab.on("pointerover", () => hover.set(tabHover));
+    tab.on("pointerout", () => hover.set(1));
     tabs.push(tab);
     categories.addChild(tab);
   }
@@ -1512,13 +1539,43 @@ function createGallery(
     const current: Text | undefined = tabs[categoryList.indexOf(category)];
 
     for (const tab of tabs) {
-      tab.tint = tab === current ? trimLit : trim;
-      tab.alpha = tab === current ? 1 : 0.7;
+      let glow: Glide | undefined = tabGlows.get(tab);
+
+      if (glow === undefined) {
+        glow = createGlide(tab === current ? 1 : 0, (amount: number) => {
+          tab.tint = mix(trim, trimLit, amount);
+          tab.alpha = 0.7 + amount * 0.3;
+        });
+        tabGlows.set(tab, glow);
+      }
+
+      glow.set(tab === current ? 1 : 0);
     }
+
+    if (current === undefined) {
+      ornament.clear();
+      return;
+    }
+
+    if (markPlaced) {
+      markX.set(current.x);
+      markWidth.set(current.width);
+    } else {
+      markPlaced = true;
+      markX.snap(current.x);
+      markWidth.snap(current.width);
+    }
+
+    drawOrnament();
+  }
+
+  function drawOrnament(): void {
+    const center: number = markX.value();
+    const half: number = markWidth.value() / 2;
 
     ornament.clear();
 
-    if (current === undefined) {
+    if (tabs.length === 0) {
       return;
     }
 
@@ -1538,23 +1595,13 @@ function createGallery(
     diamond(ornament, right + length, 0, diamondSize - 2);
     ornament
       .fill(trim)
-      .rect(current.x - current.width / 2, tabSize * 0.85, current.width, 1.5)
+      .rect(center - half, tabSize * 0.85, half * 2, 1.5)
       .fill(trimLit);
-    diamond(ornament, current.x, tabSize * 0.85 + 0.75, diamondSize);
+    diamond(ornament, center, tabSize * 0.85 + 0.75, diamondSize);
 
     if (onTabs) {
-      diamond(
-        ornament,
-        current.x - current.width / 2 - focusGap,
-        0,
-        diamondSize,
-      );
-      diamond(
-        ornament,
-        current.x + current.width / 2 + focusGap,
-        0,
-        diamondSize,
-      );
+      diamond(ornament, center - half - focusGap, 0, diamondSize);
+      diamond(ornament, center + half + focusGap, 0, diamondSize);
     }
 
     ornament.fill(trimLit);
@@ -1659,10 +1706,10 @@ function createGallery(
       return;
     }
 
-    const up: boolean = event.code === "ArrowUp" || event.code === "KeyW";
-    const down: boolean = event.code === "ArrowDown" || event.code === "KeyS";
-    const left: boolean = event.code === "ArrowLeft" || event.code === "KeyA";
-    const right: boolean = event.code === "ArrowRight" || event.code === "KeyD";
+    const up: boolean = upKeys.includes(event.code);
+    const down: boolean = downKeys.includes(event.code);
+    const left: boolean = leftKeys.includes(event.code);
+    const right: boolean = rightKeys.includes(event.code);
     const confirm: boolean = event.code === "Enter" || event.code === "Space";
 
     if (onTabs && (left || right)) {
@@ -1676,13 +1723,13 @@ function createGallery(
       onTabs = true;
       revealed = null;
       paint();
-    } else if (event.code === "ArrowLeft" || event.code === "KeyA") {
+    } else if (leftKeys.includes(event.code)) {
       browse(selected - 1);
-    } else if (event.code === "ArrowRight" || event.code === "KeyD") {
+    } else if (rightKeys.includes(event.code)) {
       browse(selected + 1);
-    } else if (event.code === "ArrowUp" || event.code === "KeyW") {
+    } else if (upKeys.includes(event.code)) {
       browse(selected - columns);
-    } else if (event.code === "ArrowDown" || event.code === "KeyS") {
+    } else if (downKeys.includes(event.code)) {
       browse(selected + columns);
     } else if (event.code === "Enter" || event.code === "Space") {
       choose(selected);

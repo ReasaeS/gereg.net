@@ -17,7 +17,8 @@ import {
   type Page,
   type PageContent,
 } from "./menu/page";
-import { createEditor, droneTexture, playerTexture } from "./editor/editor";
+import { createEditor } from "./editor/editor";
+import { droneTexture, playerTexture } from "./editor/drawings";
 import { createPlayfield, type Playfield } from "./game/playfield";
 import { createSettings } from "./settings/panel";
 import { createMaker } from "./create/maker";
@@ -57,6 +58,7 @@ import { setPortal, addPortalView, startPortal } from "./effects/portal/portal";
 import { seaHeight, createVivid, type Vivid } from "./worlds/vivid";
 import { createNightSea } from "./worlds/nightsea";
 import { getTheme } from "./theme/theme";
+import { startMotion } from "./ui/motion";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -83,6 +85,7 @@ await app.init({
 });
 
 container.appendChild(app.canvas);
+startMotion(app.ticker);
 
 const city: Container = new Container();
 const vivid: Container = new Container();

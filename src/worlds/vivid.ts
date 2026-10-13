@@ -11,10 +11,10 @@ import {
   type Texture,
   type Ticker,
 } from "pixi.js";
-import { approach } from "../effects/tween/tween";
+import { approach, frameDelta } from "../effects/tween/tween";
 import { createLighthouse, type Lighthouse } from "./lighthouse";
 import { createWitch, type Witch } from "./witch";
-import { menuPixels, menuTexture } from "../editor/editor";
+import { menuPixels, menuTexture } from "../editor/drawings";
 import { onTheme, type Theme } from "../theme/theme";
 import { onSky, type Sky } from "../settings/settings";
 
@@ -189,7 +189,6 @@ const bloomMinDepth: number = 0.1; // of the distance to the sea bottom
 const bloomReach: number = 2.6; // plume height per distance to the sea bottom
 const bloomAlpha: number = 0.1;
 const maxBlooms: number = 900;
-const maxDelta: number = 0.05; // s
 
 function mix(from: number, to: number, amount: number): number {
   return from + (to - from) * amount;
@@ -696,7 +695,7 @@ function createVivid(app: Application): Vivid {
   app.renderer.on("resize", build);
 
   app.ticker.add((ticker: Ticker) => {
-    const delta: number = Math.min(ticker.deltaMS / 1000, maxDelta);
+    const delta: number = frameDelta(ticker);
     const width: number = app.screen.width;
     const height: number = app.screen.height;
 

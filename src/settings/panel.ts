@@ -13,10 +13,12 @@ import {
   buttonHeight,
   buttonWidth,
   createButton,
-  fontFamily,
   paintButton,
   type Button,
-} from "../editor/button";
+} from "../ui/button";
+import { createText } from "../ui/text";
+import { downKeys, leftKeys, rightKeys, upKeys } from "../game/input";
+import { createGlide, type Glide } from "../ui/motion";
 import {
   channels,
   getRate,
@@ -41,6 +43,7 @@ type Row = {
   label: Text;
   adjust: (direction: number) => void;
   refresh: () => void;
+  focus?: Glide;
 };
 
 const labelSize: number = 34; // px
@@ -54,6 +57,7 @@ const sliderIdleAlpha: number = 0.55;
 const valueGap: number = 24; // px
 const markerWidth: number = 10; // px
 const markerGap: number = 18; // px
+const labelShift: number = 8; // px
 const volumeStep: number = 0.05;
 const contentWidth: number = labelWidth + sliderWidth + valueGap + 90; // px
 const titleSize: number = 44; // px
@@ -71,19 +75,6 @@ const channelNames: Map<Channel, string> = new Map([
   ["sfx", "sound effects"],
   ["dialogue", "dialogue"],
 ]);
-
-function createText(size: number): Text {
-  return new Text({
-    text: "",
-    style: {
-      fontFamily: fontFamily,
-      fontSize: size,
-      fontStyle: "italic",
-      fontWeight: "900",
-      fill: 0xffffff,
-    },
-  });
-}
 
 function createRow(name: string): [Container, Text] {
   const view: Container = new Container();
@@ -165,6 +156,7 @@ function createVolumeRow(channel: Channel): Row {
   const [view, label] = createRow(channelNames.get(channel)!);
   const track: Graphics = new Graphics();
   const value: Text = createText(valueSize);
+  const level: Glide = createGlide(getVolume(channel), draw);
   let dragging: boolean = false;
 
   function shape(graphics: Graphics, width: number): Graphics {
@@ -180,8 +172,8 @@ function createVolumeRow(channel: Channel): Row {
     ]);
   }
 
-  function refresh(): void {
-    const volume: number = getVolume(channel);
+  function draw(): void {
+    const volume: number = level.value();
 
     track.clear();
     shape(track, sliderWidth).fill({
@@ -194,8 +186,12 @@ function createVolumeRow(channel: Channel): Row {
         getTheme().highlight,
       );
     }
+  }
 
-    value.text = Math.round(volume * 100) + "%";
+  function refresh(): void {
+    level.set(getVolume(channel));
+    value.text = Math.round(getVolume(channel) * 100) + "%";
+    draw();
   }
 
   function pick(event: FederatedPointerEvent): void {
@@ -276,6 +272,10 @@ function createSettings(app: Application): PageContent {
   const rows: Array<Row> = categories.flatMap((entry: Category) => entry.rows);
   let selected: number = 0;
   let target: number = 0;
+  let placed: boolean = false;
+  const markerY: Glide = createGlide(0, (y: number) => {
+    marker.y = y;
+  });
   let active: boolean = false;
   let visibleHeight: number = 1;
   let contentHeight: number = 0;
@@ -368,9 +368,17 @@ function createSettings(app: Application): PageContent {
   function refresh(): void {
     for (let index = 0; index < rows.length; index++) {
       const row: Row = rows[index]!;
+      const label: Text = row.label;
 
-      row.label.tint = getTheme().menuText;
-      row.label.alpha = index === selected ? 1 : 0.7;
+      row.focus ??= createGlide(
+        index === selected ? 1 : 0,
+        (amount: number) => {
+          label.alpha = 0.7 + amount * 0.3;
+          label.x = amount * labelShift;
+        },
+      );
+      label.tint = getTheme().menuText;
+      row.focus.set(index === selected ? 1 : 0);
       row.refresh();
     }
 
@@ -386,7 +394,14 @@ function createSettings(app: Application): PageContent {
       .clear()
       .poly([0, 0, markerWidth, buttonHeight / 2, 0, buttonHeight])
       .fill(getTheme().accent);
-    marker.position.set(-markerWidth - markerGap, rows[selected]!.view.y);
+    marker.x = -markerWidth - markerGap;
+
+    if (placed) {
+      markerY.set(rows[selected]!.view.y);
+    } else {
+      placed = true;
+      markerY.snap(rows[selected]!.view.y);
+    }
   }
 
   function layout(): void {
@@ -438,13 +453,13 @@ function createSettings(app: Application): PageContent {
       jumpTo(Math.min(current + 1, categories.length - 1));
     } else if (event.code.startsWith("Digit")) {
       jumpTo(Number(event.code.slice(5)) - 1);
-    } else if (event.code === "ArrowUp" || event.code === "KeyW") {
+    } else if (upKeys.includes(event.code)) {
       select((selected - 1 + rows.length) % rows.length);
-    } else if (event.code === "ArrowDown" || event.code === "KeyS") {
+    } else if (downKeys.includes(event.code)) {
       select((selected + 1) % rows.length);
-    } else if (event.code === "ArrowLeft" || event.code === "KeyA") {
+    } else if (leftKeys.includes(event.code)) {
       rows[selected]!.adjust(-1);
-    } else if (event.code === "ArrowRight" || event.code === "KeyD") {
+    } else if (rightKeys.includes(event.code)) {
       rows[selected]!.adjust(1);
     } else {
       return;
