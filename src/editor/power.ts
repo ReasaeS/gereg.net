@@ -1,9 +1,11 @@
 import {
   Container,
   Graphics,
+  Rectangle,
   Sprite,
   Text,
   type Application,
+  type FederatedWheelEvent,
   type Texture,
   type Ticker,
 } from "pixi.js";
@@ -11,11 +13,13 @@ import {
   createChip,
   createChoice,
   createColors,
+  createHeader,
   createText,
   createSlider,
   rowHeight,
   rowWidth,
   chipHeight,
+  headerHeight,
   type Chip,
   type Control,
   type Option,
@@ -46,7 +50,17 @@ import {
   type Archetype,
   type ArchetypeId,
 } from "../game/archetype";
-import { createBomb, type Bomb } from "../game/bomb";
+import { hudHeight, hudWidth } from "../game/hud";
+import { approach, smoothDamp, type Spring } from "../effects/tween/tween";
+import { getTheme } from "../theme/theme";
+import {
+  bombLook,
+  createBomb,
+  resetLooks,
+  saveLooks,
+  type Bomb,
+  type Look,
+} from "../game/bomb";
 
 type Power = {
   view: Container;
@@ -62,6 +76,12 @@ const frameWidth: number = 1.5; // units
 const playerSize: number = 32; // units
 const playerStartY: number = 0.8; // of field height
 const panelGap: number = 30; // px
+const rowSmoothing: number = 0.06; // s
+const rowFade: number = 0.15; // s
+const scrollSmoothing: number = 0.08; // s
+const scrollBarWidth: number = 2; // units
+const scrollBarGap: number = 3; // units
+const scrollBarMinimum: number = 12; // units
 const summarySize: number = 10; // units
 const hintSize: number = 11; // units
 const hintGap: number = 8; // units
@@ -74,6 +94,16 @@ const fontFamily: Array<string> = [
   "Arial Black",
   "Impact",
   "sans-serif",
+];
+const tintColors: Array<string> = [
+  "#000000",
+  "#1a0a2e",
+  "#2a0a3a",
+  "#3a0a14",
+  "#3a3000",
+  "#0a2a14",
+  "#001a3a",
+  "#ffffff",
 ];
 const shotColors: Array<string> = [
   "#ffffff",
@@ -104,6 +134,8 @@ function createPower(
   const squad: Squad = createSquad(droneTexture, fieldWidth, fieldHeight);
   const bomb: Bomb = createBomb(fieldWidth, fieldHeight);
   const panel: Container = new Container();
+  const content: Container = new Container();
+  const panelMask: Graphics = new Graphics();
   const hint: Text = new Text({
     text: "ARROWS  MOVE   ·   SHIFT  FOCUS   ·   Z  SHOOT   ·   X  BOMB",
     style: {
@@ -116,7 +148,15 @@ function createPower(
   });
   const held: Set<string> = new Set();
   let power: number = maxPower;
+  const opened: Set<string> = new Set();
   let active: boolean = false;
+  const scroll: Spring = { value: 0, velocity: 0 };
+  const rowTargets: Map<Container, number> = new Map();
+  const scrollBar: Graphics = new Graphics();
+  let scrollTarget: number = 0;
+  let laidOut: boolean = false;
+  let contentHeight: number = 0;
+  let viewHeight: number = 0;
   let bombHeld: boolean = false;
 
   function changed(): void {
@@ -124,76 +164,202 @@ function createPower(
     refresh();
   }
 
+  function look(): Look {
+    return bombLook(archetype().bomb);
+  }
+
+  function restyled(): void {
+    saveLooks();
+    refresh();
+  }
+
   const reset: Chip = createChip("reset", resetWidth, () => {
     resetDrones();
+    resetLooks();
     refresh();
   });
+
+  function section(name: string, list: Array<Control>): Array<Control> {
+    const header: Control = createHeader(
+      name,
+      () => opened.has(name),
+      () => {
+        if (!opened.delete(name)) {
+          opened.add(name);
+        }
+
+        refresh();
+      },
+    );
+
+    return [
+      header,
+      ...list.map((control: Control) => {
+        const shown: (() => boolean) | undefined = control.shown;
+
+        return {
+          ...control,
+          shown: () => opened.has(name) && (shown?.() ?? true),
+        };
+      }),
+    ];
+  }
 
   const summary: Text = createText(summarySize, hintColor);
   const summaryRow: Container = new Container();
 
   const controls: Array<Control> = [
-    createChoice(
-      "Archetype",
-      () =>
-        archetypes.map((entry: Archetype): Option<ArchetypeId> => ({
-          value: entry.id,
-          label: entry.name,
-        })),
-      () => archetype().id,
-      (value: ArchetypeId) => {
-        setArchetype(value);
-        refresh();
+    ...section("Archetype", [
+      createChoice(
+        "Archetype",
+        () =>
+          archetypes.map((entry: Archetype): Option<ArchetypeId> => ({
+            value: entry.id,
+            label: entry.name,
+          })),
+        () => archetype().id,
+        (value: ArchetypeId) => {
+          setArchetype(value);
+          refresh();
+        },
+      ),
+      {
+        view: summaryRow,
+        refresh: () => {
+          summary.text = archetype().summary.toUpperCase();
+        },
       },
-    ),
-    {
-      view: summaryRow,
-      refresh: () => {
-        summary.text = archetype().summary.toUpperCase();
+    ]),
+    ...section("Drones", [
+      createSlider(
+        "Power preview",
+        minPower,
+        maxPower,
+        0.05,
+        () => power,
+        (value: number) => {
+          power = value;
+          squad.setPower(value);
+          refresh();
+        },
+      ),
+      createSlider(
+        "Drone spin",
+        -720,
+        720,
+        15,
+        () => droneSettings().spin,
+        (value: number) => {
+          droneSettings().spin = value;
+          changed();
+        },
+      ),
+      createColors(
+        "Main shot",
+        shotColors,
+        () => droneSettings().mainColor,
+        (value: string) => {
+          droneSettings().mainColor = value;
+          changed();
+        },
+      ),
+      createColors(
+        "Drone shot",
+        shotColors,
+        () => droneSettings().shotColor,
+        (value: string) => {
+          droneSettings().shotColor = value;
+          changed();
+        },
+      ),
+    ]),
+    ...section("Bomb", [
+      createColors(
+        "Bomb glow",
+        shotColors,
+        () => look().glow,
+        (value: string) => {
+          look().glow = value;
+          restyled();
+        },
+      ),
+      createColors(
+        "Bomb ring",
+        shotColors,
+        () => look().ring,
+        (value: string) => {
+          look().ring = value;
+          restyled();
+        },
+      ),
+      createSlider(
+        "Ring thickness",
+        1,
+        10,
+        0.5,
+        () => look().ringWidth,
+        (value: number) => {
+          look().ringWidth = value;
+          restyled();
+        },
+      ),
+      {
+        ...createSlider(
+          "Ring count",
+          1,
+          6,
+          1,
+          () => look().rings,
+          (value: number) => {
+            look().rings = value;
+            restyled();
+          },
+        ),
+        shown: () => archetype().bomb !== "spark",
       },
-    },
-    createSlider(
-      "Power preview",
-      minPower,
-      maxPower,
-      0.05,
-      () => power,
-      (value: number) => {
-        power = value;
-        squad.setPower(value);
-        refresh();
-      },
-    ),
-    createSlider(
-      "Drone spin",
-      -720,
-      720,
-      15,
-      () => droneSettings().spin,
-      (value: number) => {
-        droneSettings().spin = value;
-        changed();
-      },
-    ),
-    createColors(
-      "Main shot",
-      shotColors,
-      () => droneSettings().mainColor,
-      (value: string) => {
-        droneSettings().mainColor = value;
-        changed();
-      },
-    ),
-    createColors(
-      "Drone shot",
-      shotColors,
-      () => droneSettings().shotColor,
-      (value: string) => {
-        droneSettings().shotColor = value;
-        changed();
-      },
-    ),
+      createColors(
+        "Screen tint",
+        tintColors,
+        () => look().tint,
+        (value: string) => {
+          look().tint = value;
+          restyled();
+        },
+      ),
+      createSlider(
+        "Tint strength",
+        0,
+        0.8,
+        0.05,
+        () => look().tintAlpha,
+        (value: number) => {
+          look().tintAlpha = value;
+          restyled();
+        },
+      ),
+    ]),
   ];
+
+  function place(view: Container, shown: boolean, y: number): void {
+    if (shown) {
+      if (!laidOut || !view.visible) {
+        view.y = y;
+      }
+
+      if (!laidOut) {
+        view.alpha = 1;
+      }
+
+      view.visible = true;
+      rowTargets.set(view, y);
+    } else {
+      rowTargets.delete(view);
+
+      if (!laidOut) {
+        view.visible = false;
+      }
+    }
+  }
 
   function refresh(): void {
     let y: number = 0;
@@ -201,17 +367,67 @@ function createPower(
     for (const control of controls) {
       const shown: boolean = control.shown?.() ?? true;
 
-      control.view.visible = shown;
+      control.view.eventMode = shown
+        ? control.header === true
+          ? "static"
+          : "passive"
+        : "none";
+      place(control.view, shown, y);
 
       if (shown) {
-        control.view.y = y;
         control.refresh();
-        y += rowHeight;
+        y += control.header === true ? headerHeight : rowHeight;
       }
     }
 
-    reset.view.y = y + rowHeight / 2 - chipHeight / 2;
+    place(reset.view, true, y + rowHeight / 2 - chipHeight / 2);
     reset.paint();
+    contentHeight = y + rowHeight;
+    laidOut = true;
+  }
+
+  function maxScroll(): number {
+    return Math.max(contentHeight - viewHeight, 0);
+  }
+
+  function animate(delta: number): void {
+    const blend: number = 1 - Math.exp(-delta / rowSmoothing);
+
+    for (const view of [
+      ...controls.map((control: Control) => control.view),
+      reset.view,
+    ]) {
+      const target: number | undefined = rowTargets.get(view);
+
+      if (target !== undefined) {
+        view.y += (target - view.y) * blend;
+        view.alpha = approach(view.alpha, 1, delta / rowFade);
+      } else if (view.visible) {
+        view.alpha = approach(view.alpha, 0, delta / rowFade);
+        view.visible = view.alpha > 0;
+      }
+    }
+
+    scrollTarget = Math.min(scrollTarget, maxScroll());
+    smoothDamp(scroll, scrollTarget, scrollSmoothing, delta);
+    content.y = -scroll.value;
+    scrollBar.clear();
+
+    if (maxScroll() <= 0) {
+      return;
+    }
+
+    const length: number = Math.max(
+      (viewHeight / contentHeight) * viewHeight,
+      scrollBarMinimum,
+    );
+    const offset: number = (scroll.value / maxScroll()) * (viewHeight - length);
+
+    scrollBar
+      .rect(rowWidth + scrollBarGap, 0, scrollBarWidth, viewHeight)
+      .fill({ color: getTheme().menuSelected, alpha: 0.6 })
+      .rect(rowWidth + scrollBarGap, offset, scrollBarWidth, length)
+      .fill(getTheme().highlight);
   }
 
   function sharpen(target: Container, resolution: number): void {
@@ -225,19 +441,20 @@ function createPower(
   }
 
   function layout(x: number, y: number, width: number, height: number): void {
+    const panelScale: number = Math.min(
+      app.screen.width / hudWidth,
+      app.screen.height / hudHeight,
+    );
+    const panelPixels: number = rowWidth * panelScale;
     const fieldScale: number = Math.min(
       height / fieldHeight,
-      (width * 0.55) / fieldWidth,
+      (width - panelPixels - panelGap) / fieldWidth,
     );
-    const panelHeight: number = (controls.length + 1) * rowHeight;
     const fieldPixels: number = fieldWidth * fieldScale;
-    const panelScale: number = Math.min(
-      height / panelHeight,
-      (width - fieldPixels - panelGap) / rowWidth,
-    );
-    const total: number = fieldPixels + panelGap + rowWidth * panelScale;
+    const total: number = fieldPixels + panelGap + panelPixels;
     const left: number = x + (width - total) / 2;
 
+    viewHeight = height / panelScale;
     field.scale.set(fieldScale);
     field.position.set(Math.round(left), Math.round(y));
     panel.scale.set(panelScale);
@@ -245,13 +462,15 @@ function createPower(
       Math.round(left + fieldPixels + panelGap),
       Math.round(y),
     );
+    panelMask.clear().rect(0, 0, rowWidth, viewHeight).fill(0xffffff);
+    panel.hitArea = new Rectangle(0, 0, rowWidth, viewHeight);
     hint.scale.set(fieldScale);
-    sharpen(panel, panelScale * (window.devicePixelRatio || 1));
-    sharpen(hint, fieldScale * (window.devicePixelRatio || 1));
     hint.position.set(
       Math.round(left + fieldPixels / 2),
       Math.round(y + fieldHeight * fieldScale + hintGap * fieldScale),
     );
+    sharpen(panel, panelScale * (window.devicePixelRatio || 1));
+    sharpen(hint, fieldScale * (window.devicePixelRatio || 1));
   }
 
   function pressed(keys: Array<string>): boolean {
@@ -335,10 +554,19 @@ function createPower(
   summary.anchor.set(0.5);
   summary.position.set(rowWidth / 2, rowHeight / 2);
   summaryRow.addChild(summary);
-  panel.addChild(
+  content.addChild(
     ...controls.map((control: Control) => control.view),
     reset.view,
   );
+  panel.addChild(content, panelMask, scrollBar);
+  content.mask = panelMask;
+  panel.eventMode = "static";
+  panel.on("wheel", (event: FederatedWheelEvent) => {
+    scrollTarget = Math.min(
+      Math.max(scrollTarget + event.deltaY / panel.scale.y, 0),
+      maxScroll(),
+    );
+  });
   view.addChild(field, panel, hint);
   refresh();
 
@@ -375,6 +603,10 @@ function createPower(
   });
 
   app.ticker.add((ticker: Ticker) => {
+    if (view.visible) {
+      animate(Math.min(ticker.deltaMS / 1000, maxDelta));
+    }
+
     if (active) {
       update(Math.min(ticker.deltaMS / 1000, maxDelta));
     }

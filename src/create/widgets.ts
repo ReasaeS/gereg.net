@@ -352,6 +352,7 @@ function createColors(
   const view: Container = createRow(name);
   const swatches: Graphics = new Graphics();
   const size: number = (rowWidth + swatchGap) / colors.length - swatchGap;
+  const height: number = Math.min(size, chipHeight);
 
   function refresh(): void {
     swatches.clear();
@@ -360,11 +361,11 @@ function createColors(
       const x: number = index * (size + swatchGap);
       const color: string = colors[index]!;
 
-      swatches.rect(x, -size / 2, size, size).fill(color);
+      swatches.rect(x, -height / 2, size, height).fill(color);
 
       if (color === get()) {
         swatches
-          .rect(x, -size / 2, size, size)
+          .rect(x, -height / 2, size, height)
           .stroke({ color: getTheme().highlight, width: 1.5, alignment: 0 });
       }
     }
@@ -373,7 +374,7 @@ function createColors(
   swatches.position.set(0, controlY);
   swatches.eventMode = "static";
   swatches.cursor = "pointer";
-  swatches.hitArea = new Rectangle(0, -size / 2, rowWidth, size);
+  swatches.hitArea = new Rectangle(0, -height / 2, rowWidth, height);
   swatches.on("pointertap", (event: FederatedPointerEvent) => {
     const x: number = swatches.toLocal(event.global).x;
     const index: number = Math.floor(x / (size + swatchGap));

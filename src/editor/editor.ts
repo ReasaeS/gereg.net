@@ -642,7 +642,7 @@ function createEditor(app: Application): Editor {
     const target: Drawing = drawings[index]!;
     const button: Button = createButton(
       target.name,
-      () => drawing === target,
+      () => !powering && drawing === target,
       () => selectDrawing(index),
     );
     button.view.x = index * (buttonWidth + buttonGap);

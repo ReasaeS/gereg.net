@@ -1,10 +1,18 @@
-import { Graphics } from "pixi.js";
+import { Graphics, type StrokeStyle } from "pixi.js";
 import { archetype, type BombKind } from "./archetype";
 
 type Style = {
   duration: number; // s
   damage: number; // per s
-  color: string;
+};
+
+type Look = {
+  glow: string;
+  ring: string;
+  ringWidth: number; // units
+  rings: number;
+  tint: string;
+  tintAlpha: number;
 };
 
 type Bomb = {
@@ -26,17 +34,85 @@ const afterGrace: number = 1; // s
 const fadeTime: number = 0.3; // s
 const sealGrow: number = 0.8; // s
 const sealReach: number = 620; // units
-const sealRings: number = 3;
 const sealGap: number = 26; // units
 const sparkWidth: number = 110; // units
 const sparkGrow: number = 0.2; // s
 const sparkCore: number = 0.4; // of width
 const burstRing: number = 0.5; // s
+const burstStagger: number = 0.12; // s
+const tintFade: number = 0.2; // s
+const storageKey: string = "geregnet.bombLooks";
+const kinds: Array<BombKind> = ["seal", "spark", "burst"];
 const styles: Record<BombKind, Style> = {
-  seal: { duration: 2.5, damage: 24, color: "#ff6fd8" },
-  spark: { duration: 3, damage: 40, color: "#fff27a" },
-  burst: { duration: 1.2, damage: 15, color: "#7ad8ff" },
+  seal: { duration: 2.5, damage: 24 },
+  spark: { duration: 3, damage: 40 },
+  burst: { duration: 1.2, damage: 15 },
 };
+let looks: Record<BombKind, Look> = loadLooks();
+
+function defaultLooks(): Record<BombKind, Look> {
+  return {
+    seal: {
+      glow: "#ff6fd8",
+      ring: "#ffffff",
+      ringWidth: 3,
+      rings: 3,
+      tint: "#1a0a2e",
+      tintAlpha: 0.25,
+    },
+    spark: {
+      glow: "#fff27a",
+      ring: "#ffffff",
+      ringWidth: 2,
+      rings: 1,
+      tint: "#3a3000",
+      tintAlpha: 0.2,
+    },
+    burst: {
+      glow: "#7ad8ff",
+      ring: "#ffffff",
+      ringWidth: 4,
+      rings: 1,
+      tint: "#001a3a",
+      tintAlpha: 0.3,
+    },
+  };
+}
+
+function loadLooks(): Record<BombKind, Look> {
+  const fallback: Record<BombKind, Look> = defaultLooks();
+
+  try {
+    const saved: Partial<Record<BombKind, Partial<Look>>> = JSON.parse(
+      localStorage.getItem(storageKey) ?? "{}",
+    ) as Partial<Record<BombKind, Partial<Look>>>;
+
+    for (const kind of kinds) {
+      fallback[kind] = { ...fallback[kind], ...saved[kind] };
+    }
+
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveLooks(): void {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(looks));
+  } catch {
+    console.warn("Could not save the bomb looks");
+  }
+}
+
+function resetLooks(): void {
+  looks = defaultLooks();
+  saveLooks();
+}
+
+function bombLook(kind: BombKind): Look {
+  return looks[kind];
+}
 
 function createBomb(width: number, height: number): Bomb {
   const view: Graphics = new Graphics();
@@ -78,7 +154,12 @@ function createBomb(width: number, height: number): Bomb {
 
   function draw(): void {
     const alpha: number = Math.min(left / fadeTime, 1);
-    const color: string = style().color;
+    const look: Look = bombLook(kind);
+    const stroke: StrokeStyle = {
+      color: look.ring,
+      width: look.ringWidth,
+      alpha: 0.8 * alpha,
+    };
 
     view.clear();
 
@@ -86,35 +167,52 @@ function createBomb(width: number, height: number): Bomb {
       return;
     }
 
+    view.rect(0, 0, width, height).fill({
+      color: look.tint,
+      alpha: look.tintAlpha * Math.min(time / tintFade, 1) * alpha,
+    });
+
     if (kind === "seal") {
       const radius: number = sealRadius();
 
       view
         .circle(originX, originY, radius)
-        .fill({ color: color, alpha: 0.18 * alpha });
+        .fill({ color: look.glow, alpha: 0.18 * alpha });
 
-      for (let ring = 0; ring < sealRings; ring++) {
+      for (let ring = 0; ring < look.rings; ring++) {
         view.circle(originX, originY, Math.max(radius - ring * sealGap, 0));
       }
 
-      view.stroke({ color: "#ffffff", width: 3, alpha: 0.7 * alpha });
+      view.stroke(stroke);
     } else if (kind === "spark") {
       const half: number = sparkHalf();
 
       view
         .rect(originX - half, 0, half * 2, originY)
-        .fill({ color: color, alpha: 0.45 * alpha })
+        .fill({ color: look.glow, alpha: 0.45 * alpha })
         .rect(originX - half * sparkCore, 0, half * sparkCore * 2, originY)
-        .fill({ color: "#ffffff", alpha: 0.8 * alpha });
+        .fill({ color: look.ring, alpha: 0.8 * alpha })
+        .moveTo(originX - half, 0)
+        .lineTo(originX - half, originY)
+        .moveTo(originX + half, 0)
+        .lineTo(originX + half, originY)
+        .stroke(stroke);
     } else {
       const flash: number = left / style().duration;
-      const ring: number = Math.min(time / burstRing, 1);
 
       view
         .rect(0, 0, width, height)
-        .fill({ color: color, alpha: 0.35 * flash })
-        .circle(originX, originY, Math.hypot(width, height) * ring)
-        .stroke({ color: "#ffffff", width: 4, alpha: (1 - ring) * alpha });
+        .fill({ color: look.glow, alpha: 0.35 * flash });
+
+      for (let ring = 0; ring < look.rings; ring++) {
+        const spread: number = (time - ring * burstStagger) / burstRing;
+
+        if (spread > 0 && spread < 1) {
+          view
+            .circle(originX, originY, Math.hypot(width, height) * spread)
+            .stroke({ ...stroke, alpha: (1 - spread) * alpha });
+        }
+      }
     }
   }
 
@@ -175,5 +273,12 @@ function createBomb(width: number, height: number): Bomb {
   };
 }
 
-export { startBombs, deathbombWindow, createBomb };
-export type { Bomb };
+export {
+  startBombs,
+  deathbombWindow,
+  createBomb,
+  bombLook,
+  saveLooks,
+  resetLooks,
+};
+export type { Bomb, Look };
