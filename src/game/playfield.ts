@@ -20,6 +20,8 @@ import {
 import { cubicBezier, tween, type Easing } from "../effects/tween/tween";
 import { createClock, runClock, type Clock } from "./clock";
 import { createSelector, type Selector } from "./selector";
+import { createSquad, minPower, type Squad } from "./drones";
+import { archetype } from "./archetype";
 
 type Playfield = {
   view: Container;
@@ -32,8 +34,6 @@ type Playfield = {
 const fieldScreen: number = 1; // of screen size
 const fieldColor: string = "#01040f";
 const playerSize: number = 32; // units
-const playerSpeed: number = 300; // units/s
-const focusSpeed: number = 130; // units/s
 const playerStartY: number = 0.85; // of field height
 const hitboxRadius: number = 3; // units
 const hitboxColor: string = "#ff2a4d";
@@ -48,10 +48,12 @@ const rightKeys: Array<string> = ["ArrowRight", "KeyD"];
 const upKeys: Array<string> = ["ArrowUp", "KeyW"];
 const downKeys: Array<string> = ["ArrowDown", "KeyS"];
 const focusKeys: Array<string> = ["ShiftLeft", "ShiftRight"];
+const shotKeys: Array<string> = ["KeyZ"];
 
 async function createPlayfield(
   app: Application,
   texture: Texture,
+  droneTexture: Texture,
 ): Promise<Playfield> {
   const view: Container = new Container();
   const game: Container = new Container();
@@ -63,6 +65,7 @@ async function createPlayfield(
   const back: Graphics = new Graphics();
   const player: Sprite = new Sprite(texture);
   const hitbox: Graphics = new Graphics();
+  const squad: Squad = createSquad(droneTexture, fieldWidth, fieldHeight);
   const clock: Clock = createClock();
   const held: Set<string> = new Set();
   let active: boolean = false;
@@ -75,6 +78,10 @@ async function createPlayfield(
   function reset(): void {
     player.position.set(fieldWidth / 2, fieldHeight * playerStartY);
     held.clear();
+    squad.clear();
+    hud.stats.power = minPower;
+    squad.setPower(hud.stats.power);
+    hud.refresh();
   }
 
   function draw(): void {
@@ -106,7 +113,7 @@ async function createPlayfield(
   player.height = playerSize;
   fieldMask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
   field.position.set(fieldX, fieldY);
-  field.addChild(back, fieldMask, player, hitbox);
+  field.addChild(back, fieldMask, squad.shotLayer, player, squad.view, hitbox);
   field.mask = fieldMask;
   gameMask.rect(0, 0, hudWidth, hudHeight).fill(0xffffff);
   game.addChild(hud.view, selector.view, field, gameMask);
@@ -154,7 +161,7 @@ async function createPlayfield(
 
   function movePlayer(delta: number): void {
     const focused: boolean = pressed(focusKeys);
-    const speed: number = focused ? focusSpeed : playerSpeed;
+    const speed: number = focused ? archetype().focusSpeed : archetype().speed;
     let x: number = (pressed(rightKeys) ? 1 : 0) - (pressed(leftKeys) ? 1 : 0);
     let y: number = (pressed(downKeys) ? 1 : 0) - (pressed(upKeys) ? 1 : 0);
 
@@ -175,6 +182,8 @@ async function createPlayfield(
     );
     hitbox.position.copyFrom(player.position);
     hitbox.visible = focused;
+    squad.setPower(hud.stats.power);
+    squad.update(delta, player.x, player.y, focused, pressed(shotKeys));
   }
 
   function openSelector(): Promise<void> {
@@ -263,8 +272,6 @@ async function createPlayfield(
 
 export {
   leaveDuration,
-  playerSpeed,
-  focusSpeed,
   hitboxRadius,
   hitboxColor,
   leftKeys,
@@ -272,6 +279,7 @@ export {
   upKeys,
   downKeys,
   focusKeys,
+  shotKeys,
   createPlayfield,
 };
 export type { Playfield };

@@ -12,7 +12,7 @@ import {
   type Application,
   type Ticker,
 } from "pixi.js";
-import { playerTexture } from "../editor/editor";
+import { droneTexture, playerTexture } from "../editor/editor";
 import { createBackdrop, type Backdrop } from "./backdrop";
 import { drawSound, importAudio, loadAudio, playSound } from "./sound";
 import { createScene, type Scene } from "./cutscene";
@@ -55,12 +55,16 @@ import {
   wallAngle,
   defaultBackground,
   defaultRing,
+  defaultSigil,
   defaultSpell,
+  repairSpells,
+  limitBars,
   defaultSound,
   defaultEmotion,
   defaultCharacter,
   defaultCutscene,
   defaultEnemy,
+  defaultBar,
   defaultPattern,
   defaultKeyframe,
   defaultStage,
@@ -70,18 +74,19 @@ import {
   usedFiles,
   type Background,
   type Difficulty,
-  type Frame,
   type Wall,
   type Curve,
   type Wave,
   type Rank,
   type Creations,
   type Enemy,
+  type Bar,
   type Vector,
   type Pattern,
   type Keyframe,
   type Ring,
   type Spawn,
+  type Sigil,
   type Spell,
   type Sound,
   type Cutscene,
@@ -128,9 +133,10 @@ import {
 import {
   cosmetics,
   difficulties,
-  frames,
+  attacks,
   defaultName,
   ranks,
+  type Attack,
   type Cosmetic,
   type Rarity,
 } from "./rarity";
@@ -140,6 +146,7 @@ const kindWords: Map<Kind, string> = new Map([
   ["pattern", "Pattern"],
   ["enemy", "Enemy"],
   ["background", "Background"],
+  ["sigil", "Sigil"],
   ["spell", "Spell"],
   ["sound", "Sound"],
   ["character", "Character"],
@@ -220,7 +227,9 @@ const spinLimit: number = 180; // deg/s
 const speedNames: Array<string> = derivativeNames.slice(1);
 const transportWidth: number = 24; // units
 const playtestWidth: number = 98; // units
+const shotKeys: Array<string> = ["KeyZ"];
 const movementKeys: Array<string> = [
+  ...shotKeys,
   ...leftKeys,
   ...rightKeys,
   ...upKeys,
@@ -334,10 +343,21 @@ async function createMaker(app: Application): Promise<PageContent> {
   const panelBack: Graphics = new Graphics();
   const frameMask: Graphics = new Graphics();
   let frameScale: number = 1;
-  const preview: Preview = await createPreview(playerTexture(), backgroundById);
+  const preview: Preview = await createPreview(
+    playerTexture(),
+    droneTexture(),
+    backgroundById,
+    sigilById,
+    spellById,
+    patternById,
+  );
   const cardPreview: Preview = await createPreview(
     playerTexture(),
+    droneTexture(),
     backgroundById,
+    sigilById,
+    spellById,
+    patternById,
   );
   const cardTicks: Clock = createClock();
   const creations: Creations = loadCreations();
@@ -351,6 +371,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   let spawnIndex: number = 0;
   let keyIndex: number = 0;
   let ringIndex: number = 0;
+  let barIndex: number = 0;
   let emotionIndex: number = 0;
 
   function selection(name: string): number {
@@ -375,6 +396,10 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function sound(): Sound {
     return creations.sounds[selection("sound")]!;
+  }
+
+  function sigil(): Sigil {
+    return creations.sigils[selection("sigil")]!;
   }
 
   function spell(): Spell {
@@ -432,10 +457,22 @@ async function createMaker(app: Application): Promise<PageContent> {
     return creations.sounds.find((value: Sound) => value.id === id) ?? null;
   }
 
-  function ring(): Ring {
-    ringIndex = Math.min(ringIndex, spell().rings.length - 1);
+  function bar(): Bar {
+    barIndex =
+      enemy().rank !== "boss" ? 0 : Math.min(barIndex, enemy().bars.length - 1);
 
-    return spell().rings[ringIndex]!;
+    return enemy().bars[barIndex]!;
+  }
+
+  function selectBar(index: number): void {
+    barIndex = index;
+    refresh();
+  }
+
+  function ring(): Ring {
+    ringIndex = Math.min(ringIndex, sigil().rings.length - 1);
+
+    return sigil().rings[ringIndex]!;
   }
 
   function keyframe(): Keyframe {
@@ -468,16 +505,12 @@ async function createMaker(app: Application): Promise<PageContent> {
     return creations.spells.find((value: Spell) => value.id === id) ?? null;
   }
 
-  function spellOf(value: Enemy): Spell | null {
-    return value.rank === "regular" ? null : spellById(value.spell);
+  function sigilById(id: string | null): Sigil | null {
+    return creations.sigils.find((value: Sigil) => value.id === id) ?? null;
   }
 
-  function resolve(value: Spawn): [Enemy, Pattern | null, Spell | null] | null {
-    const found: Enemy | null = enemyById(value.enemy);
-
-    return found === null
-      ? null
-      : [found, patternById(found.pattern), spellOf(found)];
+  function resolve(value: Spawn): Enemy | null {
+    return enemyById(value.enemy);
   }
 
   function rarityOptions<T>(list: Array<Rarity<T>>): () => Array<Option<T>> {
@@ -680,6 +713,92 @@ async function createMaker(app: Application): Promise<PageContent> {
         cutsceneItem.voice = null;
       }
     }
+
+    for (const spellItem of creations.spells) {
+      if (spellItem.background === id) {
+        spellItem.background = null;
+      }
+
+      if (spellItem.pattern === id) {
+        spellItem.pattern = null;
+      }
+    }
+
+    repairSpells(creations);
+  }
+
+  const attackKeys: Map<Kind, number> = new Map();
+
+  function keyed(kind: Kind, list: Array<Control>): Array<Control> {
+    attackKeys.set(kind, sections - 1);
+
+    return list;
+  }
+
+  function convertAttack(to: Attack): void {
+    const item: Item = current();
+    const from: Kind = tab.name as Kind;
+    const kind: Kind = to === "spell" ? "spell" : "pattern";
+    let index: number;
+
+    if (from === "pattern" && to !== "spell") {
+      pattern().frame = to;
+      renameDefault("pattern", pattern());
+      return;
+    }
+
+    if (from === "spell" && to === "spell") {
+      return;
+    }
+
+    listOf(from).splice(tab.selected, 1);
+
+    for (const enemyItem of creations.enemies) {
+      if (enemyItem.pattern === item.id) {
+        enemyItem.pattern = null;
+      }
+
+      for (const barItem of enemyItem.bars) {
+        if (barItem.spell === item.id) {
+          barItem.spell = null;
+        }
+      }
+    }
+
+    forgetCosmetic(item.id);
+
+    if (to === "spell") {
+      if (creations.sigils.length === 0) {
+        creations.sigils.push({ ...defaultSigil(), name: "Sigil 1" });
+      }
+
+      index = creations.spells.push({
+        ...defaultSpell(creations.sigils[0]!.id),
+        id: item.id,
+        name: item.name,
+      });
+    } else {
+      index = creations.patterns.push({
+        ...defaultPattern(),
+        frame: to,
+        id: item.id,
+        name: item.name,
+      });
+    }
+
+    for (const value of tabs) {
+      value.selected = Math.max(
+        Math.min(value.selected, value.items().length - 1),
+        0,
+      );
+    }
+
+    renameDefault(kind, listOf(kind)[index - 1]!);
+    saveCreations(creations);
+    cleanup();
+    showItem(kind, index - 1);
+    sectionOpen.set(attackKeys.get(kind)!, true);
+    refresh();
   }
 
   function rarityKey(kind: Kind, item: Item): string {
@@ -734,17 +853,11 @@ async function createMaker(app: Application): Promise<PageContent> {
       }
     }
 
-    for (const enemyItem of creations.enemies) {
-      if (enemyItem.spell === item.id) {
-        enemyItem.spell = null;
-      }
-    }
-
     forgetCosmetic(item.id);
 
-    if (to === "spell") {
-      index = creations.spells.push({
-        ...defaultSpell(),
+    if (to === "sigil") {
+      index = creations.sigils.push({
+        ...defaultSigil(),
         id: item.id,
         name: item.name,
       });
@@ -908,109 +1021,110 @@ async function createMaker(app: Application): Promise<PageContent> {
         ],
         () => pattern().frame === "objective",
       ),
-      ...section("Aim", [
-        choice(
-          "Frame",
-          rarityOptions(frames),
-          () => pattern().frame,
-          (value: Frame) => {
-            pattern().frame = value;
-            renameDefault("pattern", pattern());
-          },
-        ),
-        {
-          ...choice(
-            "Wall",
-            () => wallOptions,
-            () => pattern().wall,
-            (value: Wall) => {
-              const turn: number = wallAngle(value) - wallAngle(pattern().wall);
-              const velocity: Vector = pattern().velocity;
+      ...keyed(
+        "pattern",
+        section("Aim", [
+          choice(
+            "Frame",
+            rarityOptions(attacks),
+            () => pattern().frame as Attack,
+            (value: Attack) => convertAttack(value),
+          ),
+          {
+            ...choice(
+              "Wall",
+              () => wallOptions,
+              () => pattern().wall,
+              (value: Wall) => {
+                const turn: number =
+                  wallAngle(value) - wallAngle(pattern().wall);
+                const velocity: Vector = pattern().velocity;
 
-              pattern().velocity = {
-                x: Math.round(
-                  velocity.x * Math.cos(turn) - velocity.y * Math.sin(turn),
-                ),
-                y: Math.round(
-                  velocity.x * Math.sin(turn) + velocity.y * Math.cos(turn),
-                ),
-              };
-              pattern().wall = value;
-            },
+                pattern().velocity = {
+                  x: Math.round(
+                    velocity.x * Math.cos(turn) - velocity.y * Math.sin(turn),
+                  ),
+                  y: Math.round(
+                    velocity.x * Math.sin(turn) + velocity.y * Math.cos(turn),
+                  ),
+                };
+                pattern().wall = value;
+              },
+            ),
+            shown: () => pattern().frame === "objective",
+          },
+          {
+            ...choice(
+              "Aim",
+              () => aimOptions,
+              () => pattern().aim,
+              (value: boolean) => {
+                pattern().aim = value;
+              },
+            ),
+            shown: () => pattern().frame === "subjective",
+          },
+          {
+            ...slider(
+              "Angle",
+              -180,
+              180,
+              5,
+              () => pattern().heading,
+              (value: number) => {
+                pattern().heading = value;
+              },
+            ),
+            shown: () => pattern().frame === "subjective" && !pattern().aim,
+          },
+          {
+            ...choice(
+              "Mode",
+              () => curveOptions,
+              () => pattern().aimCurve,
+              (value: Curve) => {
+                pattern().aimCurve = value;
+              },
+            ),
+            shown: () => pattern().frame === "subjective",
+          },
+          ...derivativeNames.map((name: string, order: number) => ({
+            ...slider(
+              name,
+              -angleLimit,
+              angleLimit,
+              5,
+              () => pattern().angleDerivatives[order] ?? 0,
+              (value: number) => {
+                pattern().angleDerivatives[order] = value;
+              },
+            ),
+            shown: () =>
+              pattern().frame === "subjective" &&
+              pattern().aimCurve === "polynomial" &&
+              pattern().angleDerivatives.length > order,
+          })),
+          {
+            ...derivativeActions(
+              () => pattern().angleDerivatives,
+              derivativeNames,
+              () => 0,
+            ),
+            shown: () =>
+              pattern().frame === "subjective" &&
+              pattern().aimCurve === "polynomial",
+          },
+          ...waveRows(
+            () => pattern().aimWaves,
+            (name: string, get: () => number, set: (value: number) => void) =>
+              slider(name, -phaseLimit, phaseLimit, 5, get, set),
+            () => angleAmplitude,
+            () =>
+              pattern().frame === "subjective" &&
+              pattern().aimCurve === "sinusoidal",
           ),
-          shown: () => pattern().frame === "objective",
-        },
-        {
-          ...choice(
-            "Aim",
-            () => aimOptions,
-            () => pattern().aim,
-            (value: boolean) => {
-              pattern().aim = value;
-            },
-          ),
-          shown: () => pattern().frame === "subjective",
-        },
-        {
-          ...slider(
-            "Angle",
-            -180,
-            180,
-            5,
-            () => pattern().heading,
-            (value: number) => {
-              pattern().heading = value;
-            },
-          ),
-          shown: () => pattern().frame === "subjective" && !pattern().aim,
-        },
-        {
-          ...choice(
-            "Mode",
-            () => curveOptions,
-            () => pattern().aimCurve,
-            (value: Curve) => {
-              pattern().aimCurve = value;
-            },
-          ),
-          shown: () => pattern().frame === "subjective",
-        },
-        ...derivativeNames.map((name: string, order: number) => ({
-          ...slider(
-            name,
-            -angleLimit,
-            angleLimit,
-            5,
-            () => pattern().angleDerivatives[order] ?? 0,
-            (value: number) => {
-              pattern().angleDerivatives[order] = value;
-            },
-          ),
-          shown: () =>
-            pattern().frame === "subjective" &&
-            pattern().aimCurve === "polynomial" &&
-            pattern().angleDerivatives.length > order,
-        })),
-        {
-          ...derivativeActions(
-            () => pattern().angleDerivatives,
-            derivativeNames,
-            () => 0,
-          ),
-          shown: () =>
-            pattern().frame === "subjective" &&
-            pattern().aimCurve === "polynomial",
-        },
-        ...waveRows(
-          () => pattern().aimWaves,
-          (name: string, get: () => number, set: (value: number) => void) =>
-            slider(name, -phaseLimit, phaseLimit, 5, get, set),
-          () => angleAmplitude,
-          () =>
-            pattern().frame === "subjective" &&
-            pattern().aimCurve === "sinusoidal",
-        ),
-      ]),
+        ]),
+      ),
       ...section("Fire", [
         slider(
           "Rate",
@@ -1165,17 +1279,8 @@ async function createMaker(app: Application): Promise<PageContent> {
           () => enemy().rank,
           (value: Rank) => {
             enemy().rank = value;
+            limitBars(enemy());
             renameDefault("enemy", enemy());
-          },
-        ),
-        slider(
-          "Health",
-          1,
-          200,
-          1,
-          () => enemy().health,
-          (value: number) => {
-            enemy().health = value;
           },
         ),
         choice(
@@ -1192,6 +1297,72 @@ async function createMaker(app: Application): Promise<PageContent> {
             enemy().pattern = value;
           },
         ),
+      ]),
+      ...section("Stages", [
+        {
+          ...actionRow(
+            "Add stage",
+            () => {
+              enemy().bars.push({
+                ...defaultBar(bar().health),
+                time: bar().time,
+              });
+              changed();
+              selectBar(enemy().bars.length - 1);
+            },
+            "Remove stage",
+            () => {
+              if (enemy().bars.length <= 1) {
+                return;
+              }
+
+              enemy().bars.splice(barIndex, 1);
+              changed();
+              selectBar(Math.max(barIndex - 1, 0));
+            },
+          ),
+          shown: () => enemy().rank === "boss",
+        },
+        {
+          ...choice(
+            "Stage",
+            () =>
+              enemy().bars.map((value: Bar, index: number) => ({
+                value: index,
+                label:
+                  "Stage " +
+                  (index + 1) +
+                  "  ·  " +
+                  (spellById(value.spell)?.name ?? "No spell"),
+              })),
+            () => barIndex,
+            (value: number) => selectBar(value),
+          ),
+          shown: () => enemy().rank === "boss",
+        },
+        slider(
+          "Health",
+          1,
+          200,
+          1,
+          () => bar().health,
+          (value: number) => {
+            bar().health = value;
+          },
+        ),
+        {
+          ...slider(
+            "Time limit",
+            0,
+            120,
+            1,
+            () => bar().time,
+            (value: number) => {
+              bar().time = value;
+            },
+          ),
+          shown: () => enemy().rank !== "regular",
+        },
         {
           ...choice(
             "Spell",
@@ -1202,9 +1373,9 @@ async function createMaker(app: Application): Promise<PageContent> {
                 label: value.name,
               })),
             ],
-            () => enemy().spell,
+            () => bar().spell,
             (value: string | null) => {
-              enemy().spell = value;
+              bar().spell = value;
             },
           ),
           shown: () => enemy().rank !== "regular",
@@ -1214,7 +1385,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => {
       preview.setBackground(null);
       preview.setPlayerVisible(false);
-      preview.setEnemy(enemy(), patternById(enemy().pattern), spellOf(enemy()));
+      bar();
+      preview.setEnemy(enemy(), barIndex);
     },
   );
 
@@ -1439,14 +1611,77 @@ async function createMaker(app: Application): Promise<PageContent> {
     "spell",
     () => creations.spells,
     [
-      ...cosmeticSection("spell"),
+      ...keyed(
+        "spell",
+        section("Spell", [
+          choice(
+            "Type",
+            rarityOptions(attacks),
+            () => "spell" as Attack,
+            (value: Attack) => convertAttack(value),
+          ),
+          choice(
+            "Sigil",
+            () =>
+              creations.sigils.map((value: Sigil) => ({
+                value: value.id,
+                label: value.name,
+              })),
+            () => spell().sigil,
+            (value: string) => {
+              spell().sigil = value;
+            },
+          ),
+          choice(
+            "Background",
+            () => [
+              { value: null, label: "None" },
+              ...creations.backgrounds.map((value: Background) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => spell().background,
+            (value: string | null) => {
+              spell().background = value;
+            },
+          ),
+          choice(
+            "Pattern",
+            () => [
+              { value: null, label: "Enemy pattern" },
+              ...creations.patterns.map((value: Pattern) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => spell().pattern,
+            (value: string | null) => {
+              spell().pattern = value;
+            },
+          ),
+        ]),
+      ),
+    ],
+    () => {
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setSpell(spell(), patternById(spell().pattern));
+    },
+  );
+
+  addTab(
+    "sigil",
+    () => creations.sigils,
+    [
+      ...cosmeticSection("sigil"),
       ...section("Look", [
         colors(
           "Colour",
           brightColors,
-          () => spell().color,
+          () => sigil().color,
           (value: string) => {
-            spell().color = value;
+            sigil().color = value;
           },
         ),
         slider(
@@ -1454,23 +1689,9 @@ async function createMaker(app: Application): Promise<PageContent> {
           0.1,
           1,
           0.05,
-          () => spell().opacity,
+          () => sigil().opacity,
           (value: number) => {
-            spell().opacity = value;
-          },
-        ),
-        choice(
-          "Background",
-          () => [
-            { value: null, label: "None" },
-            ...creations.backgrounds.map((value: Background) => ({
-              value: value.id as string | null,
-              label: value.name,
-            })),
-          ],
-          () => spell().background,
-          (value: string | null) => {
-            spell().background = value;
+            sigil().opacity = value;
           },
         ),
       ]),
@@ -1478,9 +1699,9 @@ async function createMaker(app: Application): Promise<PageContent> {
         actionRow(
           "Add ring",
           () => {
-            const source: Ring | undefined = spell().rings[ringIndex];
+            const source: Ring | undefined = sigil().rings[ringIndex];
 
-            spell().rings.push(
+            sigil().rings.push(
               source === undefined
                 ? defaultRing()
                 : {
@@ -1490,15 +1711,15 @@ async function createMaker(app: Application): Promise<PageContent> {
                   },
             );
             changed();
-            selectRing(spell().rings.length - 1);
+            selectRing(sigil().rings.length - 1);
           },
           "Remove ring",
           () => {
-            if (spell().rings.length <= 1) {
+            if (sigil().rings.length <= 1) {
               return;
             }
 
-            spell().rings.splice(ringIndex, 1);
+            sigil().rings.splice(ringIndex, 1);
             changed();
             selectRing(Math.max(ringIndex - 1, 0));
           },
@@ -1506,7 +1727,7 @@ async function createMaker(app: Application): Promise<PageContent> {
         choice(
           "Ring",
           () =>
-            spell().rings.map((value: Ring, index: number) => ({
+            sigil().rings.map((value: Ring, index: number) => ({
               value: index,
               label: "Ring " + (index + 1) + "  ·  " + value.radius,
             })),
@@ -1582,7 +1803,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => {
       preview.setBackground(null);
       preview.setPlayerVisible(false);
-      preview.setSpell(spell());
+      preview.setSigil(sigil());
     },
   );
 
@@ -1726,7 +1947,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
       preview.setBackground(null);
       preview.setPlayerVisible(false);
-      preview.setSpell(null);
+      preview.setSigil(null);
       plotSound(value);
       void loadAudio(value.file).then(() => {
         if (tab.name === "sound" && sound() === value) {
@@ -1898,7 +2119,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => {
       preview.setBackground(null);
       preview.setPlayerVisible(false);
-      preview.setSpell(null);
+      preview.setSigil(null);
       playScene();
     },
   );
@@ -1953,7 +2174,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => {
       preview.setBackground(null);
       preview.setPlayerVisible(false);
-      preview.setSpell(null);
+      preview.setSigil(null);
       playScene();
     },
   );
@@ -2518,9 +2739,13 @@ async function createMaker(app: Application): Promise<PageContent> {
     } else if (kind === "enemy") {
       const value: Enemy = item as Enemy;
 
-      cardPreview.setEnemy(value, patternById(value.pattern), spellOf(value));
+      cardPreview.setEnemy(value, null);
+    } else if (kind === "sigil") {
+      cardPreview.setSigil(item as Sigil);
     } else if (kind === "spell") {
-      cardPreview.setSpell(item as Spell);
+      const value: Spell = item as Spell;
+
+      cardPreview.setSpell(value, patternById(value.pattern));
     } else if (kind === "background") {
       cardPreview.setBackground(item as Background);
       cardPreview.setPattern(null);
@@ -2582,8 +2807,10 @@ async function createMaker(app: Application): Promise<PageContent> {
         enemyItem.pattern = null;
       }
 
-      if (enemyItem.spell === item.id) {
-        enemyItem.spell = null;
+      for (const barItem of enemyItem.bars) {
+        if (barItem.spell === item.id) {
+          barItem.spell = null;
+        }
       }
     }
 
@@ -2654,6 +2881,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     spawnIndex = 0;
     keyIndex = 0;
     ringIndex = 0;
+    barIndex = 0;
     emotionIndex = 0;
     sectionOpen.clear();
     laidOut = null;
@@ -2927,7 +3155,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       y *= Math.SQRT1_2;
     }
 
-    preview.steer(x, y, heldAny(focusKeys));
+    preview.steer(x, y, heldAny(focusKeys), heldAny(shotKeys));
   }
 
   function pause(): void {

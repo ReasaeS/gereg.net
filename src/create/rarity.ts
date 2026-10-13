@@ -1,6 +1,8 @@
 import type { Difficulty, Frame, Rank } from "./data";
 
-type Cosmetic = "background" | "spell" | "sound" | "character" | "cutscene";
+type Cosmetic = "background" | "sigil" | "sound" | "character" | "cutscene";
+
+type Attack = Frame | "spell";
 
 type Rarity<T> = {
   value: T;
@@ -18,7 +20,7 @@ const difficulties: Array<Rarity<Difficulty>> = [
 
 const cosmetics: Array<Rarity<Cosmetic>> = [
   { value: "background", label: "Background", color: "#7ad8ff", tier: 1 },
-  { value: "spell", label: "Spell", color: "#ff3b3b", tier: 2 },
+  { value: "sigil", label: "Sigil", color: "#ff3b3b", tier: 2 },
   { value: "sound", label: "SFX", color: "#b48cff", tier: 3 },
   { value: "cutscene", label: "Cutscene", color: "#7ae38f", tier: 4 },
   { value: "character", label: "Character", color: "#ffb347", tier: 5 },
@@ -30,17 +32,18 @@ const ranks: Array<Rarity<Rank>> = [
   { value: "boss", label: "Boss", color: "#ffb347", tier: 3 },
 ];
 
-const frames: Array<Rarity<Frame>> = [
+const attacks: Array<Rarity<Attack>> = [
   { value: "objective", label: "Objective", color: "#7ae38f", tier: 1 },
   { value: "subjective", label: "Subjective", color: "#ffb347", tier: 2 },
+  { value: "spell", label: "Spell", color: "#ff6fd8", tier: 3 },
 ];
 
 const defaultName: RegExp =
-  /^(Stage|Pattern|Enemy|Background|Spell|Sound|Character|Cutscene) (\d+)$/;
+  /^(Stage|Pattern|Enemy|Background|Sigil|Spell|Sound|Character|Cutscene) (\d+)$/;
 
 function rarityOf<T>(list: Array<Rarity<T>>, value: T): Rarity<T> {
   return list.find((entry: Rarity<T>) => entry.value === value) ?? list[0]!;
 }
 
-export { difficulties, cosmetics, ranks, frames, defaultName, rarityOf };
-export type { Cosmetic, Rarity };
+export { difficulties, cosmetics, ranks, attacks, defaultName, rarityOf };
+export type { Attack, Cosmetic, Rarity };

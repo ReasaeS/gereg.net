@@ -93,6 +93,11 @@ const menuColors: Map<string, string | null> = new Map([
   ["O", "#ffb347"],
 ]);
 
+const droneRadius: number = 13; // px
+const droneLight: string = "#ffffff";
+const droneDark: string = "#ff3b3b";
+const droneOutline: string = "#1d1d2b";
+
 function toColor(hex: string): number {
   return ((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0;
 }
@@ -125,4 +130,37 @@ function drawMenuDefault(pixels: Pixels): void {
   drawArt(pixels, menuRows, menuColors);
 }
 
-export { drawGameDefault, drawMenuDefault };
+function drawDroneDefault(pixels: Pixels): void {
+  const center: number = (pixels.size - 1) / 2;
+  const radius: number = droneRadius;
+  const half: number = radius / 2;
+
+  pixels.data.fill(0);
+
+  for (let y = 0; y < pixels.size; y++) {
+    for (let x = 0; x < pixels.size; x++) {
+      const distance: number = Math.hypot(x - center, y - center);
+      const top: number = Math.hypot(x - center, y - (center - half));
+      const bottom: number = Math.hypot(x - center, y - (center + half));
+      let color: string = x < center ? droneLight : droneDark;
+
+      if (distance > radius + 0.5) {
+        continue;
+      }
+
+      if (top < half) {
+        color = top < half / 3 ? droneLight : droneDark;
+      } else if (bottom < half) {
+        color = bottom < half / 3 ? droneDark : droneLight;
+      }
+
+      if (distance > radius - 1) {
+        color = droneOutline;
+      }
+
+      setPixel(pixels, x, y, toColor(color));
+    }
+  }
+}
+
+export { drawGameDefault, drawMenuDefault, drawDroneDefault };

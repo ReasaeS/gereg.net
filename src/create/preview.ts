@@ -5,45 +5,42 @@ import {
   Graphics,
   Rectangle,
   Sprite,
+  Text,
   Texture,
   TilingSprite,
 } from "pixi.js";
+import { createSquad, type Squad, type Target } from "../game/drones";
 import { getTexture } from "./images";
 import type {
   Background,
+  Bar,
   Curve,
   Enemy,
   Vector,
   Pattern,
   Spawn,
+  Sigil,
   Spell,
   Stage,
   Wave,
 } from "./data";
 import { placeAlong, solidSpans } from "./data";
-import { drawSpell } from "./sigil";
-import {
-  focusSpeed,
-  hitboxColor,
-  hitboxRadius,
-  playerSpeed,
-} from "../game/playfield";
+import { drawSigil } from "./sigil";
+import { hitboxColor, hitboxRadius } from "../game/playfield";
+import { archetype } from "../game/archetype";
 
 type Path = Pick<Spawn, "curve" | "derivatives" | "waves">;
 
-type Resolve = (spawn: Spawn) => [Enemy, Pattern | null, Spell | null] | null;
+type Resolve = (spawn: Spawn) => Enemy | null;
 
 type Preview = {
   view: Container;
   overlay: Container;
   setBackground: (background: Background | null) => void;
   setPattern: (pattern: Pattern | null) => void;
-  setEnemy: (
-    enemy: Enemy | null,
-    pattern: Pattern | null,
-    spell: Spell | null,
-  ) => void;
-  setSpell: (spell: Spell | null) => void;
+  setEnemy: (enemy: Enemy | null, bar: number | null) => void;
+  setSigil: (sigil: Sigil | null) => void;
+  setSpell: (spell: Spell | null, attack: Pattern | null) => void;
   setStage: (stage: Stage | null, resolve: Resolve) => void;
   seek: (time: number) => void;
   setPlayerVisible: (visible: boolean) => void;
@@ -53,7 +50,7 @@ type Preview = {
   clear: () => void;
   update: (delta: number) => void;
   setPlaytest: (on: boolean) => void;
-  steer: (x: number, y: number, focused: boolean) => void;
+  steer: (x: number, y: number, focused: boolean, shooting: boolean) => void;
   hits: () => number;
 };
 
@@ -103,6 +100,26 @@ type Actor = {
   time: number; // s
   facing: number; // rad
   emitter: Emitter;
+  bar: number;
+  barTime: number; // s
+  locked: boolean;
+  staged: boolean;
+  hp: number;
+  fill: number;
+  dead: boolean;
+};
+
+type BossHud = {
+  view: Container;
+  graphics: Graphics;
+  stages: Text;
+  timer: Text;
+  name: Text;
+  stars: Text;
+  spell: Text;
+  tag: Container;
+  tagBack: Graphics;
+  tagText: Text;
 };
 
 type Sky = {
@@ -141,6 +158,26 @@ const actorMargin: number = 60; // units
 const actorGrace: number = 2; // s
 const healthWidth: number = 36; // units
 const healthHeight: number = 3; // units
+const healthScale: number = 200;
+const pipSize: number = 3; // units
+const pipGap: number = 2; // units
+const barLeft: number = 22; // units
+const barRight: number = previewWidth - 34; // units
+const barTop: number = 6; // units
+const barHeight: number = 4; // units
+const hudMargin: number = 6; // units
+const hudResolution: number = 3;
+const fillTime: number = 1; // s
+const hurryTime: number = 10; // s
+const spellTop: number = 24; // units
+const spellPadding: number = 4; // units
+const tagPadding: number = 3; // units
+const hudFont: Array<string> = [
+  "Barlow Condensed",
+  "Arial Black",
+  "Impact",
+  "sans-serif",
+];
 const seekLookback: number = 8; // s
 const seekStep: number = 1 / 30; // s
 const patternLimit: number = 3600; // s
@@ -363,9 +400,82 @@ function paintSky(sky: Sky): void {
   sky.fill.rect(0, 0, previewWidth, previewHeight).fill(sky.gradient);
 }
 
+function hudText(size: number, color: string): Text {
+  return new Text({
+    text: "",
+    resolution: hudResolution,
+    style: {
+      fontFamily: hudFont,
+      fontSize: size,
+      fontStyle: "italic",
+      fontWeight: "900",
+      fill: color,
+      dropShadow: {
+        color: "#000000",
+        alpha: 0.85,
+        blur: 0,
+        distance: 1,
+        angle: Math.PI / 3,
+      },
+    },
+  });
+}
+
+function createBossHud(): BossHud {
+  const hud: BossHud = {
+    view: new Container(),
+    graphics: new Graphics(),
+    stages: hudText(12, "#ffffff"),
+    timer: hudText(14, "#ffffff"),
+    name: hudText(9, "#9fd8ff"),
+    stars: hudText(9, "#ffd84a"),
+    spell: hudText(11, "#ffffff"),
+    tag: new Container(),
+    tagBack: new Graphics(),
+    tagText: hudText(8, "#ff8a80"),
+  };
+
+  hud.stages.anchor.set(0, 0.5);
+  hud.stages.position.set(hudMargin, barTop + barHeight / 2);
+  hud.timer.anchor.set(1, 0.5);
+  hud.timer.position.set(previewWidth - hudMargin, barTop + barHeight / 2);
+  hud.name.position.set(barLeft, barTop + barHeight + 3);
+  hud.stars.y = hud.name.y;
+  hud.spell.anchor.set(1, 0);
+  hud.spell.position.set(previewWidth - hudMargin - spellPadding, spellTop);
+  hud.tagText.text = "ENEMY";
+  hud.tagText.anchor.set(0.5, 1);
+  hud.tagBack
+    .rect(
+      -hud.tagText.width / 2 - tagPadding,
+      -hud.tagText.height - tagPadding / 2,
+      hud.tagText.width + tagPadding * 2,
+      hud.tagText.height + tagPadding / 2,
+    )
+    .fill({ color: "#000000", alpha: 0.6 });
+  hud.tag.addChild(hud.tagBack, hud.tagText);
+  hud.tag.y = previewHeight;
+  hud.view.addChild(
+    hud.graphics,
+    hud.stages,
+    hud.timer,
+    hud.name,
+    hud.stars,
+    hud.spell,
+    hud.tag,
+  );
+  hud.view.visible = false;
+
+  return hud;
+}
+
 async function createPreview(
   playerTexture: Texture,
+  droneTexture: Texture,
   findBackground: (id: string | null) => Background | null,
+  findSigil: (id: string | null) => Sigil | null,
+  findSpell: (id: string | null) => Spell | null,
+  findPattern: (id: string | null) => Pattern | null,
 ): Promise<Preview> {
   const view: Container = new Container();
   const base: Sky = createSky();
@@ -374,6 +484,8 @@ async function createPreview(
   const coreLayer: Container = new Container();
   const actorLayer: Container = new Container();
   const overlay: Container = new Container();
+  const bossHud: BossHud = createBossHud();
+  const squad: Squad = createSquad(droneTexture, previewWidth, previewHeight);
   const sigil: Graphics = new Graphics();
   const player: Sprite = new Sprite(playerTexture);
   const hitbox: Graphics = new Graphics();
@@ -387,6 +499,7 @@ async function createPreview(
   let blend: number = 0;
   let pattern: Pattern | null = null;
   let spell: Spell | null = null;
+  let shown: Sigil | null = null;
   let spellTime: number = 0;
   let stage: Stage | null = null;
   let resolve: Resolve = () => null;
@@ -395,6 +508,7 @@ async function createPreview(
   let time: number = 0;
   let playtest: boolean = false;
   let focused: boolean = false;
+  let shooting: boolean = false;
   let hitCount: number = 0;
   let grace: number = 0;
 
@@ -408,6 +522,7 @@ async function createPreview(
     .fill(hitboxColor)
     .stroke({ color: "#ffffff", width: 1 });
   hitbox.visible = false;
+  squad.view.visible = false;
   sigil.position.set(previewWidth / 2, previewHeight / 2);
   cover.view.visible = false;
   mask.rect(0, 0, previewWidth, previewHeight).fill(0xffffff);
@@ -415,11 +530,14 @@ async function createPreview(
     base.view,
     cover.view,
     sigil,
+    squad.shotLayer,
     player,
+    squad.view,
     actorLayer,
     bulletLayer,
     coreLayer,
     hitbox,
+    bossHud.view,
     overlay,
     mask,
   );
@@ -477,37 +595,226 @@ async function createPreview(
 
     drawShape(actor.body, enemy.color, enemy.size);
 
-    if (actor.spell === null) {
+    const found: Sigil | null = findSigil(actor.spell?.sigil ?? null);
+
+    if (found === null) {
       actor.sigil.clear();
     } else {
-      drawSpell(actor.sigil, actor.spell, actor.time);
+      drawSigil(actor.sigil, found, actor.time);
+    }
+
+    actor.health.clear();
+
+    if (enemy.rank !== "regular") {
+      return;
     }
 
     actor.health
-      .clear()
       .rect(-healthWidth / 2, -enemy.size / 2 - 8, healthWidth, healthHeight)
       .fill({ color: "#000000", alpha: 0.6 })
       .rect(
         -healthWidth / 2,
         -enemy.size / 2 - 8,
-        healthWidth * Math.min(enemy.health / 200, 1),
+        healthWidth *
+          Math.min((enemy.bars[actor.bar]?.health ?? 0) / healthScale, 1) *
+          Math.min(
+            Math.max(
+              actor.hp / Math.max(enemy.bars[actor.bar]?.health ?? 1, 1),
+              0,
+            ),
+            1,
+          ),
         healthHeight,
       )
       .fill("#ff3b3b");
+
+    for (let index = actor.bar + 1; index < barCount(enemy); index++) {
+      actor.health
+        .rect(
+          -healthWidth / 2 + (index - actor.bar - 1) * (pipSize + pipGap),
+          -enemy.size / 2 - 8 + healthHeight + pipGap,
+          pipSize,
+          pipSize,
+        )
+        .fill("#ff3b3b");
+    }
+  }
+
+  function drawBossBar(delta: number): void {
+    let boss: Actor | null = null;
+
+    for (let index = actors.length - 1; index >= 0; index--) {
+      if (actors[index]!.enemy.rank !== "regular" && !actors[index]!.dead) {
+        boss = actors[index]!;
+        break;
+      }
+    }
+
+    bossHud.view.visible = boss !== null;
+
+    if (boss === null) {
+      return;
+    }
+
+    const enemy: Enemy = boss.enemy;
+    const maximum: number = Math.max(enemy.bars[boss.bar]?.health ?? 1, 1);
+    const limit: number = enemy.bars[boss.bar]?.time ?? 0;
+    const left: number = Math.max(limit - boss.barTime, 0);
+    const spells: number = enemy.bars
+      .slice(boss.bar + 1, barCount(enemy))
+      .filter((bar: Bar) => bar.spell !== null).length;
+    const width: number = barRight - barLeft;
+
+    boss.fill = Math.min(boss.fill + delta / fillTime, 1);
+
+    const amount: number = Math.min(boss.fill, Math.max(boss.hp, 0) / maximum);
+
+    bossHud.graphics
+      .clear()
+      .rect(barLeft, barTop, width, barHeight)
+      .fill({ color: "#000000", alpha: 0.55 })
+      .rect(barLeft, barTop, width * amount, barHeight)
+      .fill("#ff5a7a")
+      .rect(barLeft, barTop, width * amount, 1)
+      .fill("#ffd0da")
+      .rect(barLeft, barTop, width, barHeight)
+      .stroke({ color: "#ffffff", width: 0.5, alpha: 0.5, alignment: 1 });
+    bossHud.stages.text = String(barCount(enemy) - boss.bar - 1);
+    bossHud.timer.visible = limit > 0;
+    bossHud.timer.text = String(Math.ceil(left)).padStart(2, "0");
+    bossHud.timer.style.fill = left < hurryTime ? "#ff3b3b" : "#ffffff";
+    bossHud.name.text = enemy.name.toUpperCase();
+    bossHud.stars.text = "★".repeat(spells);
+    bossHud.stars.x = bossHud.name.x + bossHud.name.width + 3;
+    bossHud.spell.visible = boss.spell !== null;
+
+    if (boss.spell !== null) {
+      bossHud.spell.text = boss.spell.name;
+      bossHud.graphics
+        .rect(
+          bossHud.spell.x - bossHud.spell.width - spellPadding,
+          spellTop - 1,
+          bossHud.spell.width + spellPadding * 2,
+          bossHud.spell.height + 2,
+        )
+        .fill({ color: "#000000", alpha: 0.45 });
+    }
+
+    bossHud.tag.visible = boss.view.x > 0 && boss.view.x < previewWidth;
+    bossHud.tag.x = boss.view.x;
+  }
+
+  function finishBar(actor: Actor): void {
+    const next: number = actor.bar + 1;
+
+    if (next >= barCount(actor.enemy) && actor.staged) {
+      actor.dead = true;
+      return;
+    }
+
+    if (actor.enemy.rank !== "regular") {
+      clearBullets();
+    }
+
+    arm(actor, next < barCount(actor.enemy) ? next : 0);
+  }
+
+  function damage(actor: Actor, amount: number): void {
+    actor.hp -= amount;
+
+    if (actor.hp > 0) {
+      if (actor.enemy.rank === "regular") {
+        dress(actor);
+      }
+
+      return;
+    }
+
+    if (actor.locked) {
+      actor.hp = Math.max(actor.enemy.bars[actor.bar]?.health ?? 1, 1);
+      actor.fill = 0;
+      dress(actor);
+      return;
+    }
+
+    finishBar(actor);
+  }
+
+  function targets(): Array<Target> {
+    return actors
+      .filter(
+        (actor: Actor) =>
+          !actor.dead &&
+          actor.view.x >= 0 &&
+          actor.view.x <= previewWidth &&
+          actor.view.y >= 0 &&
+          actor.view.y <= previewHeight,
+      )
+      .map((actor: Actor) => ({ x: actor.view.x, y: actor.view.y }));
+  }
+
+  function hitActors(): void {
+    for (const shot of squad.shots) {
+      if (shot.spent) {
+        continue;
+      }
+
+      for (const actor of actors) {
+        const reach: number = actor.enemy.size / 2;
+
+        if (
+          actor.dead ||
+          actor.view.x < 0 ||
+          actor.view.x > previewWidth ||
+          actor.view.y < 0 ||
+          actor.view.y > previewHeight ||
+          (shot.x - actor.view.x) ** 2 + (shot.y - actor.view.y) ** 2 >
+            reach * reach
+        ) {
+          continue;
+        }
+
+        shot.spent = true;
+        damage(actor, shot.damage);
+        break;
+      }
+    }
+  }
+
+  function barCount(enemy: Enemy): number {
+    return enemy.rank === "boss" ? enemy.bars.length : 1;
+  }
+
+  function arm(actor: Actor, index: number): void {
+    const enemy: Enemy = actor.enemy;
+
+    actor.bar = Math.max(Math.min(index, barCount(enemy) - 1), 0);
+    actor.barTime = 0;
+    actor.hp = Math.max(enemy.bars[actor.bar]?.health ?? 1, 1);
+    actor.fill = 0;
+    actor.spell =
+      enemy.rank === "regular"
+        ? null
+        : findSpell(enemy.bars[actor.bar]?.spell ?? null);
+    actor.pattern =
+      findPattern(actor.spell?.pattern ?? null) ?? findPattern(enemy.pattern);
+    actor.emitter.timer = 0;
+    actor.emitter.time = 0;
+    dress(actor);
   }
 
   function addActor(
     enemy: Enemy,
-    attack: Pattern | null,
-    seal: Spell | null,
     x: number,
     y: number,
     path: Path,
+    bar: number | null,
+    staged: boolean,
   ): Actor {
     const actor: Actor = {
       enemy: enemy,
-      pattern: attack,
-      spell: seal,
+      pattern: null,
+      spell: null,
       view: new Container(),
       sigil: new Graphics(),
       body: new Graphics(),
@@ -519,13 +826,20 @@ async function createPreview(
       time: 0,
       facing: forward,
       emitter: { timer: 0, time: 0 },
+      bar: 0,
+      barTime: 0,
+      hp: 1,
+      fill: 0,
+      dead: false,
+      locked: bar !== null,
+      staged: staged,
     };
 
     actor.sprite.anchor.set(0.5);
     actor.view.addChild(actor.sigil, actor.body, actor.sprite, actor.health);
     actorLayer.addChild(actor.view);
     actors.push(actor);
-    dress(actor);
+    arm(actor, bar ?? 0);
 
     return actor;
   }
@@ -843,6 +1157,11 @@ async function createPreview(
 
       actor.time += delta;
 
+      if (actor.dead) {
+        actor.view.destroy({ children: true });
+        continue;
+      }
+
       const [x, y] = motion(actor.x, actor.y, actor.path, actor.time);
       const outside: boolean =
         x < -actorMargin ||
@@ -855,6 +1174,27 @@ async function createPreview(
         continue;
       }
 
+      const limit: number = actor.enemy.bars[actor.bar]?.time ?? 0;
+
+      actor.barTime += delta;
+
+      if (
+        actor.enemy.rank !== "regular" &&
+        limit > 0 &&
+        actor.barTime >= limit
+      ) {
+        if (actor.locked || (!actor.staged && barCount(actor.enemy) === 1)) {
+          actor.barTime = 0;
+        } else {
+          finishBar(actor);
+
+          if (actor.dead) {
+            actor.view.destroy({ children: true });
+            continue;
+          }
+        }
+      }
+
       actor.view.position.set(x, y);
 
       const [speedX, speedY] = velocity(actor.path, actor.time);
@@ -863,8 +1203,10 @@ async function createPreview(
         actor.facing = Math.atan2(speedY, speedX);
       }
 
-      if (actor.spell !== null) {
-        drawSpell(actor.sigil, actor.spell, actor.time);
+      const found: Sigil | null = findSigil(actor.spell?.sigil ?? null);
+
+      if (found !== null) {
+        drawSigil(actor.sigil, found, actor.time);
       }
 
       if (
@@ -964,20 +1306,18 @@ async function createPreview(
       arrivals[nextArrival]!.time <= time
     ) {
       const arrival: Arrival = arrivals[nextArrival]!;
-      const resolved: [Enemy, Pattern | null, Spell | null] | null = resolve(
-        arrival.spawn,
-      );
+      const resolved: Enemy | null = resolve(arrival.spawn);
 
       nextArrival++;
 
       if (resolved !== null) {
         addActor(
-          resolved[0],
-          resolved[1],
-          resolved[2],
+          resolved,
           arrival.spawn.x * previewWidth,
           arrival.spawn.y * previewHeight,
           arrival.spawn,
+          null,
+          true,
         );
       }
     }
@@ -986,7 +1326,7 @@ async function createPreview(
   }
 
   function movePlayer(delta: number): void {
-    const speed: number = focused ? focusSpeed : playerSpeed;
+    const speed: number = focused ? archetype().focusSpeed : archetype().speed;
 
     player.position.set(
       Math.min(
@@ -1041,6 +1381,9 @@ async function createPreview(
     hitCount = 0;
     grace = 0;
     focused = false;
+    shooting = false;
+    squad.clear();
+    squad.view.visible = on;
     input.x = 0;
     input.y = 0;
     player.alpha = 1;
@@ -1073,22 +1416,27 @@ async function createPreview(
       }
     }
 
-    if (spell !== null) {
+    if (shown !== null) {
       spellTime += delta;
-      drawSpell(sigil, spell, spellTime);
+      drawSigil(sigil, shown, spellTime);
     }
 
     cover.tiles.tilePosition.y += (cover.background?.scroll ?? 0) * delta;
     fade(delta);
 
     if (playtest) {
+      squad.update(delta, player.x, player.y, focused, shooting, targets());
+      hitActors();
       collide();
     }
+
+    drawBossBar(delta);
   }
 
   function clear(): void {
     clearActors();
     clearBullets();
+    squad.clear();
     emitter.timer = 0;
     emitter.time = 0;
     time = 0;
@@ -1098,13 +1446,18 @@ async function createPreview(
     base.tiles.tilePosition.y = 0;
   }
 
-  function showSpell(value: Spell | null): void {
-    spell = value;
+  function showSigil(value: Sigil | null): void {
+    shown = value;
     sigil.visible = value !== null;
 
     if (value !== null) {
-      drawSpell(sigil, value, spellTime);
+      drawSigil(sigil, value, spellTime);
     }
+  }
+
+  function showSpell(value: Spell | null): void {
+    spell = value;
+    showSigil(value === null ? null : findSigil(value.sigil));
   }
 
   paintSky(base);
@@ -1126,11 +1479,7 @@ async function createPreview(
         clearActors();
       }
     },
-    setEnemy: (
-      value: Enemy | null,
-      attack: Pattern | null,
-      seal: Spell | null,
-    ) => {
+    setEnemy: (value: Enemy | null, bar: number | null) => {
       showSpell(null);
       stage = null;
       pattern = null;
@@ -1144,17 +1493,26 @@ async function createPreview(
 
       if (actor === undefined || actor.enemy !== value || actors.length > 1) {
         clearActors();
-        addActor(value, attack, seal, previewWidth / 2, hoverY, still);
+        addActor(value, previewWidth / 2, hoverY, still, bar, false);
         return;
       }
 
-      actor.pattern = attack;
-      actor.spell = seal;
-      dress(actor);
+      const elapsed: number = actor.barTime;
+
+      actor.locked = bar !== null;
+      arm(actor, bar ?? actor.bar);
+      actor.barTime = bar === null ? elapsed : 0;
     },
-    setSpell: (value: Spell | null) => {
+    setSigil: (value: Sigil | null) => {
       stage = null;
       pattern = null;
+      clearActors();
+      spell = null;
+      showSigil(value);
+    },
+    setSpell: (value: Spell | null, attack: Pattern | null) => {
+      stage = null;
+      pattern = attack;
       clearActors();
       showSpell(value);
     },
@@ -1188,10 +1546,11 @@ async function createPreview(
     clear: clear,
     update: update,
     setPlaytest: setPlaytest,
-    steer: (x: number, y: number, focus: boolean) => {
+    steer: (x: number, y: number, focus: boolean, shoot: boolean) => {
       input.x = x;
       input.y = y;
       focused = focus;
+      shooting = shoot;
     },
     hits: () => hitCount,
   };

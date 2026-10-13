@@ -18,6 +18,7 @@ import {
 import { approach, smoothDamp, type Spring } from "../effects/tween/tween";
 import type {
   Background,
+  Bar,
   Character,
   Creations,
   Cutscene,
@@ -25,6 +26,7 @@ import type {
   Line,
   Keyframe,
   Pattern,
+  Sigil,
   Spell,
   Sound,
   Stage,
@@ -33,14 +35,14 @@ import { placeAlong, solidSpans, wallAngle } from "./data";
 import { getTexture } from "./images";
 import { getTheme } from "../theme/theme";
 import { drawShape, previewHeight, previewWidth } from "./preview";
-import { drawSpell, spellRadius } from "./sigil";
+import { drawSigil, sigilRadius } from "./sigil";
 import { drawSound, soundLength } from "./sound";
 import { createBackdrop, type Backdrop } from "./backdrop";
 import { castOf, feelingOf, speakerOf } from "./cutscene";
 import {
   cosmetics,
   difficulties,
-  frames,
+  attacks,
   defaultName,
   ranks,
   rarityOf,
@@ -52,6 +54,7 @@ type Kind =
   | "pattern"
   | "enemy"
   | "background"
+  | "sigil"
   | "spell"
   | "sound"
   | "character"
@@ -70,7 +73,15 @@ type Entry = {
   kind: Kind;
   index: number;
   item:
-    Stage | Pattern | Enemy | Background | Spell | Sound | Character | Cutscene;
+    | Stage
+    | Pattern
+    | Enemy
+    | Background
+    | Sigil
+    | Spell
+    | Sound
+    | Character
+    | Cutscene;
 };
 
 type Live = {
@@ -527,16 +538,16 @@ function drawEnemy(
   art.addChild(body);
 }
 
-function drawSpellArt(
+function drawSigilArt(
   art: Container,
-  spell: Spell,
+  sigil: Sigil,
   width: number,
   height: number,
 ): void {
   const graphics: Graphics = new Graphics();
 
-  drawSpell(graphics, spell, 0);
-  graphics.scale.set((Math.min(width, height) * 0.45) / spellRadius(spell));
+  drawSigil(graphics, sigil, 0);
+  graphics.scale.set((Math.min(width, height) * 0.45) / sigilRadius(sigil));
   graphics.position.set(width / 2, height / 2);
   art.addChild(graphics);
 }
@@ -693,6 +704,7 @@ function createGallery(
         | Pattern
         | Enemy
         | Background
+        | Sigil
         | Spell
         | Sound
         | Character
@@ -708,11 +720,12 @@ function createGallery(
       add("stage", source.stages);
     } else if (category === "pattern") {
       add("pattern", source.patterns);
+      add("spell", source.spells);
     } else if (category === "enemy") {
       add("enemy", source.enemies);
     } else {
       add("background", source.backgrounds);
-      add("spell", source.spells);
+      add("sigil", source.sigils);
       add("sound", source.sounds);
       add("cutscene", source.cutscenes);
       add("character", source.characters);
@@ -760,7 +773,11 @@ function createGallery(
     }
 
     if (entry.kind === "pattern") {
-      return rarityOf(frames, (entry.item as Pattern).frame);
+      return rarityOf(attacks, (entry.item as Pattern).frame);
+    }
+
+    if (entry.kind === "spell") {
+      return rarityOf(attacks, "spell");
     }
 
     return rarityOf(cosmetics, entry.kind);
@@ -779,6 +796,10 @@ function createGallery(
 
   function enemyById(id: string | null): Enemy | null {
     return creations().enemies.find((value: Enemy) => value.id === id) ?? null;
+  }
+
+  function sigilById(id: string | null): Sigil | null {
+    return creations().sigils.find((value: Sigil) => value.id === id) ?? null;
   }
 
   function patternById(id: string | null): Pattern | null {
@@ -1242,6 +1263,7 @@ function createGallery(
       | Pattern
       | Enemy
       | Background
+      | Sigil
       | Spell
       | Sound
       | Character
@@ -1279,10 +1301,19 @@ function createGallery(
       const enemy: Enemy = item as Enemy;
 
       drawEnemy(tile.art, enemy, width, artHeight);
+      const spells: number = enemy.bars.filter(
+        (bar: Bar) => bar.spell !== null,
+      ).length;
+
       tile.detail.text =
-        enemy.health +
-        " hp  ·  " +
-        (patternById(enemy.pattern)?.name ?? "No pattern");
+        enemy.rank === "regular" || enemy.bars.length === 1
+          ? enemy.bars[0]!.health +
+            " hp  ·  " +
+            (patternById(enemy.pattern)?.name ?? "No pattern")
+          : enemy.bars.length +
+            " stages  ·  " +
+            spells +
+            (spells === 1 ? " spell" : " spells");
     } else if (entry.kind === "sound") {
       const sound: Sound = item as Sound;
 
@@ -1317,12 +1348,33 @@ function createGallery(
         "  ·  " +
         cutscene.lines.length +
         (cutscene.lines.length === 1 ? " line" : " lines");
+    } else if (entry.kind === "sigil") {
+      const sigil: Sigil = item as Sigil;
+
+      drawSigilArt(tile.art, sigil, width, artHeight);
+      tile.detail.text =
+        sigil.rings.length + (sigil.rings.length === 1 ? " ring" : " rings");
     } else if (entry.kind === "spell") {
       const spell: Spell = item as Spell;
+      const sigil: Sigil | null = sigilById(spell.sigil);
 
-      drawSpellArt(tile.art, spell, width, artHeight);
+      if (spell.background !== null) {
+        drawBackground(
+          tile.art,
+          backgroundById(spell.background),
+          width,
+          artHeight,
+        );
+      }
+
+      if (sigil !== null) {
+        drawSigilArt(tile.art, sigil, width, artHeight);
+      }
+
       tile.detail.text =
-        spell.rings.length + (spell.rings.length === 1 ? " ring" : " rings");
+        (sigil?.name ?? "No sigil") +
+        "  ·  " +
+        (patternById(spell.pattern)?.name ?? "Enemy pattern");
     } else {
       drawBackground(tile.art, item as Background, width, artHeight);
       tile.detail.text = "Scroll " + (item as Background).scroll;

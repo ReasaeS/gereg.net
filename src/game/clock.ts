@@ -5,6 +5,7 @@ type Clock = {
 };
 
 const maxCatchUp: number = 0.05; // s
+const stepThreshold: number = 0.5; // of a step
 
 function createClock(): Clock {
   return { pending: 0 };
@@ -21,7 +22,7 @@ function runClock(
 
   clock.pending += elapsed;
 
-  while (clock.pending >= delta && steps < limit) {
+  while (clock.pending >= delta * stepThreshold && steps < limit) {
     step(delta);
     clock.pending -= delta;
     steps++;

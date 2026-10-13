@@ -17,7 +17,7 @@ import {
   type Page,
   type PageContent,
 } from "./menu/page";
-import { createEditor, playerTexture } from "./editor/editor";
+import { createEditor, droneTexture, playerTexture } from "./editor/editor";
 import { createPlayfield, type Playfield } from "./game/playfield";
 import { createSettings } from "./settings/panel";
 import { createMaker } from "./create/maker";
@@ -142,7 +142,11 @@ addPortalView(city, true);
 addPortalView(vivid, false);
 addPortalView(cityFront, true);
 addPortalView(vividFront, false);
-const playfield: Playfield = await createPlayfield(app, playerTexture());
+const playfield: Playfield = await createPlayfield(
+  app,
+  playerTexture(),
+  droneTexture(),
+);
 
 app.stage.addChild(
   city,

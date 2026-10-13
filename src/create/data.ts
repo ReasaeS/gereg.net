@@ -56,9 +56,15 @@ type Enemy = {
   sprite: string | null;
   color: string;
   size: number; // units
-  health: number;
   rank: Rank;
   pattern: string | null;
+  bars: Array<Bar>;
+};
+
+type Bar = {
+  id: string;
+  health: number;
+  time: number; // s
   spell: string | null;
 };
 
@@ -71,13 +77,20 @@ type Ring = {
   spin: number; // deg/s
 };
 
-type Spell = {
+type Sigil = {
   id: string;
   name: string;
   color: string;
   opacity: number;
   rings: Array<Ring>;
+};
+
+type Spell = {
+  id: string;
+  name: string;
+  sigil: string;
   background: string | null;
+  pattern: string | null;
 };
 
 type Waveform = "square" | "sine" | "sawtooth" | "triangle" | "noise";
@@ -172,6 +185,7 @@ type Creations = {
   patterns: Array<Pattern>;
   enemies: Array<Enemy>;
   backgrounds: Array<Background>;
+  sigils: Array<Sigil>;
   spells: Array<Spell>;
   sounds: Array<Sound>;
   characters: Array<Character>;
@@ -296,9 +310,17 @@ function defaultEnemy(pattern: string | null): Enemy {
     sprite: null,
     color: "#7ad8ff",
     size: 28,
-    health: 20,
     rank: "regular",
     pattern: pattern,
+    bars: [defaultBar(20)],
+  };
+}
+
+function defaultBar(health: number): Bar {
+  return {
+    id: createId(),
+    health: health,
+    time: 30,
     spell: null,
   };
 }
@@ -325,7 +347,7 @@ function defaultRing(): Ring {
   };
 }
 
-function defaultSpell(): Spell {
+function defaultSigil(): Sigil {
   return {
     id: createId(),
     name: "Seal",
@@ -335,8 +357,48 @@ function defaultSpell(): Spell {
       defaultRing(),
       { radius: 90, points: 8, step: 3, ticks: 24, orb: 0.06, spin: -30 },
     ],
-    background: null,
   };
+}
+
+function defaultSpell(sigil: string): Spell {
+  return {
+    id: createId(),
+    name: "Spell",
+    sigil: sigil,
+    background: null,
+    pattern: null,
+  };
+}
+
+function limitBars(enemy: Enemy): void {
+  if (enemy.rank !== "subboss" || enemy.bars.length <= 1) {
+    return;
+  }
+
+  enemy.bars = [
+    enemy.bars.find((bar: Bar) => bar.spell !== null) ?? enemy.bars[0]!,
+  ];
+}
+
+function repairSpells(creations: Creations): void {
+  const sigils: Set<string> = new Set(
+    creations.sigils.map((sigil: Sigil) => sigil.id),
+  );
+
+  for (const spell of creations.spells) {
+    if (sigils.has(spell.sigil)) {
+      continue;
+    }
+
+    if (creations.sigils.length === 0) {
+      const sigil: Sigil = defaultSigil();
+
+      creations.sigils.push(sigil);
+      sigils.add(sigil.id);
+    }
+
+    spell.sigil = creations.sigils[0]!.id;
+  }
 }
 
 function defaultSound(): Sound {
@@ -576,6 +638,7 @@ function defaultCreations(): Creations {
   const pattern: Pattern = defaultPattern();
   const enemy: Enemy = defaultEnemy(pattern.id);
   const background: Background = defaultBackground();
+  const sigil: Sigil = defaultSigil();
   const characters: Array<Character> = defaultCharacters();
 
   return {
@@ -583,7 +646,8 @@ function defaultCreations(): Creations {
     patterns: [pattern],
     enemies: [enemy],
     backgrounds: [background],
-    spells: [defaultSpell()],
+    sigils: [sigil],
+    spells: [{ ...defaultSpell(sigil.id), name: "Spell 1" }],
     sounds: [defaultSound()],
     characters: characters,
     cutscenes: [defaultCutscene(characters)],
@@ -605,7 +669,11 @@ function loadCreations(): Creations {
       patterns: parsed.patterns ?? fallback.patterns,
       enemies: parsed.enemies ?? fallback.enemies,
       backgrounds: parsed.backgrounds ?? fallback.backgrounds,
-      spells: parsed.spells ?? fallback.spells,
+      sigils: parsed.sigils ?? new Array(),
+      spells:
+        parsed.sigils === undefined
+          ? new Array()
+          : (parsed.spells ?? new Array()),
       sounds: parsed.sounds ?? fallback.sounds,
       characters:
         parsed.characters ??
@@ -629,14 +697,27 @@ function loadCreations(): Creations {
       delete character.side;
     }
 
-    for (const spell of creations.spells) {
-      spell.background = spell.background ?? null;
+    for (const enemy of creations.enemies as Array<
+      Enemy & { health?: number; spell?: string | null }
+    >) {
+      enemy.rank = enemy.rank ?? "regular";
+      enemy.bars = enemy.bars ?? [
+        { ...defaultBar(enemy.health ?? 20), spell: enemy.spell ?? null },
+      ];
+      delete enemy.health;
+      delete enemy.spell;
+      limitBars(enemy);
     }
 
-    for (const enemy of creations.enemies) {
-      enemy.spell = enemy.spell ?? null;
-      enemy.rank = enemy.rank ?? "regular";
+    if (parsed.sigils === undefined) {
+      upgradeSigils(
+        creations,
+        (parsed.spells as unknown as Array<OldSigil> | undefined) ??
+          fallback.sigils,
+      );
     }
+
+    repairSpells(creations);
 
     for (const item of [
       ...creations.patterns,
@@ -713,6 +794,35 @@ function loadCreations(): Creations {
     return creations;
   } catch {
     return defaultCreations();
+  }
+}
+
+type OldSigil = Sigil & { background?: string | null };
+
+function upgradeSigils(creations: Creations, old: Array<OldSigil>): void {
+  for (const item of old) {
+    const used: boolean = creations.enemies.some((enemy: Enemy) =>
+      enemy.bars.some((bar: Bar) => bar.spell === item.id),
+    );
+    const sigil: Sigil = {
+      id: used ? createId() : item.id,
+      name: item.name,
+      color: item.color,
+      opacity: item.opacity,
+      rings: item.rings,
+    };
+
+    creations.sigils.push(sigil);
+
+    if (used) {
+      creations.spells.push({
+        id: item.id,
+        name: item.name,
+        sigil: sigil.id,
+        background: item.background ?? null,
+        pattern: null,
+      });
+    }
   }
 }
 
@@ -828,9 +938,13 @@ export {
   placeAlong,
   defaultPattern,
   defaultEnemy,
+  defaultBar,
   defaultBackground,
   defaultRing,
+  defaultSigil,
   defaultSpell,
+  repairSpells,
+  limitBars,
   defaultSound,
   defaultEmotion,
   defaultCharacter,
@@ -854,8 +968,10 @@ export type {
   Vector,
   Pattern,
   Enemy,
+  Bar,
   Background,
   Ring,
+  Sigil,
   Spell,
   Waveform,
   SoundSource,

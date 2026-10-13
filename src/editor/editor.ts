@@ -24,7 +24,8 @@ import {
   importPixels,
   type Pixels,
 } from "./pixels";
-import { drawGameDefault, drawMenuDefault } from "./default";
+import { drawDroneDefault, drawGameDefault, drawMenuDefault } from "./default";
+import { createPower, type Power } from "./power";
 import {
   buttonWidth,
   buttonHeight,
@@ -50,11 +51,13 @@ type Drawing = {
 type Editor = {
   view: Container;
   setActive: (active: boolean) => void;
+  fullscreen?: () => boolean;
 };
 
 const spriteSize: number = 32; // px
 const gameStorageKey: string = "geregnet.playerSprite";
 const menuStorageKey: string = "geregnet.menuSprite";
+const droneStorageKey: string = "geregnet.droneSprite";
 const maxUndo: number = 100;
 const fontFamily: Array<string> = [
   "Barlow Condensed",
@@ -149,6 +152,7 @@ function createDrawing(
 const drawings: Array<Drawing> = [
   createDrawing("in game", gameStorageKey, drawGameDefault),
   createDrawing("menu", menuStorageKey, drawMenuDefault),
+  createDrawing("drone", droneStorageKey, drawDroneDefault),
 ];
 let drawing: Drawing = drawings[0]!;
 
@@ -196,6 +200,14 @@ function menuPixels(): Pixels {
   return drawings[1]!.pixels;
 }
 
+function droneTexture(): Texture {
+  return drawings[2]!.texture;
+}
+
+for (let index = 0; index < drawings.length; index++) {
+  load(drawings[index]!);
+}
+
 function createEditor(app: Application): Editor {
   const view: Container = new Container();
   const board: Container = new Container();
@@ -235,6 +247,8 @@ function createEditor(app: Application): Editor {
   let lastY: number = 0;
   let cell: number = 1;
   let swatchSize: number = swatchMaxSize;
+  let powering: boolean = false;
+  const power: Power = createPower(app, playerTexture(), droneTexture());
 
   function refresh(): void {
     drawing.source.update();
@@ -453,16 +467,30 @@ function createEditor(app: Application): Editor {
   function selectDrawing(index: number): void {
     const next: Drawing | undefined = drawings[index];
 
-    if (next === undefined || next === drawing) {
+    if (next === undefined || (next === drawing && !powering)) {
       return;
     }
 
     stroking = false;
     drawing = next;
+    showPower(false);
     canvas.texture = drawing.texture;
     small.texture = drawing.texture;
     large.texture = drawing.texture;
     hover.clear();
+    refresh();
+  }
+
+  function showPower(value: boolean): void {
+    powering = value;
+    stroking = false;
+    hover.clear();
+    board.visible = !value;
+    tools.visible = !value;
+    swatches.visible = !value;
+    preview.visible = !value;
+    power.view.visible = value;
+    power.setActive(active && value);
     refresh();
   }
 
@@ -564,6 +592,12 @@ function createEditor(app: Application): Editor {
     );
     large.position.set(spriteSize + panelGap / 2, 0);
     status.position.set(board.x + boardSize / 2, board.y + boardSize + 12);
+    power.layout(
+      tools.x,
+      board.y,
+      swatches.x + paletteColumns * (swatchSize + swatchGap) - tools.x,
+      boardSize,
+    );
     refresh();
   }
 
@@ -616,12 +650,23 @@ function createEditor(app: Application): Editor {
     tabs.addChild(button.view);
   }
 
+  const powerButton: Button = createButton(
+    "power",
+    () => powering,
+    () => showPower(true),
+  );
+
+  powerButton.view.x = drawings.length * (buttonWidth + buttonGap);
+  buttons.push(powerButton);
+  tabs.addChild(powerButton.view);
+
   large.scale.set(previewScale);
   preview.addChild(small, large);
   board.addChild(checker, canvas, grid, hover, frame);
   status.anchor.set(0.5, 0);
   status.alpha = 0;
-  view.addChild(board, tabs, tools, swatches, preview, status);
+  power.view.visible = false;
+  view.addChild(board, tabs, tools, swatches, preview, status, power.view);
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
     const text: string | undefined = event.clipboardData?.getData("text");
@@ -661,11 +706,17 @@ function createEditor(app: Application): Editor {
 
       if (drawings[index] !== undefined) {
         selectDrawing(index);
+      } else if (index === drawings.length) {
+        showPower(true);
       } else {
         return;
       }
 
       event.preventDefault();
+      return;
+    }
+
+    if (powering) {
       return;
     }
 
@@ -702,13 +753,10 @@ function createEditor(app: Application): Editor {
 
   function setActive(value: boolean): void {
     active = value;
+    power.setActive(value && powering);
     view.eventMode = value ? "passive" : "none";
     stroking = false;
     hover.clear();
-  }
-
-  for (let index = 0; index < drawings.length; index++) {
-    load(drawings[index]!);
   }
 
   layout();
@@ -716,8 +764,8 @@ function createEditor(app: Application): Editor {
 
   app.renderer.on("resize", layout);
 
-  return { view: view, setActive: setActive };
+  return { view: view, setActive: setActive, fullscreen: () => true };
 }
 
-export { createEditor, playerTexture, menuTexture, menuPixels };
+export { createEditor, playerTexture, menuTexture, menuPixels, droneTexture };
 export type { Editor };

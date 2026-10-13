@@ -1,5 +1,5 @@
 import type { Graphics } from "pixi.js";
-import type { Ring, Spell } from "./data";
+import type { Ring, Sigil } from "./data";
 
 const ringInner: number = 0.9;
 const ringCore: number = 0.42;
@@ -69,18 +69,18 @@ function drawRing(
   }
 }
 
-function drawSpell(graphics: Graphics, spell: Spell, time: number): void {
+function drawSigil(graphics: Graphics, sigil: Sigil, time: number): void {
   graphics.clear();
 
-  for (const ring of spell.rings) {
-    drawRing(graphics, ring, spell.color, (ring.spin * Math.PI * time) / 180);
+  for (const ring of sigil.rings) {
+    drawRing(graphics, ring, sigil.color, (ring.spin * Math.PI * time) / 180);
   }
 
-  graphics.alpha = spell.opacity;
+  graphics.alpha = sigil.opacity;
 }
 
-function spellRadius(spell: Spell): number {
-  return Math.max(1, ...spell.rings.map((ring: Ring) => ring.radius));
+function sigilRadius(sigil: Sigil): number {
+  return Math.max(1, ...sigil.rings.map((ring: Ring) => ring.radius));
 }
 
-export { drawRing, drawSpell, spellRadius };
+export { drawRing, drawSigil, sigilRadius };
