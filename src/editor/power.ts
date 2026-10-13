@@ -235,7 +235,7 @@ function createPower(
         },
       ),
       createColors(
-        "Bomb ring",
+        () => (archetype().bomb === "spark" ? "Beam core" : "Bomb ring"),
         shotColors,
         () => look().ring,
         (value: string) => {
@@ -244,7 +244,8 @@ function createPower(
         },
       ),
       createSlider(
-        "Ring thickness",
+        () =>
+          archetype().bomb === "spark" ? "Beam thickness" : "Ring thickness",
         1,
         10,
         0.5,

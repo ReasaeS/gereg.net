@@ -12,7 +12,6 @@ import {
   type Ticker,
 } from "pixi.js";
 import { droneTexture, playerTexture } from "../editor/drawings";
-import { createBackdrop, type Backdrop } from "./backdrop";
 import { drawSound, importAudio, loadAudio, playSound } from "./sound";
 import { createScene, type Scene } from "./cutscene";
 import {
@@ -320,7 +319,6 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => creations.characters,
   );
   const gameFrame: Container = new Container();
-  const backdrop: Backdrop = createBackdrop(app);
   const hudFrame: Graphics = new Graphics();
   const panelBack: Graphics = new Graphics();
   const frameMask: Graphics = new Graphics();
@@ -3212,7 +3210,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     frameMask,
   );
   gameFrame.mask = frameMask;
-  editor.addChild(backdrop.view, gameFrame);
+  editor.addChild(gameFrame);
   view.addChild(editor, gallery.view, drop);
 
   function hasFiles(event: DragEvent): boolean {
@@ -3270,7 +3268,6 @@ async function createMaker(app: Application): Promise<PageContent> {
     const height: number = app.screen.height;
     const bottom: number = panelBottom - chipHeight - sectionGap;
 
-    backdrop.layout();
     frameScale = hudScale(width, height);
     gameFrame.scale.set(frameScale);
     gameFrame.position.set(
@@ -3296,7 +3293,6 @@ async function createMaker(app: Application): Promise<PageContent> {
     const delta: number = frameDelta(ticker);
 
     if (editing) {
-      backdrop.update(delta);
       rows.animate(delta);
     }
 
@@ -3434,7 +3430,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   return {
     view: view,
     setActive: setActive,
-    enter: () => showSelector(false),
+    enter: () => {
+      gallery.reset();
+      showSelector(false);
+    },
     fullscreen: () => true,
     leave: () => (editing ? Promise.resolve() : gallery.disappear()),
     leaveTime: () => (editing ? 0 : gallery.disappearTime()),

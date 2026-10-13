@@ -42,6 +42,7 @@ type Tool = "pencil" | "eraser" | "fill" | "picker";
 type Editor = {
   view: Container;
   setActive: (active: boolean) => void;
+  enter?: () => void;
   fullscreen?: () => boolean;
 };
 
@@ -718,12 +719,33 @@ function createEditor(app: Application): Editor {
     hover.clear();
   }
 
+  function enter(): void {
+    drawing = drawings[0]!;
+    stroking = false;
+    showPower(false);
+    mode.snap(0);
+    canvas.texture = drawing.texture;
+    small.texture = drawing.texture;
+    large.texture = drawing.texture;
+    canvasFade.snap(1);
+    refresh();
+
+    for (const button of buttons) {
+      button.lit.snap(button.active() ? 1 : 0);
+    }
+  }
+
   layout();
   setActive(false);
 
   app.renderer.on("resize", layout);
 
-  return { view: view, setActive: setActive, fullscreen: () => true };
+  return {
+    view: view,
+    setActive: setActive,
+    enter: enter,
+    fullscreen: () => true,
+  };
 }
 
 export { createEditor };

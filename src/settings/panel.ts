@@ -480,7 +480,25 @@ function createSettings(app: Application): PageContent {
   setActive(false);
   app.renderer.on("resize", layout);
 
-  return { view: view, setActive: setActive };
+  function enter(): void {
+    selected = 0;
+    target = 0;
+    scroll.value = 0;
+    scroll.velocity = 0;
+    list.y = 0;
+    placed = false;
+    refresh();
+
+    for (let index = 0; index < rows.length; index++) {
+      rows[index]!.focus?.snap(index === 0 ? 1 : 0);
+    }
+
+    for (const button of navButtons) {
+      button.lit.snap(button.active() ? 1 : 0);
+    }
+  }
+
+  return { view: view, setActive: setActive, enter: enter };
 }
 
 export { createSettings };

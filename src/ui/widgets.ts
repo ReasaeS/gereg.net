@@ -11,12 +11,20 @@ import { getTheme } from "../theme/theme";
 import type { Vector } from "../create/types";
 import { createText } from "./text";
 import { createGlide, mix, type Glide } from "./motion";
+import { createRetype, type Retype } from "./retype";
 
 type Control = {
   view: Container;
   refresh: () => void;
   shown?: () => boolean;
   header?: boolean;
+};
+
+type Name = string | (() => string);
+
+type Row = {
+  view: Container;
+  refresh: () => void;
 };
 
 type Chip = {
@@ -63,16 +71,34 @@ const choiceSlide: number = 10; // units
 const fieldColor: string = "#01040f";
 const fieldAlpha: number = 0.85;
 
-function createRow(name: string): Container {
+function nameOf(name: Name): string {
+  return (typeof name === "string" ? name : name()).toUpperCase();
+}
+
+function onScreen(view: Container): boolean {
+  for (let node: Container | null = view; node !== null; node = node.parent) {
+    if (!node.visible) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function createRow(name: Name): Row {
   const row: Container = new Container();
   const label: Text = createText(labelSize, labelColor);
+  const retype: Retype = createRetype(label);
 
-  label.text = name.toUpperCase();
+  label.text = nameOf(name);
   label.anchor.set(0, 0.5);
   label.y = labelY;
   row.addChild(label);
 
-  return row;
+  return {
+    view: row,
+    refresh: () => retype.set(nameOf(name), onScreen(row) && row.alpha > 0.5),
+  };
 }
 
 function createValue(row: Container): Text {
@@ -239,14 +265,15 @@ function rounded(value: number): string {
 }
 
 function createSlider(
-  name: string,
+  name: Name,
   min: number,
   max: number | (() => number),
   step: number,
   get: () => number,
   set: (value: number) => void,
 ): Control {
-  const view: Container = createRow(name);
+  const row: Row = createRow(name);
+  const view: Container = row.view;
   const value: Text = createValue(view);
   const track: Track = createTrack(
     rowWidth,
@@ -261,6 +288,7 @@ function createSlider(
   );
 
   function refresh(): void {
+    row.refresh();
     track.refresh();
     value.text = rounded(get());
   }
@@ -272,19 +300,22 @@ function createSlider(
 }
 
 function createVector(
-  name: string,
+  name: Name,
   min: number,
   max: number,
   step: number,
   get: () => Vector,
   set: (value: Vector) => void,
 ): Control {
-  const view: Container = createRow(name);
+  const row: Row = createRow(name);
+  const view: Container = row.view;
   const value: Text = createValue(view);
   const width: number = (rowWidth - vectorGap) / 2;
   const axes: Array<Track> = new Array();
 
   function refresh(): void {
+    row.refresh();
+
     for (const axis of axes) {
       axis.refresh();
     }
@@ -314,12 +345,13 @@ function createVector(
 }
 
 function createChoice<T>(
-  name: string,
+  name: Name,
   options: () => Array<Option<T>>,
   get: () => T,
   set: (value: T) => void,
 ): Control {
-  const view: Container = createRow(name);
+  const row: Row = createRow(name);
+  const view: Container = row.view;
   const value: Text = createText(valueSize, "#ffffff");
   const slide: Glide = createGlide(0, (offset: number) => {
     value.x = rowWidth / 2 + offset;
@@ -350,6 +382,7 @@ function createChoice<T>(
   const next: Chip = createChip(">", arrowWidth, () => step(1));
 
   function refresh(): void {
+    row.refresh();
     value.text = options()[index()]?.label.toUpperCase() ?? "-";
   }
 
@@ -363,12 +396,13 @@ function createChoice<T>(
 }
 
 function createColors(
-  name: string,
+  name: Name,
   colors: Array<string>,
   get: () => string,
   set: (value: string) => void,
 ): Control {
-  const view: Container = createRow(name);
+  const row: Row = createRow(name);
+  const view: Container = row.view;
   const swatches: Graphics = new Graphics();
   const size: number = (rowWidth + swatchGap) / colors.length - swatchGap;
   const height: number = Math.min(size, chipHeight);
@@ -409,6 +443,8 @@ function createColors(
 
   function refresh(): void {
     const index: number = colors.indexOf(get());
+
+    row.refresh();
 
     if (!placed) {
       placed = true;
@@ -540,12 +576,13 @@ function drawField(
 }
 
 function createSpriteRow(
-  name: string,
+  name: Name,
   get: () => Texture | null,
   choose: () => void,
   clear: () => void,
 ): Control {
-  const view: Container = createRow(name);
+  const row: Row = createRow(name);
+  const view: Container = row.view;
   const chooseChip: Chip = createChip("Choose", 72, choose);
   const clearChip: Chip = createChip("Clear", 52, clear);
   const frame: Graphics = new Graphics();
@@ -559,6 +596,8 @@ function createSpriteRow(
 
   function refresh(): void {
     const texture: Texture | null = get();
+
+    row.refresh();
 
     if (texture === current) {
       return;
@@ -610,4 +649,4 @@ export {
   drawField,
   createSpriteRow,
 };
-export type { Control, Chip, Option };
+export type { Control, Chip, Option, Name };

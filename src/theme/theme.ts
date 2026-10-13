@@ -19,10 +19,8 @@ type Theme = {
 
 type ThemeListener = (theme: Theme) => void;
 
-const daysInYear: number = 366;
-const hueStride: number = 139;
-const dailySaturation: number = 0.85;
-const dailyLightness: number = 0.55;
+const dailyEdge: Array<number> = [0x06, 0x1a, 0x52];
+const dailyMiddle: Array<number> = [0xff, 0x2a, 0x4d];
 
 function dayOfYear(date: Date): number {
   const today: number = Date.UTC(
@@ -35,30 +33,29 @@ function dayOfYear(date: Date): number {
   return Math.round((today - start) / 86400000);
 }
 
+function daysInYear(date: Date): number {
+  return Math.round(
+    (Date.UTC(date.getFullYear() + 1, 0, 1) -
+      Date.UTC(date.getFullYear(), 0, 1)) /
+      86400000,
+  );
+}
+
 function channel(value: number): string {
-  return Math.round(value * 255)
-    .toString(16)
-    .padStart(2, "0");
+  return Math.round(value).toString(16).padStart(2, "0");
 }
 
 function dailyColor(date: Date): string {
-  const hue: number = ((dayOfYear(date) * hueStride) % daysInYear) / daysInYear;
-  const chroma: number =
-    (1 - Math.abs(2 * dailyLightness - 1)) * dailySaturation;
-  const sector: number = hue * 6;
-  const second: number = chroma * (1 - Math.abs((sector % 2) - 1));
-  const base: number = dailyLightness - chroma / 2;
-  const [red, green, blue] = [
-    [chroma, second, 0],
-    [second, chroma, 0],
-    [0, chroma, second],
-    [0, second, chroma],
-    [second, 0, chroma],
-    [chroma, 0, second],
-  ][Math.floor(sector) % 6]!;
+  const position: number = dayOfYear(date) / daysInYear(date);
+  const amount: number = 1 - Math.abs(position * 2 - 1);
 
   return (
-    "#" + channel(red! + base) + channel(green! + base) + channel(blue! + base)
+    "#" +
+    dailyEdge
+      .map((edge: number, index: number) =>
+        channel(edge + (dailyMiddle[index]! - edge) * amount),
+      )
+      .join("")
   );
 }
 

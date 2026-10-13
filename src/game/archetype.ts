@@ -1,6 +1,6 @@
-type ArchetypeId = "seeker" | "striker" | "scatter";
+type ArchetypeId = "seeker" | "striker";
 
-type BombKind = "seal" | "spark" | "burst";
+type BombKind = "seal" | "spark";
 
 type Archetype = {
   id: ArchetypeId;
@@ -40,18 +40,6 @@ const archetypes: Array<Archetype> = [
     spread: 4,
     homing: false,
     bomb: "spark",
-  },
-  {
-    id: "scatter",
-    name: "Scatter",
-    summary: "Wide spread · screen-clear bomb",
-    speed: 300,
-    focusSpeed: 130,
-    droneDamage: 0.6,
-    droneRate: 12,
-    spread: 30,
-    homing: false,
-    bomb: "burst",
   },
 ];
 let current: Archetype = loadArchetype();

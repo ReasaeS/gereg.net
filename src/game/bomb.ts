@@ -38,15 +38,12 @@ const sealGap: number = 26; // units
 const sparkWidth: number = 110; // units
 const sparkGrow: number = 0.2; // s
 const sparkCore: number = 0.4; // of width
-const burstRing: number = 0.5; // s
-const burstStagger: number = 0.12; // s
 const tintFade: number = 0.2; // s
 const storageKey: string = "geregnet.bombLooks";
-const kinds: Array<BombKind> = ["seal", "spark", "burst"];
+const kinds: Array<BombKind> = ["seal", "spark"];
 const styles: Record<BombKind, Style> = {
   seal: { duration: 2.5, damage: 24 },
   spark: { duration: 3, damage: 40 },
-  burst: { duration: 1.2, damage: 15 },
 };
 let looks: Record<BombKind, Look> = loadLooks();
 
@@ -67,14 +64,6 @@ function defaultLooks(): Record<BombKind, Look> {
       rings: 1,
       tint: "#3a3000",
       tintAlpha: 0.2,
-    },
-    burst: {
-      glow: "#7ad8ff",
-      ring: "#ffffff",
-      ringWidth: 4,
-      rings: 1,
-      tint: "#001a3a",
-      tintAlpha: 0.3,
     },
   };
 }
@@ -184,7 +173,7 @@ function createBomb(width: number, height: number): Bomb {
       }
 
       view.stroke(stroke);
-    } else if (kind === "spark") {
+    } else {
       const half: number = sparkHalf();
 
       view
@@ -197,22 +186,6 @@ function createBomb(width: number, height: number): Bomb {
         .moveTo(originX + half, 0)
         .lineTo(originX + half, originY)
         .stroke(stroke);
-    } else {
-      const flash: number = left / style().duration;
-
-      view
-        .rect(0, 0, width, height)
-        .fill({ color: look.glow, alpha: 0.35 * flash });
-
-      for (let ring = 0; ring < look.rings; ring++) {
-        const spread: number = (time - ring * burstStagger) / burstRing;
-
-        if (spread > 0 && spread < 1) {
-          view
-            .circle(originX, originY, Math.hypot(width, height) * spread)
-            .stroke({ ...stroke, alpha: (1 - spread) * alpha });
-        }
-      }
     }
   }
 
@@ -243,11 +216,7 @@ function createBomb(width: number, height: number): Bomb {
       return (x - originX) ** 2 + (y - originY) ** 2 < reach * reach;
     }
 
-    if (kind === "spark") {
-      return Math.abs(x - originX) < sparkHalf() + radius && y < originY;
-    }
-
-    return true;
+    return Math.abs(x - originX) < sparkHalf() + radius && y < originY;
   }
 
   function clear(): void {

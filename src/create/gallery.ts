@@ -40,7 +40,6 @@ import { previewHeight, previewWidth } from "./preview";
 import { drawShape } from "./shape";
 import { drawSigil, sigilRadius } from "./sigil";
 import { drawSound, soundLength } from "./sound";
-import { createBackdrop, type Backdrop } from "./backdrop";
 import { castOf, feelingOf, speakerOf } from "./cutscene";
 import {
   cosmetics,
@@ -96,6 +95,7 @@ type Gallery = {
   view: Container;
   refresh: () => void;
   appear: () => void;
+  reset: () => void;
   disappear: () => Promise<void>;
   disappearTime: () => number;
   setActive: (active: boolean) => void;
@@ -675,7 +675,6 @@ function createGallery(
 ): Gallery {
   const view: Container = new Container();
   const categories: Container = new Container();
-  const backdrop: Backdrop = createBackdrop(app);
   const ornament: Graphics = new Graphics();
   const tabs: Array<Text> = new Array();
   const grid: Container = new Container();
@@ -1497,6 +1496,21 @@ function createGallery(
     select(selected);
   }
 
+  function reset(): void {
+    category = categoryList[0]!;
+    selected = 0;
+    revealed = null;
+    target = 0;
+    scroll.value = 0;
+    scroll.velocity = 0;
+    markPlaced = false;
+    refresh();
+
+    for (const [tab, glow] of tabGlows) {
+      glow.snap(tabs.indexOf(tab) === 0 ? 1 : 0);
+    }
+  }
+
   function showKind(next: Category): void {
     if (next === category) {
       return;
@@ -1633,7 +1647,6 @@ function createGallery(
       Math.round(app.screen.width / 2),
       Math.round(app.screen.height * headerY),
     );
-    backdrop.layout();
     paintTabs();
     mask
       .clear()
@@ -1652,7 +1665,7 @@ function createGallery(
   grid.addChild(list, mask);
   list.mask = mask;
   categories.addChild(ornament);
-  view.addChild(backdrop.view, categories, grid);
+  view.addChild(categories, grid);
   view.eventMode = "none";
   grid.eventMode = "static";
   grid.on("wheel", (event: FederatedWheelEvent) => {
@@ -1669,8 +1682,6 @@ function createGallery(
     if (!view.visible) {
       return;
     }
-
-    backdrop.update(ticker.deltaMS / 1000);
 
     smoothDamp(scroll, target, scrollSmoothing, ticker.deltaMS / 1000);
     list.y = -scroll.value;
@@ -1771,6 +1782,7 @@ function createGallery(
     view: view,
     refresh: refresh,
     appear: appear,
+    reset: reset,
     disappear: disappear,
     disappearTime: () => Math.min(appearTime, appearEnd()) * 1000,
     setActive: setActive,

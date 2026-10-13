@@ -15,6 +15,7 @@ import { approach, frameDelta } from "../effects/tween/tween";
 import { createLighthouse, type Lighthouse } from "./lighthouse";
 import { createWitch, type Witch } from "./witch";
 import { menuPixels, menuTexture } from "../editor/drawings";
+import { createSigils, type Sigils } from "./sigils";
 import { onTheme, type Theme } from "../theme/theme";
 import { onSky, type Sky } from "../settings/settings";
 
@@ -56,6 +57,7 @@ type Scenery = {
   glowY: number; // screen heights below the dive point
   moteColor: string;
   kelp: boolean;
+  sigils: boolean;
 };
 
 type Target = () => Point | null;
@@ -112,6 +114,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: 0.6,
       moteColor: "#ffe2a8",
       kelp: false,
+      sigils: false,
     },
   ],
   [
@@ -121,6 +124,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: 0.7,
       moteColor: "#ff9aa8",
       kelp: false,
+      sigils: false,
     },
   ],
   [
@@ -130,6 +134,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: 0.6,
       moteColor: "#b8ffd9",
       kelp: true,
+      sigils: false,
     },
   ],
   [
@@ -139,9 +144,11 @@ const sceneries: Map<string, Scenery> = new Map([
       glowY: 0.6,
       moteColor: "#e0c8ff",
       kelp: false,
+      sigils: true,
     },
   ],
 ]);
+const sigilTurn: number = Math.PI; // rad
 const sceneryGlowScale: number = 1.4; // of the longer screen side
 const sceneryGlowAlpha: number = 0.4;
 const kelpCount: number = 14;
@@ -282,6 +289,8 @@ function createVivid(app: Application): Vivid {
   let scenery: Scenery = sceneries.get("config")!;
   const sceneryGlow: Sprite = new Sprite(glowTexture);
   const kelpLayer: Graphics = new Graphics();
+  const sceneSigils: Sigils = createSigils(app);
+  const sigilFrame: Container = new Container();
   const kelps: Array<Kelp> = new Array();
   let time: number = 0;
   let beamTarget: Target | null = null;
@@ -361,7 +370,8 @@ function createVivid(app: Application): Vivid {
   starLayer.blendMode = "add";
   sceneryGlow.anchor.set(0.5);
   sceneryGlow.blendMode = "add";
-  deep.addChild(sceneryGlow, kelpLayer, deepMask);
+  sigilFrame.addChild(sceneSigils.view);
+  deep.addChild(sceneryGlow, sigilFrame, kelpLayer, deepMask);
   setScenery("config");
   deep.setMask({ mask: deepMask, inverse: false });
   sea.addChild(water, nightWater, seaMask, deep, bloomLayer, surface);
@@ -400,6 +410,8 @@ function createVivid(app: Application): Vivid {
   function build(): void {
     const height: number = app.screen.height;
     const surfaceDepth: number = (height * seaHeight) / 100;
+
+    sceneSigils.layout();
     const total: number = seaDepth(height);
 
     const margin: number = overscan();
@@ -490,6 +502,16 @@ function createVivid(app: Application): Vivid {
     sceneryGlow.position.set(width / 2, centerY + scenery.glowY * height);
     sceneryGlow.width = size;
     sceneryGlow.height = size;
+    sigilFrame.visible = scenery.sigils && depth > 0;
+    sigilFrame.alpha = depth;
+    sigilFrame.position.set(width / 2, centerY);
+    sigilFrame.pivot.set(width / 2, height / 2);
+    sigilFrame.rotation = sigilTurn;
+
+    if (sigilFrame.visible) {
+      sceneSigils.update();
+    }
+
     kelpLayer.clear();
 
     if (!scenery.kelp || dive <= 0) {
