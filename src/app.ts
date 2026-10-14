@@ -35,6 +35,8 @@ import {
   showLandingRing,
   landingRing,
 } from "./menu/landing";
+import { createTerminal, type Terminal } from "./menu/terminal";
+import { createAscii, type Ascii } from "./effects/ascii/ascii";
 import { fadeOut } from "./effects/fade/fadeout";
 import { rippleReveal, type Circle } from "./effects/reveal/reveal";
 import type { RingStyle } from "./effects/ring/ring";
@@ -104,6 +106,7 @@ const buttons: Container = await createButtons(app);
 menu.addChild(buttons);
 
 const landing: Container = await createLanding(app);
+const terminal: Terminal = createTerminal(app);
 
 if (rainEnabled) {
   setBulletFloor(ocean.surface);
@@ -151,15 +154,12 @@ const playfield: Playfield = await createPlayfield(
   droneTexture(),
 );
 
-app.stage.addChild(
-  city,
-  vivid,
-  landing,
-  cityFront,
-  vividFront,
-  playfield.view,
-  createGuides(app),
-);
+const world: Container = new Container();
+
+world.addChild(city, vivid, landing, cityFront, vividFront, playfield.view);
+app.stage.addChild(world, terminal.view, createGuides(app));
+
+const ascii: Ascii = createAscii(app, world);
 startPortal(app);
 
 type Screen =
@@ -294,15 +294,18 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
     return;
   }
 
-  if (event.key !== "Escape" || screen !== "main") {
-    return;
+  if (event.key === "Escape" && screen === "main") {
+    returnToLanding();
   }
+});
 
+function returnToLanding(): void {
   screen = "outro";
   menuOpen = false;
   setButtonsActive(false);
   menu.interactiveChildren = false;
   setSurfacesActive(false);
+  setLandingEnabled(landing, false);
 
   const ring: RingStyle = {
     color: landingRing.color,
@@ -312,9 +315,11 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
   };
 
   moveLogoToCenter(app.ticker, revealDuration, revealEasing);
+  terminal.show();
+  ascii.set(true);
   rippleReveal(
     app.ticker,
-    app.stage,
+    world,
     app.screen,
     landingCircle(),
     ring,
@@ -337,7 +342,7 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
     setLandingEnabled(landing, true);
     screen = "landing";
   });
-});
+}
 
 document.addEventListener("navigate", (event: Event) => {
   const name: string = (event as CustomEvent<string>).detail;
@@ -358,10 +363,12 @@ document.addEventListener("navigate", (event: Event) => {
 
     enterButtons(app.ticker);
     moveLogoToCorner(app.ticker, revealDuration, revealEasing);
+    terminal.hide();
+    ascii.set(false);
     setLandingEnabled(landing, false);
     rippleReveal(
       app.ticker,
-      app.stage,
+      world,
       app.screen,
       landingCircle(),
       ring,
@@ -381,6 +388,7 @@ document.addEventListener("navigate", (event: Event) => {
     buttons.visible = true;
     menuOpen = true;
     setButtonsActive(true);
+    setLandingEnabled(landing, true);
     return;
   }
 
@@ -388,8 +396,17 @@ document.addEventListener("navigate", (event: Event) => {
     return;
   }
 
+  if (name === "landing") {
+    if (screen === "main") {
+      returnToLanding();
+    }
+
+    return;
+  }
+
   menuOpen = false;
   setButtonsActive(false);
+  setLandingEnabled(landing, false);
 
   if (name === "play") {
     play();

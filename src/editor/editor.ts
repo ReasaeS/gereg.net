@@ -36,6 +36,7 @@ import {
 } from "../ui/button";
 import { createText } from "../ui/text";
 import { createGlide, type Glide } from "../ui/motion";
+import { drawField } from "../ui/widgets";
 
 type Tool = "pencil" | "eraser" | "fill" | "picker";
 
@@ -52,6 +53,8 @@ const boardHeight: number = 0.62; // of screen height
 const boardWidth: number = 0.42; // of screen width
 const boardCenterY: number = 0.56; // of screen height
 const panelGap: number = 30; // px
+const boxPadding: number = 18; // px
+const statusGap: number = 12; // px
 const checkerLight: string = "#2a2f45";
 const checkerDark: string = "#1f2335";
 const gridColor: string = "#ffffff";
@@ -121,6 +124,7 @@ function createEditor(app: Application): Editor {
   const tools: Container = new Container();
   const swatches: Container = new Container();
   const frame: Graphics = new Graphics();
+  const box: Graphics = new Graphics();
   const selection: Graphics = new Graphics();
   const preview: Container = new Container();
   const small: Sprite = new Sprite(drawing.texture);
@@ -497,7 +501,7 @@ function createEditor(app: Application): Editor {
       .clear()
       .rect(0, 0, boardSize, boardSize)
       .stroke({ color: frameColor, width: frameWidth, alignment: 0 });
-    tabs.position.set(board.x, board.y - buttonHeight - tabGap);
+    tabs.position.set(board.x, board.y - boxPadding - buttonHeight - tabGap);
     tools.position.set(board.x - panelGap - buttonWidth, board.y);
 
     swatchSize = Math.min(
@@ -551,7 +555,25 @@ function createEditor(app: Application): Editor {
         panelGap,
     );
     large.position.set(spriteSize + panelGap / 2, 0);
-    status.position.set(board.x + boardSize / 2, board.y + boardSize + 12);
+    const right: number =
+      swatches.x + paletteColumns * (swatchSize + swatchGap) - swatchGap;
+    const bottom: number = Math.max(
+      board.y + boardSize,
+      tools.y + toolList.length * (buttonHeight + buttonGap) - buttonGap,
+      preview.y + spriteSize * previewScale,
+    );
+
+    box.position.set(tools.x - boxPadding, board.y - boxPadding);
+    drawField(
+      box,
+      right - tools.x + boxPadding * 2,
+      bottom - board.y + boxPadding * 2,
+      0,
+    );
+    status.position.set(
+      board.x + boardSize / 2,
+      bottom + boxPadding + statusGap,
+    );
     power.layout(
       tools.x,
       board.y,
@@ -626,7 +648,7 @@ function createEditor(app: Application): Editor {
   status.anchor.set(0.5, 0);
   status.alpha = 0;
   mode.snap(0);
-  view.addChild(board, tabs, tools, swatches, preview, status, power.view);
+  view.addChild(box, board, tabs, tools, swatches, preview, status, power.view);
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
     const text: string | undefined = event.clipboardData?.getData("text");

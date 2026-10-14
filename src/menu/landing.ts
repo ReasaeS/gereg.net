@@ -4,6 +4,7 @@ import {
   Circle as HitCircle,
   ColorMatrixFilter,
   Container,
+  Rectangle,
   Sprite,
   type Application,
   type Texture,
@@ -40,6 +41,7 @@ const cornerMargin: number = 24; // px
 const cornerGlyphWidth: number = 160; // px
 const hoverSmoothing: number = 0.12; // s
 const hoverBrightness: number = 1.3;
+const logoBoost: number = 1.6;
 
 type Placement = {
   x: number;
@@ -78,8 +80,12 @@ function landingHovered(): boolean {
   return hovered;
 }
 
-function landingBrightness(): number {
+function hoverLevel(): number {
   return 1 + (hoverBrightness - 1) * hover.value;
+}
+
+function landingBrightness(): number {
+  return logoBoost * hoverLevel();
 }
 
 function centerPlacement(circle: Circle): Placement {
@@ -105,6 +111,17 @@ function cornerPlacement(): Placement {
     y: cornerMargin - glyphTop * scale,
     width: logoViewWidth * scale,
   };
+}
+
+function cornerArea(): Rectangle {
+  const scale: number = cornerGlyphWidth / glyphWidth;
+
+  return new Rectangle(
+    cornerMargin,
+    cornerMargin,
+    cornerGlyphWidth,
+    glyphHeight * scale,
+  );
 }
 
 function brighten(
@@ -183,13 +200,16 @@ async function createLanding(application: Application): Promise<Container> {
   view.on("pointerout", () => {
     hovered = false;
   });
-  view.on("pointertap", () => navigate("start"));
+  view.on("pointertap", () => navigate(corner === 0 ? "start" : "landing"));
 
   application.ticker.add((ticker: Ticker) => {
     smoothDamp(hover, hovered ? 1 : 0, hoverSmoothing, ticker.deltaMS / 1000);
 
     const circle: Circle = landingCircle();
-    view.hitArea = new HitCircle(circle.x, circle.y, circle.radius);
+    view.hitArea =
+      corner === 0
+        ? new HitCircle(circle.x, circle.y, circle.radius)
+        : cornerArea();
 
     if (circle.radius !== ringSize) {
       currentRing.setCircle(0, 0, circle.radius - circleBorder / 2);
@@ -208,7 +228,11 @@ async function createLanding(application: Application): Promise<Container> {
     logo.width = from.width + (to.width - from.width) * corner;
     logo.height = (logo.width * logoViewHeight) / logoViewWidth;
     logoBright.brightness(
-      corner === 0 ? landingBrightness() : glideBrightness,
+      corner === 0
+        ? landingBrightness()
+        : corner === 1
+          ? hoverLevel()
+          : glideBrightness,
       false,
     );
   });
@@ -246,10 +270,11 @@ function moveLogoToCenter(
   duration: number,
   easing: Easing,
 ): Promise<void> {
-  glideBrightness = 1;
+  const from: number = hoverLevel();
 
   return tween(ticker, duration, (progress: number) => {
     corner = easing(1 - progress);
+    glideBrightness = from + (landingBrightness() - from) * easing(progress);
   });
 }
 
