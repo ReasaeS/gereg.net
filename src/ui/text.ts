@@ -1,5 +1,5 @@
 import { Container, Text } from "pixi.js";
-import { pixelRatio } from "./density";
+import { renderRatio } from "./density";
 
 const fontFamily: Array<string> = [
   "Barlow Condensed",
@@ -8,9 +8,14 @@ const fontFamily: Array<string> = [
   "sans-serif",
 ];
 
+function textResolution(): number {
+  return Math.max(renderRatio(), 1);
+}
+
 function createText(size: number, color: string = "#ffffff"): Text {
   return new Text({
     text: "",
+    resolution: textResolution(),
     style: {
       fontFamily: fontFamily,
       fontSize: size,
@@ -30,6 +35,7 @@ function createShadowText(
 ): Text {
   return new Text({
     text: text,
+    resolution: textResolution(),
     style: {
       fontFamily: fontFamily,
       fontSize: size,
@@ -59,7 +65,7 @@ function sharpen(target: Container, resolution: number): void {
 }
 
 function screenResolution(scale: number): number {
-  return scale * pixelRatio;
+  return Math.max(scale * renderRatio(), 1);
 }
 
 export { fontFamily, createText, createShadowText, sharpen, screenResolution };

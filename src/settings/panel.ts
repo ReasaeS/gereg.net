@@ -21,12 +21,25 @@ import { downKeys, leftKeys, rightKeys, upKeys } from "../game/input";
 import { createGlide, type Glide } from "../ui/motion";
 import {
   channels,
+  getCrt,
   getRate,
+  getResolution,
+  getTv,
+  getTuning,
   getVolume,
+  onCrt,
   onRate,
+  onResolution,
+  onTv,
+  onTuning,
   onVolume,
   rates,
+  resolutions,
+  setCrt,
   setRate,
+  setResolution,
+  setTv,
+  setTuning,
   setVolume,
   type Channel,
 } from "./settings";
@@ -40,6 +53,8 @@ type Row = {
   adjust: (direction: number) => void;
   refresh: () => void;
   focus?: Glide;
+  shown?: () => boolean;
+  branch?: Graphics;
 };
 
 const labelSize: number = 34; // px
@@ -54,7 +69,14 @@ const valueGap: number = 24; // px
 const markerWidth: number = 10; // px
 const markerGap: number = 18; // px
 const labelShift: number = 8; // px
-const volumeStep: number = 0.05;
+const subLabelSize: number = 28; // px
+const subIndent: number = 34; // px
+const branchX: number = 10; // px
+const branchReach: number = 22; // px
+const branchWidth: number = 2; // px
+const branchAlpha: number = 0.6;
+const branchGap: number = 4; // px
+const sliderStep: number = 0.05;
 const contentWidth: number = labelWidth + sliderWidth + valueGap + 90; // px
 const titleSize: number = 44; // px
 const titleHeight: number = 64; // px
@@ -64,6 +86,7 @@ const listTop: number = 0.3; // of screen height
 const listBottom: number = 0.9; // of screen height
 const scrollSmoothing: number = 0.1; // s
 const rateButtonWidth: number = 88; // px
+const toggleStates: Array<boolean> = [true, false];
 const channelNames: Map<Channel, string> = new Map([
   ["master", "master volume"],
   ["soundtrack", "soundtrack"],
@@ -83,15 +106,82 @@ function createRow(name: string): [Container, Text] {
   return [view, label];
 }
 
-function createRateRow(buttons: Array<Button>): Row {
-  const [view, label] = createRow("framerate");
+function createToggleRow(
+  name: string,
+  get: () => boolean,
+  set: (on: boolean) => void,
+  buttons: Array<Button>,
+): Row {
+  const [view, label] = createRow(name);
 
-  for (let index = 0; index < rates.length; index++) {
-    const value: number = rates[index]!;
+  for (let index = 0; index < toggleStates.length; index++) {
+    const on: boolean = toggleStates[index]!;
     const button: Button = createButton(
-      String(value),
-      () => getRate() === value,
-      () => setRate(value),
+      on ? "on" : "off",
+      () => get() === on,
+      () => set(on),
+    );
+
+    button.view.position.set(labelWidth + index * (buttonWidth + buttonGap), 0);
+    buttons.push(button);
+    view.addChild(button.view);
+  }
+
+  return {
+    view: view,
+    label: label,
+    adjust: (direction: number) => set(direction < 0),
+    refresh: () => {
+      for (const button of buttons) {
+        paintButton(button);
+      }
+    },
+  };
+}
+
+function subRow(row: Row, shown: () => boolean): Row {
+  const branch: Graphics = new Graphics();
+
+  row.label.style.fontSize = subLabelSize;
+  row.label.x = subIndent;
+  row.view.addChildAt(branch, 0);
+
+  return { ...row, shown: shown, branch: branch };
+}
+
+function drawBranch(branch: Graphics, joined: boolean): void {
+  const top: number = joined
+    ? buttonHeight / 2 - rowHeight
+    : buttonHeight - rowHeight + branchGap;
+
+  branch
+    .clear()
+    .moveTo(branchX, top)
+    .lineTo(branchX, buttonHeight / 2)
+    .lineTo(branchX + branchReach, buttonHeight / 2)
+    .stroke({
+      color: getTheme().accent,
+      alpha: branchAlpha,
+      width: branchWidth,
+    });
+}
+
+function createChoiceRow(
+  name: string,
+  choices: Array<number>,
+  title: (value: number) => string,
+  get: () => number,
+  set: (value: number) => void,
+  buttons: Array<Button>,
+): Row {
+  const [view, label] = createRow(name);
+
+  for (let index = 0; index < choices.length; index++) {
+    const value: number = choices[index]!;
+    const button: Button = createButton(
+      title(value),
+      () => get() === value,
+      () => set(value),
       rateButtonWidth,
     );
 
@@ -107,9 +197,9 @@ function createRateRow(buttons: Array<Button>): Row {
     view: view,
     label: label,
     adjust: (direction: number) => {
-      const index: number = rates.indexOf(getRate()) + direction;
+      const index: number = choices.indexOf(get()) + direction;
 
-      setRate(rates[Math.min(Math.max(index, 0), rates.length - 1)]!);
+      set(choices[Math.min(Math.max(index, 0), choices.length - 1)]!);
     },
     refresh: () => {
       for (const button of buttons) {
@@ -119,11 +209,15 @@ function createRateRow(buttons: Array<Button>): Row {
   };
 }
 
-function createVolumeRow(channel: Channel): Row {
-  const [view, label] = createRow(channelNames.get(channel)!);
+function createSliderRow(
+  name: string,
+  get: () => number,
+  set: (value: number) => void,
+): Row {
+  const [view, label] = createRow(name);
   const track: Graphics = new Graphics();
   const value: Text = createText(valueSize);
-  const level: Glide = createGlide(getVolume(channel), draw);
+  const level: Glide = createGlide(get(), draw);
   let dragging: boolean = false;
 
   function shape(graphics: Graphics, width: number): Graphics {
@@ -156,15 +250,15 @@ function createVolumeRow(channel: Channel): Row {
   }
 
   function refresh(): void {
-    level.set(getVolume(channel));
-    value.text = Math.round(getVolume(channel) * 100) + "%";
+    level.set(get());
+    value.text = Math.round(get() * 100) + "%";
     draw();
   }
 
   function pick(event: FederatedPointerEvent): void {
     const x: number = track.toLocal(event.global).x;
 
-    setVolume(channel, Math.round((x / sliderWidth) * 100) / 100);
+    set(Math.round((x / sliderWidth) * 100) / 100);
   }
 
   track.position.set(labelWidth, (buttonHeight - sliderHeight) / 2);
@@ -198,8 +292,7 @@ function createVolumeRow(channel: Channel): Row {
   return {
     view: view,
     label: label,
-    adjust: (direction: number) =>
-      setVolume(channel, getVolume(channel) + direction * volumeStep),
+    adjust: (direction: number) => set(get() + direction * sliderStep),
     refresh: refresh,
   };
 }
@@ -218,17 +311,98 @@ function createSettings(app: Application): PageContent {
   const list: Container = new Container();
   const mask: Graphics = new Graphics();
   const marker: Graphics = new Graphics();
+  const crtButtons: Array<Button> = new Array();
+  const tvButtons: Array<Button> = new Array();
   const rateButtons: Array<Button> = new Array();
+  const resolutionButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
   const scroll: Spring = { value: 0, velocity: 0 };
   const categories: Array<Category> = [
     {
+      name: "visual",
+      rows: [
+        createToggleRow("crt effect", getCrt, setCrt, crtButtons),
+        subRow(
+          createSliderRow(
+            "scanlines",
+            () => getTuning("scanlines"),
+            (value: number) => setTuning("scanlines", value),
+          ),
+          getCrt,
+        ),
+        subRow(
+          createSliderRow(
+            "colour fringe",
+            () => getTuning("fringe"),
+            (value: number) => setTuning("fringe", value),
+          ),
+          getCrt,
+        ),
+        subRow(
+          createSliderRow(
+            "glow",
+            () => getTuning("glow"),
+            (value: number) => setTuning("glow", value),
+          ),
+          getCrt,
+        ),
+        subRow(
+          createSliderRow(
+            "flicker",
+            () => getTuning("flicker"),
+            (value: number) => setTuning("flicker", value),
+          ),
+          getCrt,
+        ),
+        createToggleRow("tv mode", getTv, setTv, tvButtons),
+        subRow(
+          createSliderRow(
+            "curvature strength",
+            () => getTuning("curvature"),
+            (value: number) => setTuning("curvature", value),
+          ),
+          getTv,
+        ),
+        subRow(
+          createSliderRow(
+            "vignette power",
+            () => getTuning("vignette"),
+            (value: number) => setTuning("vignette", value),
+          ),
+          getTv,
+        ),
+      ],
+    },
+    {
       name: "display",
-      rows: [createRateRow(rateButtons)],
+      rows: [
+        createChoiceRow(
+          "resolution",
+          resolutions,
+          (lines: number) => (lines === 0 ? "auto" : lines + "p"),
+          getResolution,
+          setResolution,
+          resolutionButtons,
+        ),
+        createChoiceRow(
+          "framerate",
+          rates,
+          String,
+          getRate,
+          setRate,
+          rateButtons,
+        ),
+      ],
     },
     {
       name: "audio",
-      rows: channels.map((channel: Channel) => createVolumeRow(channel)),
+      rows: channels.map((channel: Channel) =>
+        createSliderRow(
+          channelNames.get(channel)!,
+          () => getVolume(channel),
+          (value: number) => setVolume(channel, value),
+        ),
+      ),
     },
   ].map((entry: { name: string; rows: Array<Row> }) => ({
     ...entry,
@@ -246,24 +420,52 @@ function createSettings(app: Application): PageContent {
   let visibleHeight: number = 1;
   let contentHeight: number = 0;
 
+  const presence: Map<Row, Glide> = new Map();
+
   for (const entry of categories) {
-    entry.top = contentHeight;
     entry.title.text = entry.name.toUpperCase();
     entry.title.anchor.set(0, 0.5);
-    entry.title.position.set(0, contentHeight + titleHeight / 2);
     list.addChild(entry.title);
-    contentHeight += titleHeight;
 
     for (const row of entry.rows) {
-      row.view.y = contentHeight;
-      list.addChild(row.view);
-      contentHeight += rowHeight;
-    }
+      const shown: () => boolean = row.shown ?? (() => true);
 
-    contentHeight += categoryGap;
+      list.addChild(row.view);
+      presence.set(row, createGlide(shown() ? 1 : 0, arrange));
+    }
   }
 
-  contentHeight -= categoryGap;
+  function amountOf(row: Row): number {
+    return presence.get(row)!.value();
+  }
+
+  function arrange(): void {
+    let y: number = 0;
+
+    for (const entry of categories) {
+      entry.top = y;
+      entry.title.position.set(0, y + titleHeight / 2);
+      y += titleHeight;
+
+      for (const row of entry.rows) {
+        const amount: number = amountOf(row);
+
+        row.view.y = y;
+        row.view.alpha = amount;
+        row.view.visible = amount > 0;
+        y += rowHeight * amount;
+      }
+
+      y += categoryGap;
+    }
+
+    contentHeight = y - categoryGap;
+    target = Math.min(target, maxScroll());
+
+    if (placed) {
+      markerY.set(rows[selected]!.view.y);
+    }
+  }
 
   for (let index = 0; index < categories.length; index++) {
     const entry: Category = categories[index]!;
@@ -311,6 +513,20 @@ function createSettings(app: Application): PageContent {
     target = Math.min(Math.max(target, 0), maxScroll());
   }
 
+  function isShown(row: Row): boolean {
+    return row.shown?.() ?? true;
+  }
+
+  function step(direction: number): void {
+    let index: number = selected;
+
+    do {
+      index = (index + direction + rows.length) % rows.length;
+    } while (!isShown(rows[index]!) && index !== selected);
+
+    select(index);
+  }
+
   function select(index: number): void {
     const row: Row = rows[index]!;
 
@@ -332,17 +548,29 @@ function createSettings(app: Application): PageContent {
   }
 
   function refresh(): void {
+    if (!isShown(rows[selected]!)) {
+      selected = rows.findIndex(isShown);
+    }
+
     for (let index = 0; index < rows.length; index++) {
       const row: Row = rows[index]!;
+
+      presence.get(row)!.set(isShown(row) ? 1 : 0);
       const label: Text = row.label;
+
+      const indent: number = row.branch === undefined ? 0 : subIndent;
 
       row.focus ??= createGlide(
         index === selected ? 1 : 0,
         (amount: number) => {
           label.alpha = 0.7 + amount * 0.3;
-          label.x = amount * labelShift;
+          label.x = indent + amount * labelShift;
         },
       );
+
+      if (row.branch !== undefined) {
+        drawBranch(row.branch, rows[index - 1]?.branch !== undefined);
+      }
       label.tint = getTheme().menuText;
       row.focus.set(index === selected ? 1 : 0);
       row.refresh();
@@ -420,9 +648,9 @@ function createSettings(app: Application): PageContent {
     } else if (event.code.startsWith("Digit")) {
       jumpTo(Number(event.code.slice(5)) - 1);
     } else if (upKeys.includes(event.code)) {
-      select((selected - 1 + rows.length) % rows.length);
+      step(-1);
     } else if (downKeys.includes(event.code)) {
-      select((selected + 1) % rows.length);
+      step(1);
     } else if (leftKeys.includes(event.code)) {
       rows[selected]!.adjust(-1);
     } else if (rightKeys.includes(event.code)) {
@@ -439,8 +667,13 @@ function createSettings(app: Application): PageContent {
     view.eventMode = value ? "passive" : "none";
   }
 
+  onCrt(refresh);
+  onTv(refresh);
+  onTuning(refresh);
   onVolume(refresh);
   onRate(refresh);
+  onResolution(refresh);
+  arrange();
   layout();
   setActive(false);
   app.renderer.on("resize", layout);

@@ -109,8 +109,8 @@ function createAscii(
   target: Container,
   frame: () => Rectangle,
 ): Ascii {
-  const resolution: number = app.renderer.resolution;
-  const atlas: Texture = createAtlas(app, resolution);
+  let resolution: number = app.renderer.resolution;
+  let atlas: Texture = createAtlas(app, resolution);
   const filter: Filter = new Filter({
     glProgram: GlProgram.from({
       vertex: filterVertex,
@@ -142,8 +142,18 @@ function createAscii(
     const uniforms: Record<string, Float32Array> = filter.resources[
       "asciiUniforms"
     ].uniforms as Record<string, Float32Array>;
-    uniforms["uCell"]!.set([cellWidth * resolution, cellHeight * resolution]);
-    uniforms["uOrigin"]!.set([frame().x * resolution, frame().y * resolution]);
+
+    if (resolution !== app.renderer.resolution) {
+      const old: Texture = atlas;
+
+      resolution = app.renderer.resolution;
+      filter.resolution = resolution;
+      atlas = createAtlas(app, resolution);
+      filter.resources["uGlyphs"] = atlas.source;
+      old.destroy(true);
+    }
+    uniforms["uCell"]!.set([cellWidth, cellHeight]);
+    uniforms["uOrigin"]!.set([frame().x, frame().y]);
   }
 
   target.filterArea = app.screen;

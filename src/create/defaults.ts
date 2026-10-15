@@ -32,7 +32,7 @@ function defaultPattern(): Pattern {
     spread: 360,
     heading: 0,
     aim: false,
-    frame: "objective",
+    frame: "subjective",
     wall: "top",
     gapShift: 0,
     gapPhaseShift: 0,

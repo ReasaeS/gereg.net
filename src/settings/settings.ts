@@ -4,6 +4,17 @@ type VolumeListener = (channel: Channel, volume: number) => void;
 
 type RateListener = (rate: number) => void;
 
+type CrtListener = (on: boolean) => void;
+
+type ResolutionListener = (lines: number) => void;
+
+type TvListener = (on: boolean) => void;
+
+type Tuning =
+  "curvature" | "vignette" | "scanlines" | "fringe" | "glow" | "flicker";
+
+type TuningListener = (tuning: Tuning, value: number) => void;
+
 const channels: Array<Channel> = ["master", "soundtrack", "sfx", "dialogue"];
 const volumeStorageKey: string = "geregnet.volume";
 const defaultVolume: number = 0.8;
@@ -14,6 +25,165 @@ const rateStorageKey: string = "geregnet.framerate";
 const defaultRate: number = 60; // Hz
 const rateListeners: Array<RateListener> = new Array();
 let rate: number = loadRate();
+const crtStorageKey: string = "geregnet.crt";
+const crtListeners: Array<CrtListener> = new Array();
+let crt: boolean = loadCrt();
+
+function loadCrt(): boolean {
+  try {
+    return localStorage.getItem(crtStorageKey) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function getCrt(): boolean {
+  return crt;
+}
+
+function setCrt(value: boolean): void {
+  if (value === crt) {
+    return;
+  }
+
+  crt = value;
+
+  try {
+    localStorage.setItem(crtStorageKey, value ? "on" : "off");
+  } catch {
+    console.warn("Could not save the CRT setting");
+  }
+
+  for (const listener of crtListeners) {
+    listener(value);
+  }
+}
+
+function onCrt(listener: CrtListener): void {
+  crtListeners.push(listener);
+  listener(crt);
+}
+
+const tunings: Array<Tuning> = [
+  "curvature",
+  "vignette",
+  "scanlines",
+  "fringe",
+  "glow",
+  "flicker",
+];
+const tuningStorageKey: string = "geregnet.tvshape";
+const tuningDefaults: Map<Tuning, number> = new Map([
+  ["curvature", 0.4],
+  ["vignette", 0.3],
+  ["scanlines", 0.47],
+  ["fringe", 0.4],
+  ["glow", 0.35],
+  ["flicker", 0.1],
+]);
+const tuningListeners: Array<TuningListener> = new Array();
+const tuningValues: Map<Tuning, number> = loadTunings();
+
+function loadTunings(): Map<Tuning, number> {
+  const loaded: Map<Tuning, number> = new Map();
+  let saved: Record<string, unknown> = {};
+
+  try {
+    saved = JSON.parse(localStorage.getItem(tuningStorageKey) ?? "{}");
+  } catch {
+    saved = {};
+  }
+
+  for (const tuning of tunings) {
+    const value: unknown = saved[tuning];
+
+    loaded.set(
+      tuning,
+      typeof value === "number" && value >= 0 && value <= 1
+        ? value
+        : tuningDefaults.get(tuning)!,
+    );
+  }
+
+  return loaded;
+}
+
+function getTuning(tuning: Tuning): number {
+  return tuningValues.get(tuning)!;
+}
+
+function setTuning(tuning: Tuning, value: number): void {
+  const clamped: number =
+    Math.round(Math.min(Math.max(value, 0), 1) * 100) / 100;
+
+  if (clamped === tuningValues.get(tuning)) {
+    return;
+  }
+
+  tuningValues.set(tuning, clamped);
+
+  try {
+    localStorage.setItem(
+      tuningStorageKey,
+      JSON.stringify(Object.fromEntries(tuningValues)),
+    );
+  } catch {
+    console.warn("Could not save the screen effect settings");
+  }
+
+  for (const listener of tuningListeners) {
+    listener(tuning, clamped);
+  }
+}
+
+function onTuning(listener: TuningListener): void {
+  tuningListeners.push(listener);
+
+  for (const tuning of tunings) {
+    listener(tuning, tuningValues.get(tuning)!);
+  }
+}
+
+const resolutions: Array<number> = [0, 720, 1080, 1440, 2160]; // px
+const resolutionStorageKey: string = "geregnet.resolution";
+const resolutionListeners: Array<ResolutionListener> = new Array();
+let resolution: number = loadResolution();
+
+function loadResolution(): number {
+  try {
+    const saved: number = Number(localStorage.getItem(resolutionStorageKey));
+
+    return resolutions.includes(saved) ? saved : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function getResolution(): number {
+  return resolution;
+}
+
+function setResolution(value: number): void {
+  if (value === resolution || !resolutions.includes(value)) {
+    return;
+  }
+
+  resolution = value;
+
+  try {
+    localStorage.setItem(resolutionStorageKey, String(value));
+  } catch {
+    console.warn("Could not save the resolution setting");
+  }
+
+  for (const listener of resolutionListeners) {
+    listener(value);
+  }
+}
+
+function onResolution(listener: ResolutionListener): void {
+  resolutionListeners.push(listener);
+}
 
 function loadRate(): number {
   try {
@@ -49,6 +219,45 @@ function setRate(value: number): void {
 
 function onRate(listener: RateListener): void {
   rateListeners.push(listener);
+}
+
+const tvStorageKey: string = "geregnet.tv";
+const tvListeners: Array<TvListener> = new Array();
+let tv: boolean = loadTv();
+
+function loadTv(): boolean {
+  try {
+    return localStorage.getItem(tvStorageKey) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function getTv(): boolean {
+  return tv;
+}
+
+function setTv(value: boolean): void {
+  if (value === tv) {
+    return;
+  }
+
+  tv = value;
+
+  try {
+    localStorage.setItem(tvStorageKey, value ? "on" : "off");
+  } catch {
+    console.warn("Could not save the TV mode setting");
+  }
+
+  for (const listener of tvListeners) {
+    listener(value);
+  }
+}
+
+function onTv(listener: TvListener): void {
+  tvListeners.push(listener);
+  listener(tv);
 }
 
 function loadVolumes(): Map<Channel, number> {
@@ -122,5 +331,18 @@ export {
   getRate,
   setRate,
   onRate,
+  resolutions,
+  getResolution,
+  setResolution,
+  onResolution,
+  getCrt,
+  setCrt,
+  onCrt,
+  getTv,
+  setTv,
+  onTv,
+  getTuning,
+  setTuning,
+  onTuning,
 };
-export type { Channel };
+export type { Channel, Tuning };

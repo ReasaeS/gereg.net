@@ -1,17 +1,10 @@
-import {
-  Assets,
-  Container,
-  Graphics,
-  Sprite,
-  Text,
-  type Texture,
-} from "pixi.js";
+import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
 import { getTheme } from "../theme/theme";
 import { maxPower, minPower } from "./drones";
 import { startBombs } from "./bomb";
 import { drawFrame } from "./field";
 import { createText, screenResolution } from "../ui/text";
-import { pixelRatio } from "../ui/density";
+import { loadLogo, trackLogo } from "../ui/logo";
 import { formatPlaytime } from "../settings/playtime";
 
 type Stats = {
@@ -40,8 +33,6 @@ type Row = {
   stars: Graphics | null;
 };
 
-const logoPath: string = "./logo.svg";
-const logoResolution: number = 2;
 const panelX: number = 440; // units
 const panelRight: number = 624; // units
 const badgeY: number = 22; // units
@@ -118,10 +109,7 @@ async function createHud(): Promise<Hud> {
   const elapsedValue: Text = createText(rowSize, valueColor);
   const rows: Array<Row> = new Array();
   const texts: Array<Text> = new Array();
-  const logoTexture: Texture = await Assets.load({
-    src: logoPath,
-    data: { resolution: logoResolution * pixelRatio },
-  });
+  const logoTexture: Texture = await loadLogo();
   const logo: Sprite = new Sprite(logoTexture);
   const stats: Stats = {
     hiScore: 0,
@@ -178,6 +166,7 @@ async function createHud(): Promise<Hud> {
   zen.visible = false;
   view.addChild(stage, zen);
 
+  trackLogo(logo);
   logo.anchor.set(0.5, 1);
   logo.width = logoWidth;
   logo.scale.y = logo.scale.x;

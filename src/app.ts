@@ -2,6 +2,7 @@ import {
   Application,
   Container,
   Graphics,
+  Text,
   Texture,
   UPDATE_PRIORITY,
   type BindGroup,
@@ -48,11 +49,11 @@ import {
   showLandingRing,
   landingRing,
 } from "./menu/landing";
-import { pixelRatio, viewScale } from "./ui/density";
+import { nativeRatio, setRenderRatio, viewScale } from "./ui/density";
 import { createTerminal, type Terminal } from "./menu/terminal";
 import { formatPlaytime, playtime } from "./settings/playtime";
 import { createAscii, type Ascii } from "./effects/ascii/ascii";
-import { createCrt, type Crt } from "./effects/crt/crt";
+import { createCrt } from "./effects/crt/crt";
 import { fadeOut } from "./effects/fade/fadeout";
 import { rippleReveal, type Circle } from "./effects/reveal/reveal";
 import type { RingStyle } from "./effects/ring/ring";
@@ -75,8 +76,9 @@ import {
 import { setPortal, addPortalView, startPortal } from "./effects/portal/portal";
 import { seaHeight, createVivid, type Vivid } from "./worlds/vivid";
 import { createNightSea } from "./worlds/nightsea";
-import { getTheme } from "./theme/theme";
+import { getTheme, onTheme, type Theme } from "./theme/theme";
 import { startMotion } from "./ui/motion";
+import { getResolution, onResolution } from "./settings/settings";
 import { startGamepad } from "./game/gamepad";
 import { createCredits, type Credits } from "./menu/credits";
 
@@ -113,15 +115,22 @@ const container: HTMLDivElement = document.getElementById(
 ) as HTMLDivElement;
 const app: Application = new Application();
 
+function renderResolution(): number {
+  const lines: number = getResolution();
+
+  return lines === 0 ? nativeRatio : lines / (window.innerHeight * viewScale());
+}
+
 await app.init({
   width: window.innerWidth * viewScale(),
   height: window.innerHeight * viewScale(),
   background: getTheme().outside,
   antialias: true,
   autoDensity: false,
-  resolution: pixelRatio,
+  resolution: renderResolution(),
 });
 
+setRenderRatio(app.renderer.resolution);
 app.canvas.style.width = "100%";
 app.canvas.style.height = "100%";
 container.appendChild(app.canvas);
@@ -138,13 +147,45 @@ function releaseFilterInput(): void {
   }
 }
 
-window.addEventListener("resize", () => {
+const wantedResolutions: WeakMap<Text, number> = new WeakMap();
+
+function sharpenAll(target: Container, from: number, to: number): void {
+  if (target instanceof Text && (target.resolution !== null || to < 1)) {
+    const stored: number | undefined = wantedResolutions.get(target);
+    const current: number =
+      stored !== undefined && Math.max(stored, 1) === target.resolution
+        ? stored
+        : (target.resolution ?? from);
+    const wanted: number = (current * to) / from;
+
+    wantedResolutions.set(target, wanted);
+    target.resolution = Math.max(wanted, 1);
+  }
+
+  for (const child of target.children) {
+    sharpenAll(child, from, to);
+  }
+}
+
+function applyResolution(): void {
+  const previous: number = app.renderer.resolution;
+  const next: number = renderResolution();
+
   releaseFilterInput();
   app.renderer.resize(
     window.innerWidth * viewScale(),
     window.innerHeight * viewScale(),
+    next,
   );
-});
+
+  if (next !== previous) {
+    setRenderRatio(next);
+    sharpenAll(app.stage, previous, next);
+  }
+}
+
+window.addEventListener("resize", applyResolution);
+onResolution(applyResolution);
 startMotion(app.ticker);
 bindLanding(app);
 
@@ -185,13 +226,34 @@ terminal.print(
 terminal.print(`RENDERER ${app.renderer.name.toUpperCase()}`, "SYS");
 const screenLayer: Container = new Container();
 
-screenLayer.addChild(introBackdrop, world, introFrame, terminal.view);
+const screenBackground: Graphics = new Graphics();
+let backgroundColor: string = getTheme().outside;
+
+function paintBackground(): void {
+  screenBackground
+    .clear()
+    .rect(0, 0, app.screen.width, app.screen.height)
+    .fill(backgroundColor);
+}
+
+onTheme((theme: Theme) => {
+  backgroundColor = theme.outside;
+  paintBackground();
+});
+app.renderer.on("resize", paintBackground);
+screenLayer.addChild(
+  screenBackground,
+  introBackdrop,
+  world,
+  introFrame,
+  terminal.view,
+);
 app.stage.addChild(screenLayer, createGuides(app));
 surroundIntro(1);
 app.renderer.on("resize", () => surroundIntro(introSurround));
 
 const ascii: Ascii = createAscii(app, world, introBounds);
-const crt: Crt = createCrt(app, screenLayer, introBounds);
+createCrt(app, screenLayer, introBounds);
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve: () => void) => {
@@ -527,7 +589,6 @@ function morphTerminal(terminalShown: boolean): void {
     setIntroFrame(amount);
     surroundIntro(amount);
     ascii.fade(amount);
-    crt.fade(amount);
     terminal.fade(amount);
     showThroughRing();
   }).then(() => settleIntro(terminalShown));

@@ -1,5 +1,4 @@
 import {
-  Assets,
   Color,
   Circle as HitCircle,
   ColorMatrixFilter,
@@ -11,7 +10,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { navigate } from "./options";
-import { pixelRatio } from "../ui/density";
+import { loadLogo, trackLogo } from "../ui/logo";
 import { onTheme, type Theme } from "../theme/theme";
 import { createRing, type Ring, type RingStyle } from "../effects/ring/ring";
 import type { Circle } from "../effects/reveal/reveal";
@@ -22,10 +21,8 @@ import {
   type Spring,
 } from "../effects/tween/tween";
 
-const logoPath: string = "./logo.svg";
 const logoViewWidth: number = 508.9;
 const logoViewHeight: number = 290;
-const logoResolution: number = 2;
 const glyphLeft: number = 55;
 const glyphTop: number = 55;
 const glyphWidth: number = 373.3;
@@ -173,13 +170,12 @@ function brighten(
 async function createLanding(application: Application): Promise<Container> {
   app = application;
 
-  const texture: Texture = await Assets.load({
-    src: logoPath,
-    data: { resolution: logoResolution * pixelRatio },
-  });
+  const texture: Texture = await loadLogo();
 
   const view: Container = new Container();
   const logo: Sprite = new Sprite(texture);
+
+  trackLogo(logo);
   const ringFilters: Array<ColorMatrixFilter> = [new ColorMatrixFilter()];
   const logoTint: ColorMatrixFilter = new ColorMatrixFilter();
   const logoBright: ColorMatrixFilter = new ColorMatrixFilter();
