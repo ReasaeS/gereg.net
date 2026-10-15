@@ -129,6 +129,7 @@ function createCrt(
       },
     },
     resolution: app.renderer.resolution,
+    antialias: "inherit",
   });
   const uniforms: Record<string, number | Float32Array> = filter.resources[
     "crtUniforms"

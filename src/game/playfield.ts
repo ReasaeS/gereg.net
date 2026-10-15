@@ -95,7 +95,7 @@ async function createPlayfield(
     fieldHeight,
   );
   const clock: Clock = createClock();
-  const zen: Zen = createZen();
+  const zen: Zen = createZen(hud.setLook);
   let menu: Menu = modesMenu;
   let zenning: boolean = false;
   let zenElapsed: number = 0;

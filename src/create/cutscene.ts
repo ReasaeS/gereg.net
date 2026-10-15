@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
-import type { Character, Cutscene, Emotion, Line } from "./types";
+import type { Character, Cutscene, Emotion, Line, Palette } from "./types";
 import { getTexture } from "./images";
 import { createText } from "../ui/text";
 import { fieldHeight, fieldWidth } from "../game/field";
@@ -9,6 +9,7 @@ type Scene = {
   play: (cutscene: Cutscene, index: number) => void;
   advance: () => void;
   update: (delta: number) => void;
+  setPalette: (palette: Palette | null) => void;
 };
 
 const boxMargin: number = 12; // units
@@ -26,6 +27,9 @@ const portraitOverlap: number = 24; // units
 const portraitX: number = 0.25; // of field width
 const lineHold: number = 1.5; // s
 const voiceEvery: number = 2;
+const arrowSize: number = 5; // units
+const arrowBob: number = 2; // units
+const arrowRate: number = 4; // rad/s
 
 function speakerOf(cast: Array<Character>, line: Line): Character | null {
   return cast.find((value: Character) => value.id === line.character) ?? null;
@@ -56,10 +60,12 @@ function castOf(cutscene: Cutscene, cast: Array<Character>): Array<Character> {
 function createScene(
   speak: (cutscene: Cutscene) => void,
   cast: () => Array<Character>,
+  autoAdvance: boolean,
 ): Scene {
   const view: Container = new Container();
   const portrait: Sprite = new Sprite();
   const box: Graphics = new Graphics();
+  const arrow: Graphics = new Graphics();
   const name: Text = createText(nameSize, "#ffffff");
   const body: Text = createText(textSize, "#ffffff");
   const boxTop: number = fieldHeight - boxMargin - boxHeight;
@@ -69,6 +75,8 @@ function createScene(
   let typed: number = 0;
   let shown: number = -1;
   let hold: number = 0;
+  let colors: Palette | null = null;
+  let bob: number = 0;
 
   function line(): Line | null {
     return scene?.lines[index] ?? null;
@@ -106,7 +114,7 @@ function createScene(
     const talking: Character | null = speaker();
 
     name.text = talking?.name.toUpperCase() ?? "";
-    name.style.fill = talking?.color ?? "#ffffff";
+    name.style.fill = colors?.label ?? talking?.color ?? "#ffffff";
     shown = -1;
     drawPortrait();
   }
@@ -167,7 +175,11 @@ function createScene(
       body.text = current.text.slice(0, after);
     }
 
-    if (typed >= current.text.length) {
+    bob += delta * arrowRate;
+    arrow.visible = typed >= current.text.length;
+    arrow.y = Math.sin(bob) * arrowBob;
+
+    if (autoAdvance && typed >= current.text.length) {
       hold += delta;
 
       if (hold >= lineHold) {
@@ -176,10 +188,38 @@ function createScene(
     }
   }
 
-  box
-    .rect(boxMargin, boxTop, boxWidth, boxHeight)
-    .fill({ color: boxColor, alpha: boxAlpha })
-    .stroke({ color: "#ffffff", width: boxBorder, alignment: 1 });
+  function drawBox(): void {
+    box
+      .clear()
+      .rect(boxMargin, boxTop, boxWidth, boxHeight)
+      .fill({ color: boxColor, alpha: boxAlpha })
+      .stroke({
+        color: colors?.accent ?? "#ffffff",
+        width: boxBorder,
+        alignment: 1,
+      });
+    arrow
+      .clear()
+      .poly([
+        boxMargin + boxWidth - boxPadding - arrowSize * 2,
+        boxTop + boxHeight - boxPadding - arrowSize,
+        boxMargin + boxWidth - boxPadding,
+        boxTop + boxHeight - boxPadding - arrowSize,
+        boxMargin + boxWidth - boxPadding - arrowSize,
+        boxTop + boxHeight - boxPadding,
+      ])
+      .fill(colors?.highlight ?? "#ffffff");
+    body.tint = colors?.text ?? "#ffffff";
+  }
+
+  function setPalette(palette: Palette | null): void {
+    colors = palette;
+    drawBox();
+    drawLine();
+  }
+
+  drawBox();
+  arrow.visible = false;
   name.position.set(boxMargin + boxPadding, boxTop + boxPadding);
   body.position.set(boxMargin + boxPadding, boxTop + boxPadding + textGap);
   body.style.wordWrap = true;
@@ -187,9 +227,15 @@ function createScene(
 
   portrait.anchor.set(0.5, 1);
   portrait.position.set(fieldWidth * portraitX, boxTop + portraitOverlap);
-  view.addChild(portrait, box, name, body);
+  view.addChild(portrait, box, name, body, arrow);
 
-  return { view: view, play: play, advance: advance, update: update };
+  return {
+    view: view,
+    play: play,
+    advance: advance,
+    update: update,
+    setPalette: setPalette,
+  };
 }
 
 export { createScene, speakerOf, feelingOf, castOf };

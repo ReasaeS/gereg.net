@@ -156,6 +156,8 @@ function loadCreations(): Creations {
       patterns: parsed.patterns ?? fallback.patterns,
       enemies: parsed.enemies ?? fallback.enemies,
       backgrounds: parsed.backgrounds ?? fallback.backgrounds,
+      wallpapers: parsed.wallpapers ?? fallback.wallpapers,
+      palettes: parsed.palettes ?? fallback.palettes,
       sigils: parsed.sigils ?? new Array(),
       spells:
         parsed.sigils === undefined
@@ -210,6 +212,7 @@ function loadCreations(): Creations {
       ...creations.patterns,
       ...creations.enemies,
       ...creations.backgrounds,
+      ...creations.wallpapers,
     ]) {
       item.sprite = item.sprite ?? null;
     }
@@ -274,6 +277,8 @@ function loadCreations(): Creations {
         defaultStage(
           creations.enemies[0]?.id ?? null,
           creations.backgrounds[0]?.id ?? null,
+          creations.wallpapers[0]?.id ?? null,
+          creations.palettes[0]?.id ?? null,
         ),
       );
     }
@@ -317,6 +322,8 @@ type OldSpawn = Spawn & { time?: number };
 
 function upgradeStage(stage: Stage & { spawns?: Array<OldSpawn> }): void {
   stage.difficulty = stage.difficulty ?? "normal";
+  stage.wallpaper = stage.wallpaper ?? null;
+  stage.palette = stage.palette ?? null;
 
   if (stage.keyframes === undefined) {
     const keyframes: Map<number, Keyframe> = new Map();
@@ -380,6 +387,7 @@ function usedSprites(creations: Creations): Set<string> {
     ...creations.patterns,
     ...creations.enemies,
     ...creations.backgrounds,
+    ...creations.wallpapers,
   ]) {
     if (item.sprite !== null) {
       used.add(item.sprite);

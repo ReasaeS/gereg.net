@@ -5,6 +5,7 @@ const databaseName: string = "geregnet";
 const storeName: string = "images";
 const maxImageSize: number = 1024; // px
 const pixelArtSize: number = 64; // px
+const builtinPrefix: string = "portraits/";
 const textures: Map<string, Texture> = new Map();
 const loading: Map<string, Promise<Texture | null>> = new Map();
 let database: Promise<IDBDatabase> | null = null;
@@ -73,6 +74,12 @@ async function storeBlob(blob: Blob): Promise<string> {
 }
 
 function readBlob(id: string): Promise<Blob | undefined> {
+  if (id.startsWith(builtinPrefix)) {
+    return fetch("./" + id)
+      .then((response: Response) => (response.ok ? response.blob() : undefined))
+      .catch(() => undefined);
+  }
+
   return run<Blob | undefined>("readonly", (store: IDBObjectStore) =>
     store.get(id),
   );

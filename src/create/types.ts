@@ -153,6 +153,24 @@ type Background = {
   scroll: number; // units/s
 };
 
+type Wallpaper = {
+  id: string;
+  name: string;
+  sprite: string | null;
+  base: string;
+  stripe: string;
+  stripes: number; // units
+};
+
+type Palette = {
+  id: string;
+  name: string;
+  accent: string;
+  highlight: string;
+  text: string;
+  label: string;
+};
+
 type Spawn = {
   id: string;
   enemy: string | null;
@@ -175,6 +193,8 @@ type Stage = {
   id: string;
   name: string;
   background: string | null;
+  wallpaper: string | null;
+  palette: string | null;
   difficulty: Difficulty;
   length: number; // s
   keyframes: Array<Keyframe>;
@@ -185,6 +205,8 @@ type Creations = {
   patterns: Array<Pattern>;
   enemies: Array<Enemy>;
   backgrounds: Array<Background>;
+  wallpapers: Array<Wallpaper>;
+  palettes: Array<Palette>;
   sigils: Array<Sigil>;
   spells: Array<Spell>;
   sounds: Array<Sound>;
@@ -204,6 +226,8 @@ export type {
   Enemy,
   Bar,
   Background,
+  Wallpaper,
+  Palette,
   Ring,
   Sigil,
   Spell,

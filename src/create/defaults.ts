@@ -3,6 +3,8 @@ import type {
   Enemy,
   Bar,
   Background,
+  Wallpaper,
+  Palette,
   Ring,
   Sigil,
   Spell,
@@ -83,6 +85,28 @@ function defaultBackground(): Background {
     top: "#031448",
     bottom: "#01030a",
     scroll: 60,
+  };
+}
+
+function defaultWallpaper(): Wallpaper {
+  return {
+    id: createId(),
+    name: "Midnight",
+    sprite: null,
+    base: "#030c2a",
+    stripe: "#0a2160",
+    stripes: 5,
+  };
+}
+
+function defaultPalette(): Palette {
+  return {
+    id: createId(),
+    name: "Lighthouse",
+    accent: "#ff2a4d",
+    highlight: "#ffffff",
+    text: "#ffffff",
+    label: "#9fd8ff",
   };
 }
 
@@ -170,18 +194,22 @@ function defaultSound(): Sound {
   };
 }
 
-function defaultEmotion(name: string): Emotion {
-  return { id: createId(), name: name, sprite: null };
+function defaultEmotion(name: string, sprite: string | null = null): Emotion {
+  return { id: createId(), name: name, sprite: sprite };
 }
 
 const characterColors: Array<string> = ["#7ad8ff", "#ff6fd8"];
 
-function defaultCharacter(name: string, order: number = 0): Character {
+function defaultCharacter(
+  name: string,
+  order: number = 0,
+  sprite: string | null = null,
+): Character {
   return {
     id: createId(),
     name: name,
     color: characterColors[order % characterColors.length]!,
-    emotions: [defaultEmotion("Neutral")],
+    emotions: [defaultEmotion("Neutral", sprite)],
   };
 }
 
@@ -195,7 +223,10 @@ function defaultLine(character: Character, text: string): Line {
 }
 
 function defaultCharacters(): Array<Character> {
-  return [defaultCharacter("You", 0), defaultCharacter("Stranger", 1)];
+  return [
+    defaultCharacter("You", 0, "portraits/you.png"),
+    defaultCharacter("Stranger", 1, "portraits/stranger.png"),
+  ];
 }
 
 function defaultCutscene(cast: Array<Character>): Cutscene {
@@ -245,11 +276,18 @@ function defaultKeyframe(time: number, spawns: Array<Spawn>): Keyframe {
   return { id: createId(), time: time, spawns: spawns };
 }
 
-function defaultStage(enemy: string | null, background: string | null): Stage {
+function defaultStage(
+  enemy: string | null,
+  background: string | null,
+  wallpaper: string | null = null,
+  palette: string | null = null,
+): Stage {
   return {
     id: createId(),
     name: "Stage",
     background: background,
+    wallpaper: wallpaper,
+    palette: palette,
     difficulty: "normal",
     length: 30,
     keyframes: [
@@ -278,14 +316,18 @@ function defaultCreations(): Creations {
   const pattern: Pattern = defaultPattern();
   const enemy: Enemy = defaultEnemy(pattern.id);
   const background: Background = defaultBackground();
+  const wallpaper: Wallpaper = defaultWallpaper();
+  const palette: Palette = defaultPalette();
   const sigil: Sigil = defaultSigil();
   const characters: Array<Character> = defaultCharacters();
 
   return {
-    stages: [defaultStage(enemy.id, background.id)],
+    stages: [defaultStage(enemy.id, background.id, wallpaper.id, palette.id)],
     patterns: [pattern],
     enemies: [enemy],
     backgrounds: [background],
+    wallpapers: [wallpaper],
+    palettes: [palette],
     sigils: [sigil],
     spells: [{ ...defaultSpell(sigil.id), name: "Spell 1" }],
     sounds: [defaultSound()],
@@ -301,6 +343,8 @@ export {
   defaultEnemy,
   defaultBar,
   defaultBackground,
+  defaultWallpaper,
+  defaultPalette,
   defaultRing,
   defaultSigil,
   defaultSpell,

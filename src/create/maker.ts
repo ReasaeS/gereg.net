@@ -31,7 +31,6 @@ import {
   type Keyboard,
 } from "../game/input";
 import {
-  drawFrame,
   fieldHeight,
   fieldWidth,
   fieldX,
@@ -60,6 +59,7 @@ import type {
   Emotion,
   Enemy,
   Keyframe,
+  Palette,
   Pattern,
   Rank,
   Ring,
@@ -71,6 +71,7 @@ import type {
   Stage,
   Vector,
   Wall,
+  Wallpaper,
   Wave,
   Waveform,
 } from "./types";
@@ -84,12 +85,14 @@ import {
   defaultEmotion,
   defaultEnemy,
   defaultKeyframe,
+  defaultPalette,
   defaultPattern,
   defaultRing,
   defaultSigil,
   defaultSound,
   defaultSpell,
   defaultStage,
+  defaultWallpaper,
   derivativeNames,
   limitBars,
   repairSpells,
@@ -127,6 +130,7 @@ import { createRows, createSection, type Rows } from "../ui/rows";
 import { createText, screenResolution, sharpen } from "../ui/text";
 import { createGlide, type Glide } from "../ui/motion";
 import { getTexture, loadTexture, removeUnused, storeImage } from "./images";
+import { createWallpaperView, type WallpaperView } from "./wallpaper";
 import {
   createGallery,
   type Action,
@@ -150,6 +154,8 @@ const kindWords: Map<Kind, string> = new Map([
   ["pattern", "Pattern"],
   ["enemy", "Enemy"],
   ["background", "Background"],
+  ["wallpaper", "Wallpaper"],
+  ["palette", "Palette"],
   ["sigil", "Sigil"],
   ["spell", "Spell"],
   ["sound", "Sound"],
@@ -245,6 +251,36 @@ const brightColors: Array<string> = [
   "#ff6fd8",
   "#1d1d2b",
 ];
+const wallColors: Array<string> = [
+  "#000000",
+  "#01040f",
+  "#030c2a",
+  "#0a2160",
+  "#0b3f9e",
+  "#1e0a2e",
+  "#4a1a5c",
+  "#2a0a14",
+  "#5c1a1a",
+  "#0a2a1a",
+  "#1e5c2a",
+  "#2a2a2a",
+];
+const menuColors: Array<string> = [
+  "#ffffff",
+  "#9fd8ff",
+  "#7ad8ff",
+  "#3b82ff",
+  "#061a52",
+  "#ff2a4d",
+  "#ff6fd8",
+  "#b48aff",
+  "#ffb347",
+  "#fff27a",
+  "#7ae38f",
+  "#01040f",
+];
+const stripeMax: number = 12; // units
+const frameSmoothing: number = 0.25; // s
 const skyColors: Array<string> = [
   "#000000",
   "#01030a",
@@ -299,6 +335,7 @@ const soundPlotWidth: number = 320; // units
 const soundPlotHeight: number = 160; // units
 const lineSpeedMin: number = 5; // chars/s
 const lineSpeedMax: number = 120; // chars/s
+const sceneKeys: Array<string> = ["KeyZ", "KeyX", "Enter", "NumpadEnter"];
 const aimOptions: Array<Option<boolean>> = [
   { value: false, label: "Fixed angle" },
   { value: true, label: "At player" },
@@ -314,13 +351,27 @@ async function createMaker(app: Application): Promise<PageContent> {
   const soundGraph: Graphics = new Graphics();
   const soundName: Text = createText(clockSize, "#ffffff");
   let soundTimer: number | null = null;
-  const scene: Scene = createScene(speak, () => creations.characters);
+  const scene: Scene = createScene(speak, () => creations.characters, false);
   const cardScene: Scene = createScene(
     () => undefined,
     () => creations.characters,
+    true,
   );
   const gameFrame: Container = new Container();
-  const hudFrame: Graphics = new Graphics();
+  const hudFrame: WallpaperView = createWallpaperView(
+    hudWidth,
+    hudHeight,
+    1,
+    frameSmoothing,
+  );
+  const boardShown: Glide = createGlide(
+    1,
+    (value: number) => {
+      board.alpha = value;
+      board.visible = value > 0;
+    },
+    frameSmoothing,
+  );
   const panelBack: Graphics = new Graphics();
   const frameMask: Graphics = new Graphics();
   let frameScale: number = 1;
@@ -354,6 +405,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   let ringIndex: number = 0;
   let barIndex: number = 0;
   let emotionIndex: number = 0;
+  let placeholderShown: boolean = false;
 
   function selection(name: string): number {
     return tabs.find((value: Tab) => value.name === name)?.selected ?? 0;
@@ -379,6 +431,35 @@ async function createMaker(app: Application): Promise<PageContent> {
     return creations.sounds[selection("sound")]!;
   }
 
+  function wallpaper(): Wallpaper {
+    return creations.wallpapers[selection("wallpaper")]!;
+  }
+
+  function palette(): Palette {
+    return creations.palettes[selection("palette")]!;
+  }
+
+  function wallpaperById(id: string | null): Wallpaper | null {
+    return (
+      creations.wallpapers.find((value: Wallpaper) => value.id === id) ?? null
+    );
+  }
+
+  function boardWanted(): number {
+    return tab.name === "wallpaper" ? 0 : 1;
+  }
+
+  function paintLook(): void {
+    boardShown.set(boardWanted());
+    hudFrame.show(
+      tab.name === "wallpaper"
+        ? wallpaper()
+        : tab.name === "stage"
+          ? wallpaperById(stage().wallpaper)
+          : null,
+    );
+  }
+
   function sigil(): Sigil {
     return creations.sigils[selection("sigil")]!;
   }
@@ -396,7 +477,11 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function scened(): boolean {
-    return tab.name === "cutscene" || tab.name === "character";
+    return (
+      tab.name === "cutscene" ||
+      tab.name === "character" ||
+      tab.name === "palette"
+    );
   }
 
   function showcase(): Cutscene {
@@ -417,7 +502,24 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function playScene(): void {
-    scene.play(tab.name === "character" ? showcase() : cutscene(), 0);
+    placeholderShown = tab.name === "palette";
+    scene.setPalette(placeholderShown ? palette() : null);
+    scene.play(
+      tab.name === "character"
+        ? showcase()
+        : placeholderShown
+          ? defaultCutscene(creations.characters)
+          : cutscene(),
+      0,
+    );
+  }
+
+  function showPalette(): void {
+    if (placeholderShown) {
+      scene.setPalette(palette());
+    } else {
+      playScene();
+    }
   }
 
   function emotion(): Emotion {
@@ -504,6 +606,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function changed(): void {
     saveCreations(creations);
+    paintLook();
 
     if (tab.name !== "stage") {
       preview.clear();
@@ -683,6 +786,22 @@ async function createMaker(app: Application): Promise<PageContent> {
     ]);
   }
 
+  function forgetStageLook(id: string): void {
+    for (const stageItem of creations.stages) {
+      if (stageItem.background === id) {
+        stageItem.background = null;
+      }
+
+      if (stageItem.wallpaper === id) {
+        stageItem.wallpaper = null;
+      }
+
+      if (stageItem.palette === id) {
+        stageItem.palette = null;
+      }
+    }
+  }
+
   function forgetCosmetic(id: string): void {
     for (const cutsceneItem of creations.cutscenes) {
       if (cutsceneItem.voice === id) {
@@ -822,16 +941,22 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     listOf(from).splice(tab.selected, 1);
-
-    for (const stageItem of creations.stages) {
-      if (stageItem.background === item.id) {
-        stageItem.background = null;
-      }
-    }
-
+    forgetStageLook(item.id);
     forgetCosmetic(item.id);
 
-    if (to === "sigil") {
+    if (to === "wallpaper") {
+      index = creations.wallpapers.push({
+        ...defaultWallpaper(),
+        id: item.id,
+        name: item.name,
+      });
+    } else if (to === "palette") {
+      index = creations.palettes.push({
+        ...defaultPalette(),
+        id: item.id,
+        name: item.name,
+      });
+    } else if (to === "sigil") {
       index = creations.sigils.push({
         ...defaultSigil(),
         id: item.id,
@@ -1407,6 +1532,96 @@ async function createMaker(app: Application): Promise<PageContent> {
       preview.setBackground(background());
       preview.setPlayerVisible(false);
       preview.setPattern(null);
+    },
+  );
+
+  addTab(
+    "wallpaper",
+    () => creations.wallpapers,
+    [
+      ...cosmeticSection("wallpaper"),
+      ...section("Look", [
+        spriteRow(),
+        colors(
+          "Base",
+          wallColors,
+          () => wallpaper().base,
+          (value: string) => {
+            wallpaper().base = value;
+          },
+        ),
+        colors(
+          "Stripe",
+          wallColors,
+          () => wallpaper().stripe,
+          (value: string) => {
+            wallpaper().stripe = value;
+          },
+        ),
+        slider(
+          "Stripe width",
+          0,
+          stripeMax,
+          1,
+          () => wallpaper().stripes,
+          (value: number) => {
+            wallpaper().stripes = value;
+          },
+        ),
+      ]),
+    ],
+    () => {
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setPattern(null);
+    },
+  );
+
+  addTab(
+    "palette",
+    () => creations.palettes,
+    [
+      ...cosmeticSection("palette"),
+      ...section("Colours", [
+        colors(
+          "Accent",
+          menuColors,
+          () => palette().accent,
+          (value: string) => {
+            palette().accent = value;
+          },
+        ),
+        colors(
+          "Highlight",
+          menuColors,
+          () => palette().highlight,
+          (value: string) => {
+            palette().highlight = value;
+          },
+        ),
+        colors(
+          "Text",
+          menuColors,
+          () => palette().text,
+          (value: string) => {
+            palette().text = value;
+          },
+        ),
+        colors(
+          "Labels",
+          menuColors,
+          () => palette().label,
+          (value: string) => {
+            palette().label = value;
+          },
+        ),
+      ]),
+    ],
+    () => {
+      preview.setBackground(null);
+      preview.setPlayerVisible(false);
+      preview.setPattern(null);
+      showPalette();
     },
   );
 
@@ -2183,6 +2398,34 @@ async function createMaker(app: Application): Promise<PageContent> {
             stage().background = value;
           },
         ),
+        choice(
+          "Wallpaper",
+          () => [
+            { value: null, label: "Default" },
+            ...creations.wallpapers.map((value: Wallpaper) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => stage().wallpaper,
+          (value: string | null) => {
+            stage().wallpaper = value;
+          },
+        ),
+        choice(
+          "Palette",
+          () => [
+            { value: null, label: "Default" },
+            ...creations.palettes.map((value: Palette) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => stage().palette,
+          (value: string | null) => {
+            stage().palette = value;
+          },
+        ),
         slider(
           "Length",
           5,
@@ -2576,6 +2819,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     layout();
     timeline.visible = tab.name === "stage";
     tab.show();
+    paintLook();
 
     if (tab.name === "stage") {
       buildMarkers();
@@ -2695,11 +2939,9 @@ async function createMaker(app: Application): Promise<PageContent> {
       }
     }
 
-    for (const stageItem of creations.stages) {
-      if (stageItem.background === item.id) {
-        stageItem.background = null;
-      }
+    forgetStageLook(item.id);
 
+    for (const stageItem of creations.stages) {
       for (const keyframeItem of stageItem.keyframes) {
         for (const spawnItem of keyframeItem.spawns) {
           if (spawnItem.enemy === item.id) {
@@ -2730,7 +2972,14 @@ async function createMaker(app: Application): Promise<PageContent> {
     let index: number;
 
     if (category === "stage") {
-      index = creations.stages.push(defaultStage(enemyId, backgroundId));
+      index = creations.stages.push(
+        defaultStage(
+          enemyId,
+          backgroundId,
+          creations.wallpapers[0]?.id ?? null,
+          creations.palettes[0]?.id ?? null,
+        ),
+      );
     } else if (category === "pattern") {
       index = creations.patterns.push(defaultPattern());
     } else if (category === "enemy") {
@@ -2768,6 +3017,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     laidOut = null;
     preview.clear();
     refresh();
+    boardShown.snap(boardWanted());
   }
 
   function openItem(kind: Kind, index: number): void {
@@ -3164,7 +3414,6 @@ async function createMaker(app: Application): Promise<PageContent> {
   drawPlayIcon();
 
   timeline.addChild(track, clock, total, transport);
-  drawFrame(hudFrame);
   panelBack
     .rect(
       panelLeft - panelPadding,
@@ -3201,7 +3450,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   timeline.position.set(0, fieldY);
   gameFrame.addChild(
-    hudFrame,
+    hudFrame.view,
     panelBack,
     board,
     controls,
@@ -3329,6 +3578,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     patternBar.visible = tab.name === "pattern";
+    playtestBar.visible = tab.name !== "palette";
     fieldFocus.set(typing !== null ? 1 : 0);
     drawField(clockBox, clockWidth, chipHeight, fieldFocus.value());
 
@@ -3368,7 +3618,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       return;
     }
 
-    if (scened() && event.code === "Space") {
+    if (scened() && typing === null && sceneKeys.includes(event.code)) {
       scene.advance();
       event.preventDefault();
       return;

@@ -25,11 +25,13 @@ import type {
   Enemy,
   Keyframe,
   Line,
+  Palette,
   Pattern,
   Sigil,
   Sound,
   Spell,
   Stage,
+  Wallpaper,
 } from "./types";
 import { placeAlong, solidSpans, wallAngle } from "./geometry";
 import { getTexture } from "./images";
@@ -40,6 +42,8 @@ import { previewHeight, previewWidth } from "./preview";
 import { drawShape } from "./shape";
 import { drawSigil, sigilRadius } from "./sigil";
 import { drawSound, soundLength } from "./sound";
+import { paintWallpaper } from "./wallpaper";
+import { drawPalette } from "./palette";
 import { castOf, feelingOf, speakerOf } from "./cutscene";
 import {
   cosmetics,
@@ -56,6 +60,8 @@ type Kind =
   | "pattern"
   | "enemy"
   | "background"
+  | "wallpaper"
+  | "palette"
   | "sigil"
   | "spell"
   | "sound"
@@ -79,6 +85,8 @@ type Entry = {
     | Pattern
     | Enemy
     | Background
+    | Wallpaper
+    | Palette
     | Sigil
     | Spell
     | Sound
@@ -164,6 +172,7 @@ const tileGap: number = 26; // px
 const artInset: number = 16; // px
 const artTop: number = 18; // px
 const artHeight: number = 140; // px
+const wallpaperScale: number = 0.6;
 const nameSize: number = 17; // px
 const detailSize: number = 12; // px
 const plusSize: number = 56; // px
@@ -708,6 +717,8 @@ function createGallery(
         | Pattern
         | Enemy
         | Background
+        | Wallpaper
+        | Palette
         | Sigil
         | Spell
         | Sound
@@ -729,6 +740,8 @@ function createGallery(
       add("enemy", source.enemies);
     } else {
       add("background", source.backgrounds);
+      add("wallpaper", source.wallpapers);
+      add("palette", source.palettes);
       add("sigil", source.sigils);
       add("sound", source.sounds);
       add("cutscene", source.cutscenes);
@@ -1277,6 +1290,8 @@ function createGallery(
       | Pattern
       | Enemy
       | Background
+      | Wallpaper
+      | Palette
       | Sigil
       | Spell
       | Sound
@@ -1389,6 +1404,22 @@ function createGallery(
         (sigil?.name ?? "No sigil") +
         "  ·  " +
         (patternById(spell.pattern)?.name ?? "Enemy pattern");
+    } else if (entry.kind === "wallpaper") {
+      const wallpaper: Wallpaper = item as Wallpaper;
+      const layer: Container = new Container();
+
+      paintWallpaper(layer, wallpaper, width, artHeight, wallpaperScale);
+      tile.art.addChild(layer);
+      tile.detail.text =
+        wallpaper.sprite !== null
+          ? "Image"
+          : wallpaper.stripes > 0
+            ? "Stripes " + wallpaper.stripes
+            : "Solid";
+    } else if (entry.kind === "palette") {
+      drawBackground(tile.art, null, width, artHeight);
+      drawPalette(tile.art, item as Palette, width, artHeight);
+      tile.detail.text = "4 colours";
     } else {
       drawBackground(tile.art, item as Background, width, artHeight);
       tile.detail.text = "Scroll " + (item as Background).scroll;

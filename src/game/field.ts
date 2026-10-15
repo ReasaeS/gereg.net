@@ -15,23 +15,41 @@ function hudScale(width: number, height: number): number {
   return Math.min(width / hudWidth, height / hudHeight);
 }
 
-function drawFrame(frame: Graphics): void {
-  frame.clear().rect(0, 0, hudWidth, hudHeight).fill(frameColor);
+function drawStripes(
+  graphics: Graphics,
+  width: number,
+  height: number,
+  base: string,
+  stripe: string,
+  thickness: number,
+  scale: number,
+): void {
+  const gap: number = stripeGap * scale;
+  const band: number = thickness * scale;
 
-  for (let x = -hudHeight; x < hudWidth; x += stripeGap) {
-    frame
-      .poly([
-        x,
-        hudHeight,
-        x + stripeWidth,
-        hudHeight,
-        x + stripeWidth + hudHeight,
-        0,
-        x + hudHeight,
-        0,
-      ])
-      .fill(stripeColor);
+  graphics.clear().rect(0, 0, width, height).fill(base);
+
+  if (band <= 0) {
+    return;
   }
+
+  for (let x = -height; x < width; x += gap) {
+    graphics
+      .poly([x, height, x + band, height, x + band + height, 0, x + height, 0])
+      .fill(stripe);
+  }
+}
+
+function drawFrame(frame: Graphics): void {
+  drawStripes(
+    frame,
+    hudWidth,
+    hudHeight,
+    frameColor,
+    stripeColor,
+    stripeWidth,
+    1,
+  );
 }
 
 export {
@@ -42,5 +60,6 @@ export {
   fieldWidth,
   fieldHeight,
   hudScale,
+  drawStripes,
   drawFrame,
 };

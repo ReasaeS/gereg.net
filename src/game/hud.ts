@@ -1,9 +1,12 @@
 import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
-import { getTheme } from "../theme/theme";
 import { maxPower, minPower } from "./drones";
 import { startBombs } from "./bomb";
-import { drawFrame } from "./field";
+import { hudHeight, hudWidth } from "./field";
 import { createText, screenResolution } from "../ui/text";
+import { createGlide, mix, type Glide } from "../ui/motion";
+import { createWallpaperView, type WallpaperView } from "../create/wallpaper";
+import { paletteOf } from "../create/palette";
+import type { Palette, Wallpaper } from "../create/types";
 import { loadLogo, trackLogo } from "../ui/logo";
 import { formatPlaytime } from "../settings/playtime";
 
@@ -25,7 +28,10 @@ type Hud = {
   setScale: (scale: number) => void;
   setZen: (on: boolean) => void;
   setElapsed: (seconds: number) => void;
+  setLook: (wallpaper: Wallpaper | null, palette: Palette | null) => void;
 };
+
+type Shade = "accent" | "highlight" | "text" | "label";
 
 type Row = {
   label: Text;
@@ -40,8 +46,8 @@ const badgeHeight: number = 24; // units
 const badgeSlant: number = 8; // units
 const badgeSize: number = 20; // units
 const rowSize: number = 17; // units
-const labelColor: string = "#9fd8ff";
-const valueColor: string = "#ffffff";
+const shades: Array<Shade> = ["accent", "highlight", "text", "label"];
+const lookSmoothing: number = 0.6; // s
 const lifeColor: string = "#ff6fa8";
 const bombColor: string = "#5cff8a";
 const starRadius: number = 6.5; // units
@@ -66,6 +72,7 @@ function drawStars(
   count: number,
   color: string,
   right: number,
+  outline: number,
 ): void {
   graphics.clear();
 
@@ -80,12 +87,12 @@ function drawStars(
       points.push(centerX + Math.cos(angle) * radius, Math.sin(angle) * radius);
     }
 
-    graphics.poly(points).fill(color).stroke({ color: "#ffffff", width: 1 });
+    graphics.poly(points).fill(color).stroke({ color: outline, width: 1 });
   }
 }
 
-function drawBadge(frame: Graphics): void {
-  frame
+function drawBadge(badge: Graphics): void {
+  badge
     .poly([
       panelX + badgeSlant,
       badgeY,
@@ -96,17 +103,23 @@ function drawBadge(frame: Graphics): void {
       panelX,
       badgeY + badgeHeight,
     ])
-    .fill(getTheme().accent);
+    .fill(0xffffff);
 }
 
 async function createHud(): Promise<Hud> {
   const view: Container = new Container();
-  const frame: Graphics = new Graphics();
-  const badge: Text = createText(badgeSize, valueColor);
+  const wall: WallpaperView = createWallpaperView(
+    hudWidth,
+    hudHeight,
+    1,
+    lookSmoothing,
+  );
+  const badgeBack: Graphics = new Graphics();
+  const badge: Text = createText(badgeSize);
   const stage: Container = new Container();
   const zen: Container = new Container();
-  const elapsedLabel: Text = createText(rowSize, labelColor);
-  const elapsedValue: Text = createText(rowSize, valueColor);
+  const elapsedLabel: Text = createText(rowSize);
+  const elapsedValue: Text = createText(rowSize);
   const rows: Array<Row> = new Array();
   const texts: Array<Text> = new Array();
   const logoTexture: Texture = await loadLogo();
@@ -122,9 +135,20 @@ async function createHud(): Promise<Hud> {
     point: 0,
   };
 
-  drawFrame(frame);
-  drawBadge(frame);
-  view.addChild(frame);
+  const plain: Palette = paletteOf(null);
+  const shown: Record<Shade, number> = {
+    accent: 0,
+    highlight: 0,
+    text: 0,
+    label: 0,
+  };
+  let from: Record<Shade, number> = { ...shown };
+  let to: Palette = plain;
+  const blend: Glide = createGlide(1, paint, lookSmoothing);
+
+  wall.show(null);
+  drawBadge(badgeBack);
+  view.addChild(wall.view, badgeBack);
   badge.text = "NORMAL";
   badge.anchor.set(0.5);
   badge.position.set((panelX + panelRight) / 2, badgeY + badgeHeight / 2);
@@ -132,9 +156,9 @@ async function createHud(): Promise<Hud> {
 
   for (let index = 0; index < rowLayout.length; index++) {
     const [name, y] = rowLayout[index]!;
-    const label: Text = createText(rowSize, labelColor);
+    const label: Text = createText(rowSize);
     const star: boolean = name === "Player" || name === "Bomb";
-    const value: Text | null = star ? null : createText(rowSize, valueColor);
+    const value: Text | null = star ? null : createText(rowSize);
     const stars: Graphics | null = star ? new Graphics() : null;
 
     label.text = name;
@@ -202,8 +226,56 @@ async function createHud(): Promise<Hud> {
       }
     }
 
-    drawStars(rows[2]!.stars!, stats.lives, lifeColor, panelRight);
-    drawStars(rows[3]!.stars!, stats.bombs, bombColor, panelRight);
+    drawStars(
+      rows[2]!.stars!,
+      stats.lives,
+      lifeColor,
+      panelRight,
+      shown.highlight,
+    );
+    drawStars(
+      rows[3]!.stars!,
+      stats.bombs,
+      bombColor,
+      panelRight,
+      shown.highlight,
+    );
+  }
+
+  function paint(value: number): void {
+    for (const shade of shades) {
+      shown[shade] = mix(from[shade], to[shade], value);
+    }
+
+    badgeBack.tint = shown.accent;
+    badge.tint = shown.text;
+    elapsedLabel.tint = shown.label;
+    elapsedValue.tint = shown.text;
+
+    for (const row of rows) {
+      row.label.tint = shown.label;
+
+      if (row.value !== null) {
+        row.value.tint = shown.text;
+      }
+    }
+
+    refresh();
+  }
+
+  function setLook(wallpaper: Wallpaper | null, palette: Palette | null): void {
+    const next: Palette = paletteOf(palette);
+
+    wall.show(wallpaper);
+
+    if (JSON.stringify(next) === JSON.stringify(to)) {
+      return;
+    }
+
+    from = { ...shown };
+    to = next;
+    blend.snap(0);
+    blend.set(1);
   }
 
   function setZen(on: boolean): void {
@@ -232,7 +304,7 @@ async function createHud(): Promise<Hud> {
     }
   }
 
-  refresh();
+  blend.snap(1);
 
   return {
     view: view,
@@ -241,6 +313,7 @@ async function createHud(): Promise<Hud> {
     setScale: setScale,
     setZen: setZen,
     setElapsed: setElapsed,
+    setLook: setLook,
   };
 }
 

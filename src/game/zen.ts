@@ -8,7 +8,13 @@ import {
 import { loadCreations } from "../create/storage";
 import { loadTexture } from "../create/images";
 import { playTrack, type Track } from "../create/sound";
-import type { Background, Creations, Sound } from "../create/types";
+import type {
+  Background,
+  Creations,
+  Palette,
+  Sound,
+  Wallpaper,
+} from "../create/types";
 import { fieldHeight, fieldWidth } from "./field";
 
 type Zen = {
@@ -17,6 +23,17 @@ type Zen = {
   stop: () => void;
   update: (delta: number) => void;
 };
+
+type Look = {
+  background: Background | null;
+  wallpaper: Wallpaper | null;
+  palette: Palette | null;
+};
+
+type LookListener = (
+  wallpaper: Wallpaper | null,
+  palette: Palette | null,
+) => void;
 
 type Scene = {
   view: Container;
@@ -85,16 +102,37 @@ function paintScene(scene: Scene, background: Background | null): void {
   });
 }
 
-function stageBackgrounds(creations: Creations): Array<Background> {
-  const found: Array<Background> = new Array();
+function stageLooks(creations: Creations): Array<Look> {
+  const found: Array<Look> = new Array();
 
   for (const stage of creations.stages) {
-    const background: Background | undefined = creations.backgrounds.find(
-      (candidate: Background) => candidate.id === stage.background,
-    );
+    const look: Look = {
+      background:
+        creations.backgrounds.find(
+          (candidate: Background) => candidate.id === stage.background,
+        ) ?? null,
+      wallpaper:
+        creations.wallpapers.find(
+          (candidate: Wallpaper) => candidate.id === stage.wallpaper,
+        ) ?? null,
+      palette:
+        creations.palettes.find(
+          (candidate: Palette) => candidate.id === stage.palette,
+        ) ?? null,
+    };
 
-    if (background !== undefined && !found.includes(background)) {
-      found.push(background);
+    if (
+      (look.background !== null ||
+        look.wallpaper !== null ||
+        look.palette !== null) &&
+      !found.some(
+        (other: Look) =>
+          other.background === look.background &&
+          other.wallpaper === look.wallpaper &&
+          other.palette === look.palette,
+      )
+    ) {
+      found.push(look);
     }
   }
 
@@ -115,12 +153,12 @@ function shuffled<T>(list: Array<T>): Array<T> {
   return copy;
 }
 
-function createZen(): Zen {
+function createZen(onLook: LookListener): Zen {
   const view: Container = new Container();
   const front: Scene = createScene();
   const back: Scene = createScene();
   let scenes: Array<Scene> = [front, back];
-  let backgrounds: Array<Background> = new Array();
+  let looks: Array<Look> = new Array();
   let sceneIndex: number = 0;
   let sceneElapsed: number = 0;
   let fading: number = -1;
@@ -152,11 +190,12 @@ function createZen(): Zen {
     const creations: Creations = loadCreations();
 
     running = true;
-    backgrounds = shuffled(stageBackgrounds(creations));
+    looks = shuffled(stageLooks(creations));
     sceneIndex = 0;
     sceneElapsed = 0;
     fading = -1;
-    paintScene(scenes[0]!, backgrounds[0] ?? null);
+    paintScene(scenes[0]!, looks[0]?.background ?? null);
+    onLook(looks[0]?.wallpaper ?? null, looks[0]?.palette ?? null);
     scenes[0]!.view.alpha = 1;
     scenes[1]!.view.visible = false;
     view.visible = true;
@@ -171,6 +210,7 @@ function createZen(): Zen {
 
   function stop(): void {
     running = false;
+    onLook(null, null);
     track?.stop();
     track = null;
     view.visible = false;
@@ -202,13 +242,14 @@ function createZen(): Zen {
       return;
     }
 
-    if (sceneElapsed < sceneTime || backgrounds.length < 2) {
+    if (sceneElapsed < sceneTime || looks.length < 2) {
       return;
     }
 
     sceneElapsed = 0;
-    sceneIndex = (sceneIndex + 1) % backgrounds.length;
-    paintScene(scenes[1]!, backgrounds[sceneIndex]!);
+    sceneIndex = (sceneIndex + 1) % looks.length;
+    paintScene(scenes[1]!, looks[sceneIndex]!.background);
+    onLook(looks[sceneIndex]!.wallpaper, looks[sceneIndex]!.palette);
     scenes[1]!.view.alpha = 0;
     scenes[1]!.view.visible = true;
     view.addChild(scenes[0]!.view, scenes[1]!.view);

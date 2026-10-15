@@ -128,6 +128,7 @@ function createAscii(
       uGlyphs: atlas.source,
     },
     resolution: resolution,
+    antialias: "inherit",
   });
   const amount: Glide = createGlide(
     1,
