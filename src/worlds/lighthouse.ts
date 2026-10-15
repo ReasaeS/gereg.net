@@ -21,6 +21,7 @@ type Lighthouse = {
     delta: number,
   ) => void;
   reset: () => void;
+  retract: () => void;
 };
 
 const unitHeight: number = 100;
@@ -163,6 +164,7 @@ function createLighthouse(
   const aim: Spring = { value: 0, velocity: 0 };
   const reach: Spring = { value: 0, velocity: 0 };
   let time: number = 0;
+  let retracting: boolean = false;
 
   flare.anchor.set(0.5);
   flare.blendMode = "add";
@@ -189,6 +191,12 @@ function createLighthouse(
     const flareSize: number = height * lighthouseHeight * flareScale;
 
     time += delta;
+
+    if (target !== null) {
+      retracting = false;
+    } else if (retracting) {
+      springStep(reach, 0, beamFrequency, beamDamping, delta);
+    }
 
     if (target !== null) {
       const goal: number = Math.atan2(target.y - lampHeight, target.x - lampX);
@@ -245,7 +253,15 @@ function createLighthouse(
     beam.scale.x = 0;
   }
 
-  return { view: view, beam: beam, update: update, reset: reset };
+  return {
+    view: view,
+    beam: beam,
+    update: update,
+    reset: reset,
+    retract: () => {
+      retracting = true;
+    },
+  };
 }
 
 export { createLighthouse };

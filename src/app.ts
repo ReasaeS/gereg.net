@@ -13,6 +13,7 @@ import {
   buttonFaces,
   resetButtons,
   enterButtons,
+  leaveButtons,
   setButtonsActive,
   selectedPoint,
   menuHovered,
@@ -77,6 +78,7 @@ import { createNightSea } from "./worlds/nightsea";
 import { getTheme } from "./theme/theme";
 import { startMotion } from "./ui/motion";
 import { startGamepad } from "./game/gamepad";
+import { createCredits, type Credits } from "./menu/credits";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -89,6 +91,7 @@ const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
 const diveFlip: number = -Math.PI; // rad
 const transitionLead: number = 200; // ms
 const terminalColor: string = "#000000";
+const beamRetractTime: number = 500; // ms
 const visitorNumber: number = 1;
 const userName: string | null = null;
 const tips: Array<string> = [
@@ -222,6 +225,10 @@ ocean.setBeamTarget(selectedPoint);
 ocean.setHoverBlocker(menuHovered);
 vivid.addChild(ocean.view);
 
+const credits: Credits = createCredits(app, ocean.setDistance);
+
+screenLayer.addChildAt(credits.view, screenLayer.getChildIndex(world) + 1);
+
 const menu: Container = new Container();
 const buttons: Container = await load(() => createButtons(app));
 menu.addChild(buttons);
@@ -290,6 +297,7 @@ type Screen =
   | "diving"
   | "page"
   | "rising"
+  | "credits"
   | "playing";
 
 let menuOpen: boolean = false;
@@ -414,6 +422,23 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
 
   if (event.key === "Escape" && screen === "playing" && !playfield.back()) {
     rise(playfield.hide, playfield.hideDuration());
+    return;
+  }
+
+  if (event.key === "Escape" && screen === "credits") {
+    screen = "rising";
+    credits
+      .close()
+      .then(() => {
+        buttons.visible = true;
+        setSurfacesActive(true);
+        ocean.setWitchShown(true);
+        return enterButtons(app.ticker);
+      })
+      .then(() => {
+        navigate("menu");
+        screen = "main";
+      });
     return;
   }
 
@@ -613,6 +638,21 @@ document.addEventListener("navigate", (event: Event) => {
 
   if (name === "play") {
     play();
+    return;
+  }
+
+  if (name === "credits") {
+    screen = "diving";
+    setSurfacesActive(false);
+    ocean.retractBeam();
+    leaveButtons(app.ticker).then(() => {
+      buttons.visible = false;
+    });
+    ocean.setWitchShown(false);
+    wait(beamRetractTime).then(() => {
+      screen = "credits";
+      credits.open();
+    });
     return;
   }
 

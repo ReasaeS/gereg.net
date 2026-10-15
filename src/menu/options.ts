@@ -42,10 +42,17 @@ const enterDuration: number = 420; // ms
 const enterStagger: number = 70; // ms
 const enterDistance: number = 1200; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
+const leaveDuration: number = 380; // ms
 const bobAmount: number = 4; // px
 const bobSpeed: number = 0.35; // Hz
 
-const names: Array<string> = ["play", "customise", "create", "config"];
+const names: Array<string> = [
+  "play",
+  "customise",
+  "create",
+  "config",
+  "credits",
+];
 
 type MenuItem = {
   name: string;
@@ -232,6 +239,23 @@ function enterButtons(ticker: Ticker): Promise<void> {
   });
 }
 
+function leaveButtons(ticker: Ticker): Promise<void> {
+  const total: number = leaveDuration + enterStagger * (items.length - 1);
+
+  return tween(ticker, total, (progress: number) => {
+    for (let index = 0; index < items.length; index++) {
+      const item: MenuItem = items[index]!;
+      const local: number = Math.min(
+        Math.max((progress * total - index * enterStagger) / leaveDuration, 0),
+        1,
+      );
+
+      item.enter = enterDistance * local * local * local;
+      item.view.alpha = 1 - local;
+    }
+  });
+}
+
 function setButtonsActive(value: boolean): void {
   active = value;
 }
@@ -358,6 +382,7 @@ export {
   buttonFaces,
   resetButtons,
   enterButtons,
+  leaveButtons,
   setButtonsActive,
   navigate,
 };

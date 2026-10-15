@@ -18,6 +18,7 @@ import { menuPixels, menuTexture } from "../editor/drawings";
 import { createSigils, type Sigils } from "./sigils";
 import { createArmy, type Army } from "./army";
 import { onTheme, type Theme } from "../theme/theme";
+import { createGlide, type Glide } from "../ui/motion";
 
 type Reflection = {
   x: number; // %
@@ -57,10 +58,13 @@ type Vivid = {
   setBeamTarget: (target: Target) => void;
   setHoverBlocker: (blocker: (point: Point) => boolean) => void;
   resetBeam: () => void;
+  retractBeam: () => void;
   view: Container;
   scene: Container;
   setDepth: (depth: number) => void;
   setFlip: (angle: number) => void;
+  setDistance: (distance: number) => void;
+  setWitchShown: (shown: boolean) => void;
   setScenery: (name: string) => void;
   aboveSea: Graphics;
   rainLayer: Container;
@@ -97,6 +101,7 @@ const starHeight: number = 0.85; // of sky height
 const seaHeight: number = 20; // vh
 const abyssColor: string = "#01030a";
 const diveDistance: number = 2.2; // screen heights
+const witchFade: number = 0.2; // s
 const sceneries: Map<string, Scenery> = new Map([
   [
     "config",
@@ -268,6 +273,17 @@ function createVivid(app: Application): Vivid {
   const motes: Array<Mote> = new Array();
   let depth: number = 0;
   let flip: number = 0;
+  let distance: number = 0;
+  const details: Container = new Container();
+  const witchLayer: Container = new Container();
+  const witchShown: Glide = createGlide(
+    1,
+    (value: number) => {
+      witchLayer.alpha = value;
+      witchLayer.visible = value > 0;
+    },
+    witchFade,
+  );
   let scenery: Scenery = sceneries.get("config")!;
   const sceneryGlow: Sprite = new Sprite(glowTexture);
   const sceneSigils: Sigils = createSigils(app);
@@ -355,16 +371,9 @@ function createVivid(app: Application): Vivid {
     (point: Point) => hoverBlocker?.(point) ?? false,
   );
 
-  scene.addChild(
-    sky,
-    nightSky,
-    starLayer,
-    rainLayer,
-    lighthouse.view,
-    lighthouse.beam,
-    witch.view,
-    sea,
-  );
+  details.addChild(lighthouse.view, lighthouse.beam);
+  witchLayer.addChild(witch.view);
+  scene.addChild(sky, nightSky, starLayer, rainLayer, details, witchLayer, sea);
   moteLayer.blendMode = "add";
   moteLayer.alpha = 0;
 
@@ -668,7 +677,7 @@ function createVivid(app: Application): Vivid {
       if (witch.hovered()) {
         beamLocal.copyFrom(witch.view.position);
       } else {
-        scene.toLocal(target, undefined, beamLocal);
+        details.toLocal(target, undefined, beamLocal);
       }
     }
 
@@ -679,6 +688,15 @@ function createVivid(app: Application): Vivid {
       target === null ? null : beamLocal,
       delta,
     );
+
+    const nearness: number = Math.exp(-distance);
+
+    details.scale.set(nearness);
+    details.position.set(
+      (width / 2) * (1 - nearness),
+      height * (1 - seaHeight / 100) * (1 - nearness),
+    );
+    details.visible = nearness > 0.002;
 
     drawNight(width, height * (1 - seaHeight / 100), delta);
     drawSea(width, height, delta);
@@ -691,11 +709,16 @@ function createVivid(app: Application): Vivid {
     scene: scene,
     setDepth: setDepth,
     setFlip: setFlip,
+    setDistance: (value: number) => {
+      distance = value;
+    },
+    setWitchShown: (shown: boolean) => witchShown.set(shown ? 1 : 0),
     setScenery: setScenery,
     setBeamTarget: (target: Target) => {
       beamTarget = target;
     },
     resetBeam: lighthouse.reset,
+    retractBeam: lighthouse.retract,
     setHoverBlocker: (blocker: (point: Point) => boolean) => {
       hoverBlocker = blocker;
     },
