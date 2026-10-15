@@ -22,17 +22,13 @@ import { createGlide, type Glide } from "../ui/motion";
 import {
   channels,
   getRate,
-  getSky,
   getVolume,
   onRate,
-  onSky,
   onVolume,
   rates,
   setRate,
-  setSky,
   setVolume,
   type Channel,
-  type Sky,
 } from "./settings";
 import type { PageContent } from "../menu/page";
 import { smoothDamp, type Spring } from "../effects/tween/tween";
@@ -67,7 +63,6 @@ const navGap: number = 70; // px
 const listTop: number = 0.3; // of screen height
 const listBottom: number = 0.9; // of screen height
 const scrollSmoothing: number = 0.1; // s
-const skies: Array<Sky> = ["day", "night"];
 const rateButtonWidth: number = 88; // px
 const channelNames: Map<Channel, string> = new Map([
   ["master", "master volume"],
@@ -86,34 +81,6 @@ function createRow(name: string): [Container, Text] {
   view.addChild(label);
 
   return [view, label];
-}
-
-function createSkyRow(buttons: Array<Button>): Row {
-  const [view, label] = createRow("sky");
-
-  for (let index = 0; index < skies.length; index++) {
-    const sky: Sky = skies[index]!;
-    const button: Button = createButton(
-      sky,
-      () => getSky() === sky,
-      () => setSky(sky),
-    );
-
-    button.view.position.set(labelWidth + index * (buttonWidth + buttonGap), 0);
-    buttons.push(button);
-    view.addChild(button.view);
-  }
-
-  return {
-    view: view,
-    label: label,
-    adjust: (direction: number) => setSky(direction < 0 ? "day" : "night"),
-    refresh: () => {
-      for (const button of buttons) {
-        paintButton(button);
-      }
-    },
-  };
 }
 
 function createRateRow(buttons: Array<Button>): Row {
@@ -251,14 +218,13 @@ function createSettings(app: Application): PageContent {
   const list: Container = new Container();
   const mask: Graphics = new Graphics();
   const marker: Graphics = new Graphics();
-  const skyButtons: Array<Button> = new Array();
   const rateButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
   const scroll: Spring = { value: 0, velocity: 0 };
   const categories: Array<Category> = [
     {
       name: "display",
-      rows: [createSkyRow(skyButtons), createRateRow(rateButtons)],
+      rows: [createRateRow(rateButtons)],
     },
     {
       name: "audio",
@@ -473,7 +439,6 @@ function createSettings(app: Application): PageContent {
     view.eventMode = value ? "passive" : "none";
   }
 
-  onSky(refresh);
   onVolume(refresh);
   onRate(refresh);
   layout();

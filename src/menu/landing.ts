@@ -11,6 +11,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { navigate } from "./options";
+import { pixelRatio } from "../ui/density";
 import { onTheme, type Theme } from "../theme/theme";
 import { createRing, type Ring, type RingStyle } from "../effects/ring/ring";
 import type { Circle } from "../effects/reveal/reveal";
@@ -34,7 +35,8 @@ const circleWidth: number = 32; // vw
 const circleMaxWidth: number = 500; // px
 const circleMaxHeight: number = 70; // vh
 const circleBorder: number = 4; // px
-const circleColor: string = "#3232ff";
+const introShare: number = 0.8; // of screen size
+const logoColor: string = "#3232ff";
 
 const circleGlow: number = 24; // px
 const cornerMargin: number = 24; // px
@@ -50,7 +52,7 @@ type Placement = {
 };
 
 const landingRing: RingStyle = {
-  color: circleColor,
+  color: logoColor,
   width: circleBorder,
   glow: circleGlow,
   brightness: 1,
@@ -62,18 +64,48 @@ let ringSize: number = 0;
 let hovered: boolean = false;
 const hover: Spring = { value: 0, velocity: 0 };
 let corner: number = 0;
+let frameAmount: number = 1;
 let glideBrightness: number = 1;
+
+function introBounds(): Rectangle {
+  const width: number = app?.screen.width ?? 0;
+  const height: number = app?.screen.height ?? 0;
+  const share: number = 1 + (introShare - 1) * frameAmount;
+
+  return new Rectangle(
+    Math.round((width * (1 - share)) / 2),
+    Math.round((height * (1 - share)) / 2),
+    Math.round(width * share),
+    Math.round(height * share),
+  );
+}
+
+function bindLanding(application: Application): void {
+  app = application;
+}
+
+function setIntroFrame(amount: number): void {
+  frameAmount = amount;
+}
 
 function landingCircle(): Circle {
   const width: number = app?.screen.width ?? 0;
   const height: number = app?.screen.height ?? 0;
-  const diameter: number = Math.min(
+  const full: number = Math.min(
     (width * circleWidth) / 100,
     circleMaxWidth,
     (height * circleMaxHeight) / 100,
   );
+  const framed: number = Math.min(
+    (width * introShare * circleWidth) / 100,
+    (height * introShare * circleMaxHeight) / 100,
+  );
 
-  return { x: width / 2, y: height / 2, radius: diameter / 2 };
+  return {
+    x: width / 2,
+    y: height / 2,
+    radius: (full + (framed - full) * frameAmount) / 2,
+  };
 }
 
 function landingHovered(): boolean {
@@ -143,7 +175,7 @@ async function createLanding(application: Application): Promise<Container> {
 
   const texture: Texture = await Assets.load({
     src: logoPath,
-    data: { resolution: logoResolution * (window.devicePixelRatio || 1) },
+    data: { resolution: logoResolution * pixelRatio },
   });
 
   const view: Container = new Container();
@@ -285,6 +317,10 @@ function showLandingRing(): void {
 }
 
 export {
+  logoColor,
+  introBounds,
+  bindLanding,
+  setIntroFrame,
   createLanding,
   setLandingEnabled,
   landingCircle,

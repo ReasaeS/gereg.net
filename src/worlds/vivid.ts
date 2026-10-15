@@ -16,9 +16,8 @@ import { createLighthouse, type Lighthouse } from "./lighthouse";
 import { createWitch, type Witch } from "./witch";
 import { menuPixels, menuTexture } from "../editor/drawings";
 import { createSigils, type Sigils } from "./sigils";
-import { createDialogs, type Dialogs } from "./dialogs";
+import { createArmy, type Army } from "./army";
 import { onTheme, type Theme } from "../theme/theme";
-import { onSky, type Sky } from "../settings/settings";
 
 type Reflection = {
   x: number; // %
@@ -48,7 +47,7 @@ type Scenery = {
   glow: string | null;
   glowY: number; // screen heights below the dive point
   moteColor: string;
-  dialogs: boolean;
+  army: boolean;
   sigils: boolean;
 };
 
@@ -105,7 +104,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glow: "#ffb02e",
       glowY: 0.6,
       moteColor: "#ffe2a8",
-      dialogs: false,
+      army: false,
       sigils: false,
     },
   ],
@@ -115,7 +114,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glow: "#ff2a4d",
       glowY: 0.7,
       moteColor: "#ff9aa8",
-      dialogs: false,
+      army: false,
       sigils: false,
     },
   ],
@@ -125,7 +124,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glow: "#1fd68a",
       glowY: 0.6,
       moteColor: "#b8ffd9",
-      dialogs: true,
+      army: true,
       sigils: false,
     },
   ],
@@ -135,7 +134,7 @@ const sceneries: Map<string, Scenery> = new Map([
       glow: "#a35cff",
       glowY: 0.6,
       moteColor: "#e0c8ff",
-      dialogs: false,
+      army: false,
       sigils: true,
     },
   ],
@@ -245,8 +244,8 @@ function createVivid(app: Application): Vivid {
     },
   });
   const stars: Array<Star> = new Array();
-  let night: number = 0;
-  let nightTarget: number = 0;
+  let night: number = 1;
+  const nightTarget: number = 1;
   const glowTexture: Texture = createGlowTexture(app.renderer, glowFalloff);
   const plumeTexture: Texture = createGlowTexture(app.renderer, plumeFalloff);
   const reflections: Array<Reflection> = new Array();
@@ -272,7 +271,7 @@ function createVivid(app: Application): Vivid {
   let scenery: Scenery = sceneries.get("config")!;
   const sceneryGlow: Sprite = new Sprite(glowTexture);
   const sceneSigils: Sigils = createSigils(app);
-  const sceneDialogs: Dialogs = createDialogs(app);
+  const sceneArmy: Army = createArmy(app);
   const sceneryFrame: Container = new Container();
   let time: number = 0;
   let beamTarget: Target | null = null;
@@ -341,7 +340,7 @@ function createVivid(app: Application): Vivid {
   starLayer.blendMode = "add";
   sceneryGlow.anchor.set(0.5);
   sceneryGlow.blendMode = "add";
-  sceneryFrame.addChild(sceneSigils.view, sceneDialogs.view);
+  sceneryFrame.addChild(sceneSigils.view, sceneArmy.view);
   deep.addChild(sceneryGlow, sceneryFrame, deepMask);
   setScenery("config");
   deep.setMask({ mask: deepMask, inverse: false });
@@ -383,7 +382,7 @@ function createVivid(app: Application): Vivid {
     const surfaceDepth: number = (height * seaHeight) / 100;
 
     sceneSigils.layout();
-    sceneDialogs.layout();
+    sceneArmy.layout();
     const total: number = seaDepth(height);
 
     const margin: number = overscan();
@@ -473,20 +472,20 @@ function createVivid(app: Application): Vivid {
     sceneryGlow.position.set(width / 2, centerY + scenery.glowY * height);
     sceneryGlow.width = size;
     sceneryGlow.height = size;
-    sceneryFrame.visible = (scenery.sigils || scenery.dialogs) && depth > 0;
+    sceneryFrame.visible = (scenery.sigils || scenery.army) && depth > 0;
     sceneryFrame.alpha = depth;
     sceneryFrame.position.set(width / 2, centerY);
     sceneryFrame.pivot.set(width / 2, height / 2);
     sceneryFrame.rotation = sceneryTurn;
     sceneSigils.view.visible = scenery.sigils;
-    sceneDialogs.view.visible = scenery.dialogs;
+    sceneArmy.view.visible = scenery.army;
 
     if (sceneryFrame.visible && scenery.sigils) {
       sceneSigils.update();
     }
 
-    if (sceneryFrame.visible && scenery.dialogs) {
-      sceneDialogs.update(delta);
+    if (sceneryFrame.visible && scenery.army) {
+      sceneArmy.update(delta);
     }
   }
 
@@ -650,11 +649,6 @@ function createVivid(app: Application): Vivid {
 
     build();
   });
-
-  onSky((sky: Sky) => {
-    nightTarget = sky === "night" ? 1 : 0;
-  });
-  night = nightTarget;
 
   build();
   app.renderer.on("resize", build);

@@ -10,6 +10,10 @@ const buffers: Map<string, AudioBuffer> = new Map();
 const loading: Map<string, Promise<AudioBuffer | null>> = new Map();
 let context: AudioContext | null = null;
 
+type Track = {
+  stop: () => void;
+};
+
 function soundLength(sound: Sound): number {
   return sound.source === "file"
     ? (bufferOf(sound)?.duration ?? 0)
@@ -182,6 +186,47 @@ function playSound(sound: Sound): void {
   }
 }
 
+function playTrack(sound: Sound, ended: (played: boolean) => void): Track {
+  let source: AudioBufferSourceNode | null = null;
+  let stopped: boolean = false;
+
+  if (audio().state === "suspended") {
+    void audio().resume();
+  }
+
+  void loadAudio(sound.file).then((buffer: AudioBuffer | null) => {
+    if (stopped) {
+      return;
+    }
+
+    if (buffer === null) {
+      ended(false);
+      return;
+    }
+
+    const gain: GainNode = audio().createGain();
+    const node: AudioBufferSourceNode = audio().createBufferSource();
+
+    gain.gain.value = sound.volume * effectiveVolume("soundtrack");
+    node.buffer = buffer;
+    node.connect(gain).connect(audio().destination);
+    node.onended = () => {
+      if (!stopped) {
+        ended(true);
+      }
+    };
+    node.start();
+    source = node;
+  });
+
+  return {
+    stop: () => {
+      stopped = true;
+      source?.stop();
+    },
+  };
+}
+
 function drawSound(
   graphics: Graphics,
   sound: Sound,
@@ -235,4 +280,5 @@ function drawSound(
   graphics.stroke({ color: color, width: 1 });
 }
 
-export { soundLength, loadAudio, importAudio, playSound, drawSound };
+export { soundLength, loadAudio, importAudio, playSound, playTrack, drawSound };
+export type { Track };

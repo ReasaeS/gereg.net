@@ -7,20 +7,30 @@ import {
   type Spring,
 } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
-import { levels, type Level } from "./levels";
 import { downKeys, upKeys } from "./input";
 import { createText, screenResolution } from "../ui/text";
 import { createGlide, mix, type Glide } from "../ui/motion";
 
+type Choice = {
+  name: string;
+  title: string;
+};
+
+type Menu = {
+  heading: string;
+  choices: Array<Choice>;
+};
+
 type Selector = {
   view: Container;
+  setMenu: (menu: Menu) => void;
   rollDown: () => Promise<void>;
   rollUp: () => Promise<void>;
   rollUpDuration: () => number;
   close: () => void;
   setActive: (active: boolean) => void;
   setScale: (scale: number) => void;
-  onChoose: (listener: (level: Level) => void) => void;
+  onChoose: (listener: (index: number) => void) => void;
 };
 
 type Entry = {
@@ -98,12 +108,13 @@ function createSelector(ticker: Ticker): Selector {
   const heading: Text = createText(titleSize, "#ffffff");
   const highlight: Graphics = new Graphics();
   const entries: Array<Entry> = new Array();
-  const texts: Array<Text> = [heading];
+  let texts: Array<Text> = [heading];
   const highlightY: Spring = { value: listY, velocity: 0 };
-  const listeners: Array<(level: Level) => void> = new Array();
+  const listeners: Array<(index: number) => void> = new Array();
   let selected: number = 0;
   let active: boolean = false;
   let roll: number = 0;
+  let textScale: number = 1;
 
   function place(): void {
     door.y = -doorHeight * (1 - roll);
@@ -121,7 +132,7 @@ function createSelector(ticker: Ticker): Selector {
   }
 
   function select(index: number): void {
-    selected = (index + levels.length) % levels.length;
+    selected = (index + entries.length) % entries.length;
     paint();
   }
 
@@ -130,10 +141,8 @@ function createSelector(ticker: Ticker): Selector {
       return;
     }
 
-    const level: Level = levels[selected]!;
-
     for (let index = 0; index < listeners.length; index++) {
-      listeners[index]!(level);
+      listeners[index]!(selected);
     }
   }
 
@@ -150,21 +159,37 @@ function createSelector(ticker: Ticker): Selector {
       titleY + titleHeight / 2,
     ])
     .fill(getTheme().accent);
-  heading.text = "STAGE SELECT";
   heading.anchor.set(0.5);
   heading.position.set(doorWidth / 2, titleY);
   door.addChild(slats, badge, heading, highlight);
 
-  for (let index = 0; index < levels.length; index++) {
-    const level: Level = levels[index]!;
+  function setMenu(menu: Menu): void {
+    for (const entry of entries) {
+      entry.view.destroy({ children: true });
+    }
+
+    entries.length = 0;
+    texts = [heading];
+    heading.text = menu.heading;
+    selected = 0;
+
+    for (let index = 0; index < menu.choices.length; index++) {
+      addEntry(menu.choices[index]!, index);
+    }
+
+    setScale(textScale);
+    paint();
+  }
+
+  function addEntry(choice: Choice, index: number): void {
     const entry: Container = new Container();
     const name: Text = createText(nameSize, "#ffffff");
     const title: Text = createText(subtitleSize, "#ffffff");
     const top: number = entryY(index);
 
-    name.text = level.name.toUpperCase();
+    name.text = choice.name.toUpperCase();
     name.position.set(entryInset + entrySlant + 6, top + 4);
-    title.text = level.title;
+    title.text = choice.title;
     title.style.fill = subtitleColor;
     title.position.set(entryInset + entrySlant + 6, top + 4 + nameSize + 1);
     entry.addChild(name, title);
@@ -279,6 +304,8 @@ function createSelector(ticker: Ticker): Selector {
   }
 
   function setScale(scale: number): void {
+    textScale = scale;
+
     for (let index = 0; index < texts.length; index++) {
       texts[index]!.resolution = screenResolution(scale);
     }
@@ -286,6 +313,7 @@ function createSelector(ticker: Ticker): Selector {
 
   return {
     view: view,
+    setMenu: setMenu,
     rollDown: () => {
       highlightY.value = entryY(selected);
       highlightY.velocity = 0;
@@ -299,11 +327,11 @@ function createSelector(ticker: Ticker): Selector {
     },
     setActive: setActive,
     setScale: setScale,
-    onChoose: (listener: (level: Level) => void) => {
+    onChoose: (listener: (index: number) => void) => {
       listeners.push(listener);
     },
   };
 }
 
 export { createSelector };
-export type { Selector };
+export type { Choice, Menu, Selector };

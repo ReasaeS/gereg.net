@@ -1,4 +1,5 @@
 import { Container, Text } from "pixi.js";
+import { pixelRatio } from "./density";
 
 const fontFamily: Array<string> = [
   "Barlow Condensed",
@@ -58,7 +59,7 @@ function sharpen(target: Container, resolution: number): void {
 }
 
 function screenResolution(scale: number): number {
-  return scale * (window.devicePixelRatio || 1);
+  return scale * pixelRatio;
 }
 
 export { fontFamily, createText, createShadowText, sharpen, screenResolution };

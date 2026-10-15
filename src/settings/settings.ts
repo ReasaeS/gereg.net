@@ -1,16 +1,9 @@
-type Sky = "day" | "night";
-
-type SkyListener = (sky: Sky) => void;
-
 type Channel = "master" | "soundtrack" | "sfx" | "dialogue";
 
 type VolumeListener = (channel: Channel, volume: number) => void;
 
 type RateListener = (rate: number) => void;
 
-const skyStorageKey: string = "geregnet.sky";
-const skyListeners: Array<SkyListener> = new Array();
-let sky: Sky = loadSky();
 const channels: Array<Channel> = ["master", "soundtrack", "sfx", "dialogue"];
 const volumeStorageKey: string = "geregnet.volume";
 const defaultVolume: number = 0.8;
@@ -119,46 +112,8 @@ function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
 
-function loadSky(): Sky {
-  try {
-    return localStorage.getItem(skyStorageKey) === "day" ? "day" : "night";
-  } catch {
-    return "night";
-  }
-}
-
-function getSky(): Sky {
-  return sky;
-}
-
-function setSky(value: Sky): void {
-  if (value === sky) {
-    return;
-  }
-
-  sky = value;
-
-  try {
-    localStorage.setItem(skyStorageKey, value);
-  } catch {
-    console.warn("Could not save the sky setting");
-  }
-
-  for (let index = 0; index < skyListeners.length; index++) {
-    skyListeners[index]!(value);
-  }
-}
-
-function onSky(listener: SkyListener): void {
-  skyListeners.push(listener);
-  listener(sky);
-}
-
 export {
   channels,
-  getSky,
-  setSky,
-  onSky,
   getVolume,
   effectiveVolume,
   setVolume,
@@ -168,4 +123,4 @@ export {
   setRate,
   onRate,
 };
-export type { Sky, Channel };
+export type { Channel };

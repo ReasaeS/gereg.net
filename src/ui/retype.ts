@@ -20,9 +20,7 @@ function createRetype(text: Text): Retype {
     let shown: string = "";
 
     for (let index = 0; index < length; index++) {
-      shown += swapped.has(index)
-        ? (to[index] ?? "")
-        : (from[index] ?? to[index] ?? "");
+      shown += swapped.has(index) ? (to[index] ?? "") : (from[index] ?? "");
     }
 
     text.text = shown;
@@ -61,10 +59,14 @@ function createRetype(text: Text): Retype {
 
     changes = new Array();
 
-    for (let index = 0; index < Math.max(from.length, to.length); index++) {
+    for (let index = 0; index < to.length; index++) {
       if (from[index] !== to[index]) {
         changes.push(index);
       }
+    }
+
+    for (let index = from.length - 1; index >= to.length; index--) {
+      changes.push(index);
     }
 
     elapsed = 0;

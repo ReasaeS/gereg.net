@@ -39,7 +39,7 @@ type Option<T> = {
 };
 
 type Track = {
-  view: Graphics;
+  view: Container;
   refresh: () => void;
 };
 
@@ -176,6 +176,7 @@ function createTrack(
   get: () => number,
   set: (value: number) => void,
 ): Track {
+  const view: Container = new Container();
   const track: Graphics = new Graphics();
   const knob: Graphics = new Graphics();
   const amount: Glide = createGlide(0, draw);
@@ -229,35 +230,36 @@ function createTrack(
   knob
     .rect(-knobWidth / 2, -knobHeight / 2, knobWidth, knobHeight)
     .fill(getTheme().highlight);
-  track.eventMode = "static";
-  track.cursor = "pointer";
-  track.hitArea = new Rectangle(
+  view.eventMode = "static";
+  view.cursor = "pointer";
+  view.hitArea = new Rectangle(
     -knobWidth / 2,
     -knobHeight,
     width + knobWidth,
     knobHeight * 2,
   );
-  track.on("pointerdown", (event: FederatedPointerEvent) => {
+  view.on("pointerdown", (event: FederatedPointerEvent) => {
     dragging = true;
     pick(event);
   });
-  track.on("globalpointermove", (event: FederatedPointerEvent) => {
+  view.on("globalpointermove", (event: FederatedPointerEvent) => {
     if (dragging) {
       pick(event);
     }
   });
-  track.on("pointerup", () => {
+  view.on("pointerup", () => {
     dragging = false;
   });
-  track.on("pointerupoutside", () => {
+  view.on("pointerupoutside", () => {
     dragging = false;
   });
-  track.on("pointerover", () => hover.set(1));
-  track.on("pointerout", () => hover.set(0));
+  view.on("pointerover", () => hover.set(1));
+  view.on("pointerout", () => hover.set(0));
+  track.eventMode = "none";
   knob.eventMode = "none";
-  track.addChild(knob);
+  view.addChild(track, knob);
 
-  return { view: track, refresh: refresh };
+  return { view: view, refresh: refresh };
 }
 
 function rounded(value: number): string {

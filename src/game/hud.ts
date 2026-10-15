@@ -11,6 +11,8 @@ import { maxPower, minPower } from "./drones";
 import { startBombs } from "./bomb";
 import { drawFrame } from "./field";
 import { createText, screenResolution } from "../ui/text";
+import { pixelRatio } from "../ui/density";
+import { formatPlaytime } from "../settings/playtime";
 
 type Stats = {
   hiScore: number;
@@ -28,6 +30,8 @@ type Hud = {
   stats: Stats;
   refresh: () => void;
   setScale: (scale: number) => void;
+  setZen: (on: boolean) => void;
+  setElapsed: (seconds: number) => void;
 };
 
 type Row = {
@@ -63,6 +67,8 @@ const rowLayout: Array<[string, number]> = [
   ["Graze", 224],
   ["Point", 248],
 ];
+const elapsedLabelY: number = 72; // units
+const elapsedValueY: number = 96; // units
 
 function drawStars(
   graphics: Graphics,
@@ -106,11 +112,15 @@ async function createHud(): Promise<Hud> {
   const view: Container = new Container();
   const frame: Graphics = new Graphics();
   const badge: Text = createText(badgeSize, valueColor);
+  const stage: Container = new Container();
+  const zen: Container = new Container();
+  const elapsedLabel: Text = createText(rowSize, labelColor);
+  const elapsedValue: Text = createText(rowSize, valueColor);
   const rows: Array<Row> = new Array();
   const texts: Array<Text> = new Array();
   const logoTexture: Texture = await Assets.load({
     src: logoPath,
-    data: { resolution: logoResolution * (window.devicePixelRatio || 1) },
+    data: { resolution: logoResolution * pixelRatio },
   });
   const logo: Sprite = new Sprite(logoTexture);
   const stats: Stats = {
@@ -142,21 +152,31 @@ async function createHud(): Promise<Hud> {
     label.text = name;
     label.anchor.set(0, 0.5);
     label.position.set(panelX, y);
-    view.addChild(label);
+    stage.addChild(label);
 
     if (value !== null) {
       value.anchor.set(1, 0.5);
       value.position.set(panelRight, y);
-      view.addChild(value);
+      stage.addChild(value);
     }
 
     if (stars !== null) {
       stars.y = y;
-      view.addChild(stars);
+      stage.addChild(stars);
     }
 
     rows.push({ label: label, value: value, stars: stars });
   }
+
+  elapsedLabel.text = "Time Elapsed";
+  elapsedLabel.anchor.set(0, 0.5);
+  elapsedLabel.position.set(panelX, elapsedLabelY);
+  elapsedValue.text = formatPlaytime(0);
+  elapsedValue.anchor.set(1, 0.5);
+  elapsedValue.position.set(panelRight, elapsedValueY);
+  zen.addChild(elapsedLabel, elapsedValue);
+  zen.visible = false;
+  view.addChild(stage, zen);
 
   logo.anchor.set(0.5, 1);
   logo.width = logoWidth;
@@ -197,7 +217,21 @@ async function createHud(): Promise<Hud> {
     drawStars(rows[3]!.stars!, stats.bombs, bombColor, panelRight);
   }
 
-  texts.push(badge);
+  function setZen(on: boolean): void {
+    stage.visible = !on;
+    zen.visible = on;
+    badge.text = on ? "ZEN" : "NORMAL";
+  }
+
+  function setElapsed(seconds: number): void {
+    const text: string = formatPlaytime(seconds * 1000);
+
+    if (elapsedValue.text !== text) {
+      elapsedValue.text = text;
+    }
+  }
+
+  texts.push(badge, elapsedLabel, elapsedValue);
 
   for (let index = 0; index < rows.length; index++) {
     const row: Row = rows[index]!;
@@ -211,7 +245,14 @@ async function createHud(): Promise<Hud> {
 
   refresh();
 
-  return { view: view, stats: stats, refresh: refresh, setScale: setScale };
+  return {
+    view: view,
+    stats: stats,
+    refresh: refresh,
+    setScale: setScale,
+    setZen: setZen,
+    setElapsed: setElapsed,
+  };
 }
 
 export { createHud };

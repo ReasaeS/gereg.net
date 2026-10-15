@@ -22,7 +22,9 @@ import {
   type Easing,
 } from "../effects/tween/tween";
 import { createClock, runClock, type Clock } from "./clock";
-import { createSelector, type Selector } from "./selector";
+import { createSelector, type Menu, type Selector } from "./selector";
+import { levels, type Level } from "./levels";
+import { createZen, type Zen } from "./zen";
 import { minPower } from "./drones";
 import { startBombs } from "./bomb";
 import { createPilot, type Pilot } from "./pilot";
@@ -50,6 +52,28 @@ const enterDistance: number = 400; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
 const rollLead: number = 200; // ms
+const modesMenu: Menu = {
+  heading: "PLAY",
+  choices: [
+    { name: "Story", title: "Fight through the stages" },
+    { name: "Multiplayer", title: "Play alongside others" },
+    { name: "Zen", title: "Roam under your own skies" },
+  ],
+};
+const stagesMenu: Menu = {
+  heading: "STAGE SELECT",
+  choices: levels.map((level: Level) => ({
+    name: level.name,
+    title: level.title,
+  })),
+};
+const multiplayerMenu: Menu = {
+  heading: "MULTIPLAYER",
+  choices: [
+    { name: "Local", title: "Coming soon" },
+    { name: "Online", title: "Coming soon" },
+  ],
+};
 
 async function createPlayfield(
   app: Application,
@@ -71,6 +95,10 @@ async function createPlayfield(
     fieldHeight,
   );
   const clock: Clock = createClock();
+  const zen: Zen = createZen();
+  let menu: Menu = modesMenu;
+  let zenning: boolean = false;
+  let zenElapsed: number = 0;
   let active: boolean = false;
   let rolling: boolean = false;
   const keyboard: Keyboard = createKeyboard(() => active);
@@ -104,7 +132,7 @@ async function createPlayfield(
 
   fieldMask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
   field.position.set(fieldX, fieldY);
-  field.addChild(back, fieldMask, ...pilot.layers());
+  field.addChild(back, zen.view, fieldMask, ...pilot.layers());
   field.mask = fieldMask;
   gameMask.rect(0, 0, hudWidth, hudHeight).fill(0xffffff);
   game.addChild(hud.view, selector.view, field, gameMask);
@@ -123,8 +151,15 @@ async function createPlayfield(
       return;
     }
 
+    zen.update(frameDelta(ticker));
+
     if (!active) {
       return;
+    }
+
+    if (zenning) {
+      zenElapsed += frameDelta(ticker);
+      hud.setElapsed(zenElapsed);
     }
 
     runClock(clock, frameDelta(ticker), movePlayer);
@@ -147,26 +182,67 @@ async function createPlayfield(
     }
   }
 
-  function openSelector(): Promise<void> {
+  function openMenu(next: Menu): Promise<void> {
     active = false;
     rolling = true;
     keyboard.clear();
     pilot.hitbox.visible = false;
+    selector.setActive(false);
 
-    return selector.rollDown().then(() => {
-      rolling = false;
-      selector.setActive(true);
-    });
+    return selector
+      .rollUp()
+      .then(() => {
+        menu = next;
+        selector.setMenu(next);
+        return selector.rollDown();
+      })
+      .then(() => {
+        rolling = false;
+        selector.setActive(true);
+      });
   }
 
-  selector.onChoose(() => {
+  function startPlaying(zenMode: boolean): void {
     selector.setActive(false);
     rolling = true;
     reset();
+    zenning = zenMode;
+
+    if (zenMode) {
+      zenElapsed = 0;
+      hud.setElapsed(0);
+      hud.setZen(true);
+      pilot.squad.setDrones(false);
+      zen.start();
+    }
+
     selector.rollUp().then(() => {
       rolling = false;
       active = true;
     });
+  }
+
+  function stopZen(): void {
+    if (zenning) {
+      zenning = false;
+      zen.stop();
+      hud.setZen(false);
+      pilot.squad.setDrones(true);
+    }
+  }
+
+  selector.onChoose((index: number) => {
+    if (menu === modesMenu) {
+      if (index === 0) {
+        openMenu(stagesMenu);
+      } else if (index === 1) {
+        openMenu(multiplayerMenu);
+      } else {
+        startPlaying(true);
+      }
+    } else if (menu === stagesMenu) {
+      startPlaying(false);
+    }
   });
 
   function show(): Promise<void> {
@@ -175,8 +251,8 @@ async function createPlayfield(
     selector.close();
     pilot.hitbox.visible = false;
     view.visible = true;
-    tween(app.ticker, enterDuration - rollLead, () => undefined).then(
-      openSelector,
+    tween(app.ticker, enterDuration - rollLead, () => undefined).then(() =>
+      openMenu(modesMenu),
     );
 
     return tween(app.ticker, enterDuration, (progress: number) => {
@@ -191,7 +267,15 @@ async function createPlayfield(
     }
 
     if (active) {
-      openSelector();
+      const wasZen: boolean = zenning;
+
+      stopZen();
+      openMenu(wasZen ? modesMenu : stagesMenu);
+      return true;
+    }
+
+    if (menu !== modesMenu) {
+      openMenu(modesMenu);
       return true;
     }
 
@@ -208,6 +292,7 @@ async function createPlayfield(
     active = false;
     selector.setActive(false);
     keyboard.clear();
+    stopZen();
     selector.rollUp();
 
     return tween(app.ticker, door, () => undefined)

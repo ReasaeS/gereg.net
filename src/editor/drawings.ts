@@ -83,6 +83,21 @@ function saveDrawing(target: Drawing): void {
   }
 }
 
+function defaultPlayerTexture(): Texture {
+  const pixels: Pixels = createPixels(spriteSize);
+
+  drawGameDefault(pixels);
+
+  return new Texture({
+    source: new BufferImageSource({
+      resource: pixels.data,
+      width: spriteSize,
+      height: spriteSize,
+      scaleMode: "nearest",
+    }),
+  });
+}
+
 function playerTexture(): Texture {
   return drawings[0]!.texture;
 }
@@ -108,6 +123,7 @@ export {
   drawings,
   saveDrawing,
   playerTexture,
+  defaultPlayerTexture,
   menuTexture,
   menuPixels,
   droneTexture,

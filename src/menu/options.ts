@@ -243,7 +243,12 @@ function buttonFaces(): Array<Container> {
 async function createButtons(app: Application): Promise<Container> {
   await Assets.load({
     src: fontPath,
-    data: { family: "Barlow Condensed", weights: ["900"], style: "italic" },
+    data: {
+      family: "Barlow Condensed",
+      weights: ["900"],
+      style: "italic",
+      display: "swap",
+    },
   });
 
   const root: Container = new Container();

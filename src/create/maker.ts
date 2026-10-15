@@ -310,7 +310,8 @@ async function createMaker(app: Application): Promise<PageContent> {
   const rows: Rows = createRows();
   const itemBar: Container = new Container();
   const board: Container = new Container();
-  const soundPlot: Graphics = new Graphics();
+  const soundPlot: Container = new Container();
+  const soundGraph: Graphics = new Graphics();
   const soundName: Text = createText(clockSize, "#ffffff");
   let soundTimer: number | null = null;
   const scene: Scene = createScene(speak, () => creations.characters);
@@ -1934,7 +1935,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function plotSound(value: Sound): void {
     drawSound(
-      soundPlot,
+      soundGraph,
       value,
       soundPlotWidth,
       soundPlotHeight,
@@ -3181,7 +3182,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   soundName.anchor.set(0.5, 0);
   soundName.position.set(soundPlotWidth / 2, soundPlotHeight + soundNameGap);
-  soundPlot.addChild(soundName);
+  soundPlot.addChild(soundGraph, soundName);
   controls.position.set(panelLeft, panelTop);
   track.position.set(columnCenter - timelineHeight / 2, 0);
   track.hitArea = new Rectangle(

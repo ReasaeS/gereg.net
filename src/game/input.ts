@@ -21,9 +21,12 @@ const playKeys: Array<string> = [
   ...shotKeys,
   ...bombKeys,
 ];
+const players: Array<() => boolean> = new Array();
 
 function createKeyboard(enabled: () => boolean): Keyboard {
   const held: Set<string> = new Set();
+
+  players.push(enabled);
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (
@@ -54,6 +57,10 @@ function createKeyboard(enabled: () => boolean): Keyboard {
   };
 }
 
+function playing(): boolean {
+  return players.some((enabled: () => boolean) => enabled());
+}
+
 function steering(pressed: (keys: Array<string>) => boolean): Vector {
   const x: number = (pressed(rightKeys) ? 1 : 0) - (pressed(leftKeys) ? 1 : 0);
   const y: number = (pressed(downKeys) ? 1 : 0) - (pressed(upKeys) ? 1 : 0);
@@ -72,6 +79,7 @@ export {
   bombKeys,
   playKeys,
   createKeyboard,
+  playing,
   steering,
 };
 export type { Keyboard };

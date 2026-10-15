@@ -44,6 +44,7 @@ type Squad = {
   shotLayer: Container;
   shots: Array<Shot>;
   setPower: (value: number) => void;
+  setDrones: (shown: boolean) => void;
   update: (
     delta: number,
     x: number,
@@ -188,6 +189,7 @@ function createSquad(
   let droneTimer: number = 0;
   let spin: number = 0;
   let power: number = maxPower;
+  let dronesShown: boolean = true;
 
   function addShot(
     x: number,
@@ -243,7 +245,7 @@ function createSquad(
     y: number,
     focused: boolean,
   ): void {
-    const count: number = droneCount(power);
+    const count: number = dronesShown ? droneCount(power) : 0;
     const formation: Formation | undefined = formations[count - 1];
     const pull: number = 1 - Math.exp(-follow * delta);
     const scale: number =
@@ -426,6 +428,9 @@ function createSquad(
     shotLayer: shotLayer,
     shots: shots,
     setPower: setPower,
+    setDrones: (shown: boolean) => {
+      dronesShown = shown;
+    },
     update: update,
     clear: clear,
   };
