@@ -9,6 +9,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { smoothDamp, type Spring } from "../../effects/tween/tween";
+import { createGlide, type Glide } from "../../ui/motion";
 import { downKeys, leftKeys, rightKeys, upKeys } from "../../game/input";
 import type { Creations } from "../types";
 import { previewHeight, previewWidth } from "../preview/preview";
@@ -16,7 +17,7 @@ import {
   categoryList,
   entryRarity,
   itemNames,
-  listEntries,
+  searchEntries,
   type Action,
   type Category,
   type Entry,
@@ -40,11 +41,19 @@ import {
   stepTile,
   type Tile,
 } from "./tile";
-import { createTabs, type Tabs } from "./tabs";
+import { createTabs, headerY, type Tabs } from "./tabs";
+import { createSearchBar, type SearchBar } from "./search";
 
 type Live = {
   show: (kind: Kind, index: number) => Container | null;
   update: (delta: number) => void;
+};
+
+type Place = {
+  key: string;
+  x: Spring;
+  y: Spring;
+  fade: Spring;
 };
 
 type Gallery = {
@@ -69,6 +78,12 @@ const appearStagger: number = 0.05; // s
 const appearDistance: number = 40; // px
 const staggerLimit: number = 16;
 const liftMargin: number = 14; // px
+const searchTop: number = 52; // px
+const searchGap: number = 36; // px
+const slideSmoothing: number = 0.12; // s
+const fadeSmoothing: number = 0.08; // s
+const fadeLimit: number = 0.01;
+const emptySize: number = 14; // px
 
 function createGallery(
   app: Application,
@@ -84,6 +99,13 @@ function createGallery(
   const list: Container = new Container();
   const mask: Graphics = new Graphics();
   const tiles: Array<Tile> = new Array();
+  const places: Map<Tile, Place> = new Map();
+  const leaving: Array<Tile> = new Array();
+  const searchBar: SearchBar = createSearchBar(app, () => rebuild(false));
+  const empty: Text = createSerif(emptySize, trim);
+  const emptyFade: Glide = createGlide(0, (value: number) => {
+    empty.alpha = value;
+  });
   const logo: Texture | null = tintedLogo(app);
   const scroll: Spring = { value: 0, velocity: 0 };
   let category: Category = "stage";
@@ -99,13 +121,28 @@ function createGallery(
   let vanished: (() => void) | null = null;
   let liveTile: Tile | null = null;
   let liveView: Container | null = null;
+  let shown: Array<Entry> = new Array();
 
   function entries(): Array<Entry> {
-    return listEntries(creations(), category);
+    return shown;
   }
 
   function count(): number {
-    return entries().length + 1;
+    return shown.length + 1;
+  }
+
+  function keyOf(index: number): string {
+    const entry: Entry | undefined = shown[index - 1];
+
+    return entry === undefined ? "new" : entry.kind + ":" + entry.item.id;
+  }
+
+  function slotX(index: number): number {
+    return (index % columns) * (tileWidth + tileGap) + tileWidth / 2;
+  }
+
+  function slotY(index: number): number {
+    return rowOf(index) * (tileHeight + tileGap) + tileHeight / 2;
   }
 
   function choose(index: number): void {
@@ -160,6 +197,29 @@ function createGallery(
     paintTile(tiles[index]!, gemCategories.includes(category));
   }
 
+  function slide(delta: number): void {
+    for (let index = 0; index < tiles.length; index++) {
+      const place: Place = places.get(tiles[index]!)!;
+
+      smoothDamp(place.x, slotX(index), slideSmoothing, delta);
+      smoothDamp(place.y, slotY(index), slideSmoothing, delta);
+      smoothDamp(place.fade, 1, fadeSmoothing, delta);
+    }
+
+    for (let index = leaving.length - 1; index >= 0; index--) {
+      const tile: Tile = leaving[index]!;
+      const place: Place = places.get(tile)!;
+
+      smoothDamp(place.fade, 0, fadeSmoothing, delta);
+
+      if (place.fade.value < fadeLimit) {
+        leaving.splice(index, 1);
+        places.delete(tile);
+        tile.view.destroy({ children: true });
+      }
+    }
+  }
+
   function animateTiles(delta: number): void {
     for (let index = 0; index < tiles.length; index++) {
       const goal: number = !onTabs && index === selected ? 1 : 0;
@@ -171,30 +231,48 @@ function createGallery(
     }
   }
 
-  function makeTile(index: number): Tile {
-    return createTile(index, logo, {
-      hover: (at: number) => {
-        if (active) {
+  function makeTile(index: number, born: number): Tile {
+    const tile: Tile = createTile(index === 0, logo, {
+      hover: () => {
+        const at: number = tiles.indexOf(tile);
+
+        if (active && at >= 0) {
           onTabs = false;
           selected = at;
           revealed = at;
           paint();
         }
       },
-      tap: (at: number) => {
+      tap: () => {
+        const at: number = tiles.indexOf(tile);
+
+        if (at < 0) {
+          return;
+        }
+
         onTabs = false;
         selected = at;
         paint();
         choose(at);
       },
-      act: (at: number, action: Action) => {
-        const entry: Entry | undefined = entries()[at - 1];
+      act: (action: Action) => {
+        const entry: Entry | undefined = entries()[tiles.indexOf(tile) - 1];
 
         if (active && entry !== undefined) {
           act(entry.kind, entry.index, action);
         }
       },
     });
+
+    places.set(tile, {
+      key: keyOf(index),
+      x: { value: slotX(index), velocity: 0 },
+      y: { value: slotY(index), velocity: 0 },
+      fade: { value: born, velocity: 0 },
+    });
+    list.addChild(tile.view);
+
+    return tile;
   }
 
   function release(): void {
@@ -323,16 +401,25 @@ function createGallery(
         1,
       );
       const eased: number = 1 - Math.pow(1 - progress, 3);
+      const tile: Tile = tiles[index]!;
+      const place: Place = places.get(tile)!;
 
-      tiles[index]!.view.alpha = Math.min(progress * 3, 1);
-      applyTransform(tiles[index]!);
-      tiles[index]!.view.position.set(
-        (index % columns) * (tileWidth + tileGap) + tileWidth / 2,
-        rowOf(index) * (tileHeight + tileGap) +
-          tileHeight / 2 +
-          appearDistance * (1 - eased),
+      tile.view.alpha = Math.min(progress * 3, 1) * place.fade.value;
+      applyTransform(tile);
+      tile.view.position.set(
+        place.x.value,
+        place.y.value + appearDistance * (1 - eased),
       );
     }
+
+    for (const tile of leaving) {
+      const place: Place = places.get(tile)!;
+
+      tile.view.alpha = Math.min(tile.view.alpha, place.fade.value);
+      tile.view.position.set(place.x.value, place.y.value);
+    }
+
+    empty.position.set(slotX(1), slotY(1));
   }
 
   function appearEnd(): number {
@@ -361,29 +448,79 @@ function createGallery(
     arrange();
   }
 
-  function refresh(): void {
-    while (tiles.length < count()) {
-      const tile: Tile = makeTile(tiles.length);
-      tiles.push(tile);
-      list.addChild(tile.view);
+  function rebuild(all: boolean): void {
+    const chosen: Tile | undefined = tiles[selected];
+    const flipped: Tile | undefined =
+      revealed === null ? undefined : tiles[revealed];
+    const previous: Map<string, Tile> = new Map();
+    const fresh: boolean = tiles.length === 0;
+
+    for (const tile of tiles) {
+      const key: string = places.get(tile)!.key;
+
+      if (previous.has(key)) {
+        leaving.push(tile);
+      } else {
+        previous.set(key, tile);
+      }
     }
 
-    while (tiles.length > count()) {
-      const tile: Tile = tiles.pop()!;
+    shown = searchEntries(creations(), category, searchBar.search());
+    tiles.length = 0;
 
+    for (let index = 0; index < count(); index++) {
+      const tile: Tile | undefined = previous.get(keyOf(index));
+
+      if (tile === undefined) {
+        tiles.push(makeTile(index, fresh ? 1 : 0));
+        describe(tiles[index]!, index);
+        continue;
+      }
+
+      previous.delete(keyOf(index));
+      tiles.push(tile);
+
+      if (all || index === 0) {
+        describe(tile, index);
+      }
+    }
+
+    for (const tile of previous.values()) {
       if (tile === liveTile) {
         release();
       }
 
+      tile.view.eventMode = "none";
+      leaving.push(tile);
+    }
+
+    if (chosen !== undefined && tiles.includes(chosen)) {
+      selected = tiles.indexOf(chosen);
+    }
+
+    revealed =
+      flipped !== undefined && tiles.includes(flipped)
+        ? tiles.indexOf(flipped)
+        : null;
+    emptyFade.set(shown.length === 0 && searchBar.filtering() ? 1 : 0);
+    arrange();
+    select(selected);
+  }
+
+  function refresh(): void {
+    rebuild(true);
+  }
+
+  function clear(): void {
+    release();
+
+    for (const tile of [...tiles, ...leaving]) {
+      places.delete(tile);
       tile.view.destroy({ children: true });
     }
 
-    for (let index = 0; index < tiles.length; index++) {
-      describe(tiles[index]!, index);
-    }
-
-    arrange();
-    select(selected);
+    tiles.length = 0;
+    leaving.length = 0;
   }
 
   function reset(): void {
@@ -393,6 +530,9 @@ function createGallery(
     target = 0;
     scroll.value = 0;
     scroll.velocity = 0;
+    searchBar.reset();
+    searchBar.setCategory(category);
+    clear();
     refresh();
     tabs.reset(category, onTabs);
   }
@@ -406,18 +546,27 @@ function createGallery(
     selected = 0;
     revealed = null;
     target = 0;
+    searchBar.setCategory(category);
+    clear();
     refresh();
     appear();
   }
 
   function layout(): void {
     const area: number = app.screen.width * galleryWidth;
-    const top: number = app.screen.height * galleryTop;
+    const searchY: number = Math.round(app.screen.height * headerY) + searchTop;
+    const top: number = Math.max(
+      app.screen.height * galleryTop,
+      searchY + searchBar.height + searchGap,
+    );
 
     columns = Math.max(Math.floor((area + tileGap) / (tileWidth + tileGap)), 1);
 
     const width: number = columns * (tileWidth + tileGap) - tileGap;
     const left: number = Math.round(app.screen.width / 2 - width / 2);
+
+    searchBar.view.position.set(Math.round(app.screen.width / 2), searchY);
+    searchBar.layout(Math.max(width, area));
 
     visibleHeight = app.screen.height * galleryBottom - top;
     grid.position.set(left, top);
@@ -436,9 +585,13 @@ function createGallery(
     reveal();
   }
 
+  empty.text = "NO MATCHING CARDS";
+  empty.anchor.set(0.5);
+  empty.alpha = 0;
+  list.addChild(empty);
   grid.addChild(list, mask);
   list.mask = mask;
-  view.addChild(tabs.view, grid);
+  view.addChild(tabs.view, searchBar.view, grid);
   view.eventMode = "none";
   grid.eventMode = "static";
   grid.on("wheel", (event: FederatedWheelEvent) => {
@@ -458,6 +611,7 @@ function createGallery(
 
     smoothDamp(scroll, target, scrollSmoothing, ticker.deltaMS / 1000);
     list.y = -scroll.value;
+    slide(ticker.deltaMS / 1000);
     animateTiles(ticker.deltaMS / 1000);
     animateLive(Math.min(ticker.deltaMS / 1000, rainMaxDelta));
 
@@ -473,20 +627,26 @@ function createGallery(
 
     if (appearDirection > 0 && appearTime < appearEnd()) {
       appearTime += ticker.deltaMS / 1000;
-      arrange();
     } else if (appearDirection < 0 && appearTime > 0) {
       appearTime = Math.max(appearTime - ticker.deltaMS / 1000, 0);
-      arrange();
 
       if (appearTime === 0) {
         vanished?.();
         vanished = null;
       }
     }
+
+    arrange();
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (!active || event.altKey || event.ctrlKey || event.metaKey) {
+    if (
+      !active ||
+      searchBar.focused() ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
       return;
     }
 
@@ -544,6 +704,7 @@ function createGallery(
 
   function setActive(value: boolean): void {
     active = value;
+    searchBar.setActive(value);
     view.eventMode = value ? "passive" : "none";
   }
 

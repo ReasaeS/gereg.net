@@ -160,5 +160,5 @@ function createTabs(
   return { view: view, paint: paint, layout: layout, reset: reset };
 }
 
-export { createTabs };
+export { createTabs, headerY };
 export type { Tabs };

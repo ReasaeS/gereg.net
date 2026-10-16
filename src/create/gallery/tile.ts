@@ -78,9 +78,9 @@ type Tile = {
 };
 
 type TileEvents = {
-  hover: (index: number) => void;
-  tap: (index: number) => void;
-  act: (index: number, action: Action) => void;
+  hover: () => void;
+  tap: () => void;
+  act: (action: Action) => void;
 };
 
 const actions: Array<Action> = ["delete", "rename", "publish"];
@@ -268,7 +268,7 @@ function stepTile(
 }
 
 function createTile(
-  index: number,
+  faceUp: boolean,
   logo: Texture | null,
   events: TileEvents,
 ): Tile {
@@ -364,7 +364,7 @@ function createTile(
         event.stopPropagation();
 
         if (button.enabled) {
-          events.act(index, action);
+          events.act(action);
         }
       });
       row.addChild(button.view);
@@ -380,8 +380,8 @@ function createTile(
   tile.cursor = "pointer";
   tile.hitArea = new Rectangle(0, 0, tileWidth, tileHeight);
   tile.pivot.set(tileWidth / 2, tileHeight / 2);
-  tile.on("pointerover", () => events.hover(index));
-  tile.on("pointertap", () => events.tap(index));
+  tile.on("pointerover", () => events.hover());
+  tile.on("pointertap", () => events.tap());
 
   return {
     view: tile,
@@ -396,8 +396,8 @@ function createTile(
     gems: gems,
     rank: rank,
     rarity: null,
-    turnFrom: index === 0 ? Math.PI : 0,
-    turnTo: index === 0 ? Math.PI : 0,
+    turnFrom: faceUp ? Math.PI : 0,
+    turnTo: faceUp ? Math.PI : 0,
     turnProgress: 1,
     back: back,
     art: art,

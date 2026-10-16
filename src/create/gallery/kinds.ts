@@ -58,6 +58,15 @@ type Entry = {
   item: Creation;
 };
 
+type Order = "rarity" | "name" | "created";
+
+type Search = {
+  query: string;
+  order: Order;
+  reversed: boolean;
+  types: Set<string>;
+};
+
 const categoryList: Array<Category> = ["stage", "enemy", "pattern", "cosmetic"];
 const categoryNames: Map<Category, string> = new Map([
   ["stage", "stages"],
@@ -71,6 +80,29 @@ const itemNames: Map<Category, string> = new Map([
   ["enemy", "enemy"],
   ["pattern", "pattern"],
 ]);
+
+const orderList: Array<Order> = ["rarity", "name", "created"];
+const orderNames: Map<Order, string> = new Map([
+  ["rarity", "rarity"],
+  ["name", "a - z"],
+  ["created", "created"],
+]);
+
+function categoryTypes(category: Category): Array<Rarity<unknown>> {
+  if (category === "stage") {
+    return difficulties;
+  }
+
+  if (category === "enemy") {
+    return ranks;
+  }
+
+  if (category === "pattern") {
+    return attacks;
+  }
+
+  return cosmetics;
+}
 
 function entryRarity(entry: Entry): Rarity<unknown> {
   if (entry.kind === "stage") {
@@ -119,10 +151,7 @@ function compareEntries(
     return firstDefault !== null ? 1 : -1;
   }
 
-  return first.item.name.localeCompare(second.item.name, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
+  return compareNames(first, second);
 }
 
 function listEntries(source: Creations, category: Category): Array<Entry> {
@@ -156,5 +185,64 @@ function listEntries(source: Creations, category: Category): Array<Entry> {
   );
 }
 
-export { categoryList, categoryNames, itemNames, entryRarity, listEntries };
-export type { Kind, Category, Action, Creation, Entry };
+function compareNames(first: Entry, second: Entry): number {
+  return first.item.name.localeCompare(second.item.name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function compareOrder(
+  order: Order,
+  category: Category,
+  first: Entry,
+  second: Entry,
+): number {
+  let result: number = 0;
+
+  if (order === "name") {
+    result = compareNames(first, second);
+  } else if (order === "created" && first.item.id !== second.item.id) {
+    result = first.item.id < second.item.id ? -1 : 1;
+  }
+
+  if (result !== 0) {
+    return result;
+  }
+
+  return compareEntries(category, first, second);
+}
+
+function searchEntries(
+  source: Creations,
+  category: Category,
+  search: Search,
+): Array<Entry> {
+  const query: string = search.query.trim().toLowerCase();
+  const direction: number = search.reversed ? -1 : 1;
+
+  return listEntries(source, category)
+    .filter(
+      (entry: Entry) =>
+        (search.types.size === 0 ||
+          search.types.has(entryRarity(entry).label)) &&
+        entry.item.name.toLowerCase().includes(query),
+    )
+    .sort(
+      (first: Entry, second: Entry) =>
+        compareOrder(search.order, category, first, second) * direction,
+    );
+}
+
+export {
+  categoryList,
+  categoryNames,
+  itemNames,
+  orderList,
+  orderNames,
+  categoryTypes,
+  entryRarity,
+  listEntries,
+  searchEntries,
+};
+export type { Kind, Category, Action, Creation, Entry, Order, Search };
