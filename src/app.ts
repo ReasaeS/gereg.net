@@ -32,7 +32,7 @@ import { createEditor } from "./editor/editor";
 import { droneTexture, playerTexture } from "./editor/drawings";
 import { createPlayfield, type Playfield } from "./game/playfield";
 import { createSettings } from "./settings/panel";
-import { createMaker } from "./create/maker";
+import { createMaker } from "./create/maker/maker";
 import { createGuides } from "./dev/guides";
 import { resetApp } from "./dev/reset";
 import {
