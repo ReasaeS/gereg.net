@@ -1,26 +1,15 @@
-import type { Creations, Enemy, Pattern, Stage } from "../types";
-import {
-  defaultBackground,
-  defaultCharacter,
-  defaultCutscene,
-  defaultEnemy,
-  defaultPalette,
-  defaultPattern,
-  defaultSigil,
-  defaultSound,
-  defaultSpell,
-  defaultStage,
-  defaultWallpaper,
-  repairSpells,
-} from "../defaults";
-import { defaultName, type Attack, type Cosmetic } from "../rarity";
-import { cleanName } from "../transcript";
-import type { Category, Kind } from "../gallery/kinds";
+import type { Creations, Enemy, Pattern, Run, Stage } from "../types";
+import { createId, defaultSigil, repairSpells } from "../defaults";
+import { defaultName } from "../rarity";
+import { blankEntry } from "../blank";
+import type { Deal, Kind } from "../gallery/kinds";
 import type { Item } from "./studio";
 
 const nameLength: number = 24;
 const kindWords: Map<Kind, string> = new Map([
   ["stage", "Stage"],
+  ["run", "Run"],
+  ["game", "Game"],
   ["pattern", "Pattern"],
   ["enemy", "Enemy"],
   ["background", "Background"],
@@ -36,6 +25,8 @@ const kindWords: Map<Kind, string> = new Map([
 function listOf(creations: Creations, kind: Kind): Array<Item> {
   const lists: Record<Kind, Array<Item>> = {
     stage: creations.stages,
+    run: creations.runs,
+    game: creations.games,
     pattern: creations.patterns,
     enemy: creations.enemies,
     background: creations.backgrounds,
@@ -54,11 +45,13 @@ function listOf(creations: Creations, kind: Kind): Array<Item> {
 function rarityKey(kind: Kind, item: Item): string {
   return kind === "stage"
     ? (item as Stage).difficulty
-    : kind === "enemy"
-      ? (item as Enemy).rank
-      : kind === "pattern"
-        ? (item as Pattern).frame
-        : kind;
+    : kind === "run"
+      ? (item as Run).difficulty
+      : kind === "enemy"
+        ? (item as Enemy).rank
+        : kind === "pattern"
+          ? (item as Pattern).frame
+          : kind;
 }
 
 function freshName(creations: Creations, kind: Kind, item: Item): string {
@@ -96,6 +89,10 @@ function forgetStageLook(creations: Creations, id: string): void {
 
     if (stageItem.palette === id) {
       stageItem.palette = null;
+    }
+
+    if (stageItem.music === id) {
+      stageItem.music = null;
     }
   }
 }
@@ -146,123 +143,6 @@ function forgetSpawns(creations: Creations, id: string): void {
   }
 }
 
-function convertAttack(
-  creations: Creations,
-  from: Kind,
-  index: number,
-  to: Attack,
-): number {
-  const item: Item = listOf(creations, from)[index]!;
-
-  listOf(creations, from).splice(index, 1);
-  forgetAttack(creations, item.id);
-  forgetCosmetic(creations, item.id);
-
-  if (to === "spell") {
-    if (creations.sigils.length === 0) {
-      creations.sigils.push({ ...defaultSigil(), name: "Sigil 1" });
-    }
-
-    return (
-      creations.spells.push({
-        ...defaultSpell(creations.sigils[0]!.id),
-        id: item.id,
-        name: item.name,
-      }) - 1
-    );
-  }
-
-  return (
-    creations.patterns.push({
-      ...defaultPattern(),
-      frame: to,
-      id: item.id,
-      name: item.name,
-    }) - 1
-  );
-}
-
-function convertCosmetic(
-  creations: Creations,
-  from: Kind,
-  index: number,
-  to: Cosmetic,
-): number {
-  const item: Item = listOf(creations, from)[index]!;
-
-  listOf(creations, from).splice(index, 1);
-  forgetStageLook(creations, item.id);
-  forgetCosmetic(creations, item.id);
-
-  if (to === "wallpaper") {
-    return (
-      creations.wallpapers.push({
-        ...defaultWallpaper(),
-        id: item.id,
-        name: item.name,
-      }) - 1
-    );
-  }
-
-  if (to === "palette") {
-    return (
-      creations.palettes.push({
-        ...defaultPalette(),
-        id: item.id,
-        name: item.name,
-      }) - 1
-    );
-  }
-
-  if (to === "sigil") {
-    return (
-      creations.sigils.push({
-        ...defaultSigil(),
-        id: item.id,
-        name: item.name,
-      }) - 1
-    );
-  }
-
-  if (to === "sound") {
-    return (
-      creations.sounds.push({
-        ...defaultSound(),
-        id: item.id,
-        name: item.name,
-      }) - 1
-    );
-  }
-
-  if (to === "character") {
-    return (
-      creations.characters.push({
-        ...defaultCharacter(item.name),
-        id: item.id,
-        name: cleanName(item.name) || "Character",
-      }) - 1
-    );
-  }
-
-  if (to === "cutscene") {
-    return (
-      creations.cutscenes.push({
-        ...defaultCutscene(creations.characters),
-        id: item.id,
-        name: item.name,
-      }) - 1
-    );
-  }
-
-  return (
-    creations.backgrounds.push({
-      ...defaultBackground(),
-      id: item.id,
-      name: item.name,
-    }) - 1
-  );
-}
-
 function deleteEntry(creations: Creations, kind: Kind, index: number): void {
   const item: Item | undefined = listOf(creations, kind)[index];
 
@@ -277,32 +157,40 @@ function deleteEntry(creations: Creations, kind: Kind, index: number): void {
   forgetSpawns(creations, item.id);
 }
 
-function createEntry(creations: Creations, category: Category): Kind {
-  const kind: Kind = category === "cosmetic" ? "background" : category;
-
-  if (category === "stage") {
-    creations.stages.push(
-      defaultStage(
-        creations.enemies[0]?.id ?? null,
-        creations.backgrounds[0]?.id ?? null,
-        creations.wallpapers[0]?.id ?? null,
-        creations.palettes[0]?.id ?? null,
-      ),
-    );
-  } else if (category === "pattern") {
-    creations.patterns.push(defaultPattern());
-  } else if (category === "enemy") {
-    creations.enemies.push(defaultEnemy(creations.patterns[0]?.id ?? null));
-  } else {
-    creations.backgrounds.push(defaultBackground());
+function createEntry(creations: Creations, deal: Deal): Kind {
+  if (deal.kind === "spell" && creations.sigils.length === 0) {
+    creations.sigils.push({ ...defaultSigil(), name: "Sigil 1" });
   }
 
+  const item: Item = blankEntry(creations, deal, false);
+
+  listOf(creations, deal.kind).push(item);
+  item.name = freshName(creations, deal.kind, item);
+
+  return deal.kind;
+}
+
+function duplicateEntry(
+  creations: Creations,
+  kind: Kind,
+  index: number,
+): number {
   const list: Array<Item> = listOf(creations, kind);
-  const item: Item = list[list.length - 1]!;
+  const item: Item | undefined = list[index];
 
-  item.name = freshName(creations, kind, item);
+  if (item === undefined) {
+    return -1;
+  }
 
-  return kind;
+  const copy: Item = structuredClone(item);
+  const suffix: string = " copy";
+
+  copy.id = createId();
+  copy.name = defaultName.test(item.name)
+    ? freshName(creations, kind, copy)
+    : item.name.slice(0, nameLength - suffix.length) + suffix;
+
+  return list.push(copy) - 1;
 }
 
 export {
@@ -310,8 +198,7 @@ export {
   listOf,
   freshName,
   renameDefault,
-  convertAttack,
-  convertCosmetic,
   deleteEntry,
   createEntry,
+  duplicateEntry,
 };

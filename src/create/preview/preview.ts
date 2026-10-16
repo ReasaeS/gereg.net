@@ -48,6 +48,11 @@ type Preview = {
   ) => void;
   hits: () => number;
   bombs: () => number;
+  score: () => number;
+  grazes: () => number;
+  setLoop: (loop: boolean) => void;
+  setPower: (value: number) => void;
+  finished: () => boolean;
 };
 
 type Arrival = {
@@ -72,6 +77,7 @@ const still: Path = {
   waves: new Array(),
 };
 const fadeTime: number = 1; // s
+const grazePoints: number = 50;
 
 async function createPreview(
   playerTexture: Texture,
@@ -127,6 +133,9 @@ async function createPreview(
   let bombing: boolean = false;
   let dying: number = 0;
   let blink: number = 0;
+  let grazeCount: number = 0;
+  let looping: boolean = true;
+  let ended: boolean = false;
 
   coreLayer.blendMode = "add";
   pilot.reset(playerX, playerY);
@@ -230,6 +239,7 @@ async function createPreview(
     actors.clear();
     bullets.clear();
     blend = 0;
+    ended = false;
     time = Math.max(goal - seekLookback, 0);
     schedule();
 
@@ -257,10 +267,22 @@ async function createPreview(
       return;
     }
 
+    if (ended) {
+      actors.move(delta);
+      return;
+    }
+
     time += delta;
 
-    if (time >= stage.length) {
+    if (time >= stage.length && looping) {
       seek(0);
+      return;
+    }
+
+    if (time >= stage.length) {
+      time = stage.length;
+      ended = true;
+      actors.move(delta);
       return;
     }
 
@@ -326,11 +348,17 @@ async function createPreview(
     ) {
       dying = deathbombWindow;
     }
+
+    if (dying <= 0) {
+      grazeCount += bullets.graze(player.x, player.y);
+    }
   }
 
   function setPlaytest(on: boolean): void {
     playtest = on;
     hitCount = 0;
+    grazeCount = 0;
+    actors.resetPoints();
     grace = 0;
     focused = false;
     shooting = false;
@@ -518,6 +546,13 @@ async function createPreview(
     },
     hits: () => hitCount,
     bombs: () => bomb.stock(),
+    score: () => actors.points() + grazeCount * grazePoints,
+    grazes: () => grazeCount,
+    setPower: (value: number) => squad.setPower(value),
+    setLoop: (loop: boolean) => {
+      looping = loop;
+    },
+    finished: () => ended,
   };
 }
 

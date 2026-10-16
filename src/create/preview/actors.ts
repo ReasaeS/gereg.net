@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, type Texture } from "pixi.js";
 import { getTexture } from "../images";
-import type { Enemy, Pattern, Sigil, Spell } from "../types";
+import type { Enemy, Pattern, Rank, Sigil, Spell } from "../types";
 import { drawSigil } from "../sigil";
 import { drawShape } from "../shape";
 import { motion, velocity, type Path } from "../kinematics";
@@ -56,6 +56,8 @@ type Actors = {
   targets: () => Array<Target>;
   shoot: (squad: Squad) => void;
   bomb: (bomb: Bomb, delta: number) => void;
+  points: () => number;
+  resetPoints: () => void;
 };
 
 const forward: number = Math.PI / 2; // rad
@@ -67,6 +69,12 @@ const healthScale: number = 200;
 const pipSize: number = 3; // units
 const pipGap: number = 2; // units
 const stillSpeed: number = 1; // units/s
+const damagePoints: number = 10;
+const defeatPoints: Map<Rank, number> = new Map([
+  ["regular", 1000],
+  ["subboss", 10000],
+  ["boss", 50000],
+]);
 
 function barCount(enemy: Enemy): number {
   return enemy.rank === "boss" ? enemy.bars.length : 1;
@@ -78,6 +86,7 @@ function createActors(
   bullets: Bullets,
 ): Actors {
   const actors: Array<Actor> = new Array();
+  let points: number = 0;
 
   function dress(actor: Actor): void {
     const enemy: Enemy = actor.enemy;
@@ -156,6 +165,10 @@ function createActors(
   }
 
   function damage(actor: Actor, amount: number): void {
+    if (!actor.locked) {
+      points += Math.min(amount, Math.max(actor.hp, 0)) * damagePoints;
+    }
+
     actor.hp -= amount;
 
     if (actor.hp > 0) {
@@ -173,6 +186,7 @@ function createActors(
       return;
     }
 
+    points += defeatPoints.get(actor.enemy.rank) ?? 0;
     finishBar(actor);
   }
 
@@ -381,6 +395,10 @@ function createActors(
     targets: targets,
     shoot: shoot,
     bomb: bomb,
+    points: () => points,
+    resetPoints: () => {
+      points = 0;
+    },
   };
 }
 

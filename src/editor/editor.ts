@@ -37,6 +37,7 @@ import {
 import { createText } from "../ui/text";
 import { createGlide, type Glide } from "../ui/motion";
 import { drawField } from "../ui/widgets";
+import type { Topic } from "../menu/help";
 
 type Tool = "pencil" | "eraser" | "fill" | "picker";
 
@@ -45,6 +46,7 @@ type Editor = {
   setActive: (active: boolean) => void;
   enter?: () => void;
   fullscreen?: () => boolean;
+  topic?: () => Topic;
 };
 
 const maxUndo: number = 100;
@@ -767,6 +769,7 @@ function createEditor(app: Application): Editor {
     setActive: setActive,
     enter: enter,
     fullscreen: () => true,
+    topic: () => "customise",
   };
 }
 

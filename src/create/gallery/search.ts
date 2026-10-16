@@ -72,7 +72,11 @@ function createOption(text: string, color: string, tap: () => void): Option {
   const view: Container = new Container();
   const label: Text = createSerif(optionSize, "#ffffff");
   const mark: Graphics = new Graphics();
-  const hover: Glide = createGlide(1, (scale: number) => view.scale.set(scale));
+  const hover: Glide = createGlide(1, (scale: number) => {
+    if (!view.destroyed) {
+      view.scale.set(scale);
+    }
+  });
   const option: Option = {
     view: view,
     label: label,
@@ -80,6 +84,10 @@ function createOption(text: string, color: string, tap: () => void): Option {
     lit: false,
     hovered: false,
     glow: createGlide(0, (amount: number) => {
+      if (view.destroyed) {
+        return;
+      }
+
       label.tint = mix(trim, color, amount);
       label.alpha = idleAlpha + (1 - idleAlpha) * amount;
       mark.alpha = amount;

@@ -5,6 +5,7 @@ import type {
   Enemy,
   Keyframe,
   Palette,
+  Sound,
   Spawn,
   Vector,
   Wallpaper,
@@ -122,6 +123,22 @@ function addStageTab(studio: Studio): StageTab {
           () => stage().palette,
           (value: string | null) => {
             stage().palette = value;
+          },
+        ),
+        choice(
+          "Music",
+          () => [
+            { value: null, label: "None" },
+            ...creations.sounds
+              .filter((value: Sound) => value.source === "file")
+              .map((value: Sound) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+          ],
+          () => stage().music,
+          (value: string | null) => {
+            stage().music = value;
           },
         ),
         slider(

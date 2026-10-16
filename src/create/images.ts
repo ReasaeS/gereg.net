@@ -180,6 +180,7 @@ async function eraseFiles(): Promise<void> {
 }
 
 export {
+  builtinPrefix,
   eraseFiles,
   storeBlob,
   readBlob,

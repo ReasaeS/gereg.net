@@ -26,10 +26,12 @@ import {
   defaultStage,
   defaultCreations,
   defaultSpawnY,
+  repairPacks,
 } from "./defaults";
 import { wallAngle } from "./geometry";
 
 const storageKey: string = "geregnet.creations";
+const saveListeners: Array<() => void> = new Array();
 
 type OldLine = {
   id: string;
@@ -153,6 +155,8 @@ function loadCreations(): Creations {
     const fallback: Creations = defaultCreations();
     const creations: Creations = {
       stages: parsed.stages ?? new Array(),
+      runs: parsed.runs ?? new Array(),
+      games: parsed.games ?? new Array(),
       patterns: parsed.patterns ?? fallback.patterns,
       enemies: parsed.enemies ?? fallback.enemies,
       backgrounds: parsed.backgrounds ?? fallback.backgrounds,
@@ -283,6 +287,8 @@ function loadCreations(): Creations {
       );
     }
 
+    repairPacks(creations);
+
     return creations;
   } catch {
     return defaultCreations();
@@ -324,6 +330,7 @@ function upgradeStage(stage: Stage & { spawns?: Array<OldSpawn> }): void {
   stage.difficulty = stage.difficulty ?? "normal";
   stage.wallpaper = stage.wallpaper ?? null;
   stage.palette = stage.palette ?? null;
+  stage.music = stage.music ?? null;
 
   if (stage.keyframes === undefined) {
     const keyframes: Map<number, Keyframe> = new Map();
@@ -418,11 +425,21 @@ function usedFiles(creations: Creations): Set<string> {
 }
 
 function saveCreations(creations: Creations): void {
+  repairPacks(creations);
+
   try {
     localStorage.setItem(storageKey, JSON.stringify(creations));
   } catch {
     console.warn("Could not save the creations");
   }
+
+  for (const listener of saveListeners) {
+    listener();
+  }
 }
 
-export { loadCreations, saveCreations, usedSprites, usedFiles };
+function onSave(listener: () => void): void {
+  saveListeners.push(listener);
+}
+
+export { loadCreations, saveCreations, onSave, usedSprites, usedFiles };

@@ -81,6 +81,7 @@ import { startMotion } from "./ui/motion";
 import { getResolution, onResolution } from "./settings/settings";
 import { startGamepad } from "./game/gamepad";
 import { createCredits, type Credits } from "./menu/credits";
+import { createHelp, type Help, type Topic } from "./menu/help";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -106,6 +107,10 @@ const tips: Array<string> = [
   "PRESS M IN THE CUSTOMISE MENU TO MIRROR YOUR DRAWING.",
   "PRESS G IN THE CUSTOMISE MENU TO TOGGLE THE GRID.",
   "PRESS P IN THE CREATE MENU TO PLAYTEST.",
+  "PRESS ESC DURING A RUN TO PAUSE.",
+  "PRESS ? ON ANY SCREEN TO SEE ITS CONTROLS.",
+  "EXPORT A CARD TO SHARE IT. DROP A CARD FILE ON THE CREATE MENU TO IMPORT IT.",
+  "PRESS / IN THE CREATE MENU TO SEARCH YOUR CARDS.",
 ];
 const zoomDuration: number = 1100; // ms
 const zoomEasing: Easing = cubicBezier(0.45, 0, 0.35, 1);
@@ -457,6 +462,51 @@ function play(): void {
     "playing",
   );
 }
+
+const help: Help = createHelp(app);
+
+screenLayer.addChild(help.view);
+
+function helpTopic(): Topic | null {
+  if (screen === "main") {
+    return "menu";
+  }
+
+  if (screen === "playing") {
+    return "play";
+  }
+
+  if (screen === "page" && currentPage !== null) {
+    return currentPage.content?.topic?.() ?? null;
+  }
+
+  return null;
+}
+
+window.addEventListener(
+  "keydown",
+  (event: KeyboardEvent) => {
+    const asked: boolean =
+      (event.key === "?" || event.code === "F1") &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey;
+
+    if (help.shown()) {
+      if (asked || event.key === "Escape") {
+        help.toggle(null);
+      }
+    } else if (asked && helpTopic() !== null) {
+      help.toggle(helpTopic());
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },
+  true,
+);
 
 window.addEventListener("keydown", (event: KeyboardEvent) => {
   if (!event.altKey || event.code !== "KeyR" || event.repeat) {

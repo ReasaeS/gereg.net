@@ -26,13 +26,15 @@ import {
   tween,
   type Easing,
 } from "../../effects/tween/tween";
-import type { Creations, Sound } from "../types";
+import type { Creations, Sound, Stage } from "../types";
 import {
   loadCreations,
+  onSave,
   saveCreations,
   usedFiles,
   usedSprites,
 } from "../storage";
+import { createHistory, type History, type Place } from "./history";
 import { createPreview, type Preview } from "../preview/preview";
 import {
   chipHeight,
@@ -46,8 +48,7 @@ import { createGlide, type Glide } from "../../ui/motion";
 import { loadTexture, removeUnused } from "../images";
 import { createWallpaperView, type WallpaperView } from "../wallpaper";
 import { createGallery, type Gallery, type Live } from "../gallery/gallery";
-import type { Action, Category, Kind } from "../gallery/kinds";
-import { cosmetics, type Attack, type Cosmetic } from "../rarity";
+import type { Action, Deal, Kind } from "../gallery/kinds";
 import type { Cursor, Item, Selection, Studio, Tab } from "./studio";
 import { createKit, type Kit } from "./kit";
 import { createSelection } from "./selection";
@@ -58,11 +59,11 @@ import { createTransport, type Transport } from "./transport";
 import { createTimeline, transportWidth, type Timeline } from "./timeline";
 import { createDrop, type Drop } from "./drop";
 import { createCards } from "./cards";
+import { exportCard, importCard, type Imported } from "../share";
 import {
-  convertAttack as convertAttackItem,
-  convertCosmetic as convertCosmeticItem,
   createEntry,
   deleteEntry,
+  duplicateEntry,
   listOf,
   nameLength,
   renameDefault,
@@ -78,6 +79,9 @@ import { addSoundTab, type SoundTab } from "./tabs/sound";
 import { addCutsceneTab } from "./tabs/cutscene";
 import { addCharacterTab } from "./tabs/character";
 import { addStageTab, type StageTab } from "./tabs/stage";
+import { addRunTab } from "./tabs/run";
+import { addGameTab } from "./tabs/game";
+import { gameStages, runStages } from "../packs";
 
 const sectionGap: number = 6; // units
 const panelLeft: number = 430; // units
@@ -145,8 +149,6 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   const ticks: Clock = createClock();
   const kit: Kit = createKit(changed, refresh);
-  const cosmeticKeys: Map<Cosmetic, number> = new Map();
-  const attackKeys: Map<Kind, number> = new Map();
   let frameScale: number = 1;
   let tab: Tab;
   let active: boolean = false;
@@ -169,9 +171,6 @@ async function createMaker(app: Application): Promise<PageContent> {
     refreshControls: refreshControls,
     spriteRow: () => uploads.spriteRow(),
     pickImage: () => uploads.pickImage(),
-    cosmeticSection: cosmeticSection,
-    keyed: keyed,
-    convertAttack: convertAttack,
     renameDefault: (kind: Kind, item: Item) =>
       renameDefault(creations, kind, item),
     playScene: scenes.play,
@@ -180,6 +179,11 @@ async function createMaker(app: Application): Promise<PageContent> {
     buildMarkers: () => markers.build(),
     placeMarkers: () => markers.place(),
   };
+  const history: History = createHistory(creations, () => ({
+    tab: tab.name,
+    selected: tab.selected,
+    cursor: { ...cursor },
+  }));
   const uploads: Uploads = createUploads(studio);
   const markers: Markers = createMarkers(studio);
   const transport: Transport = createTransport(
@@ -193,14 +197,28 @@ async function createMaker(app: Application): Promise<PageContent> {
     return tab.name === "wallpaper" ? 0 : 1;
   }
 
+  function lookStage(): Stage | null {
+    if (tab.name === "stage") {
+      return pick.stage();
+    }
+
+    if (tab.name === "run") {
+      return runStages(creations, pick.run())[0] ?? null;
+    }
+
+    if (tab.name === "game") {
+      return gameStages(creations, pick.game())[0] ?? null;
+    }
+
+    return null;
+  }
+
   function paintLook(): void {
     boardShown.set(boardWanted());
     hudFrame.show(
       tab.name === "wallpaper"
         ? pick.wallpaper()
-        : tab.name === "stage"
-          ? pick.wallpaperById(pick.stage().wallpaper)
-          : null,
+        : pick.wallpaperById(lookStage()?.wallpaper ?? null),
     );
   }
 
@@ -228,7 +246,39 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function cleanup(): void {
-    removeUnused(usedFiles(creations));
+    removeUnused(new Set([...usedFiles(creations), ...history.files()]));
+  }
+
+  function travel(place: Place | null): void {
+    if (place === null) {
+      return;
+    }
+
+    const next: Tab | undefined = tabs.find(
+      (value: Tab) => value.name === place.tab,
+    );
+
+    if (transport.playtesting()) {
+      transport.setPlaytesting(false);
+    }
+
+    if (next !== undefined) {
+      next.selected = place.selected;
+      tab = next;
+    }
+
+    for (const value of tabs) {
+      value.selected = Math.max(
+        Math.min(value.selected, value.items().length - 1),
+        0,
+      );
+    }
+
+    Object.assign(cursor, place.cursor);
+    changed();
+    refreshControls();
+    refresh();
+    history.finish();
   }
 
   function refreshControls(): void {
@@ -263,76 +313,6 @@ async function createMaker(app: Application): Promise<PageContent> {
     });
   }
 
-  function cosmeticSection(kind: Cosmetic): Array<Control> {
-    cosmeticKeys.set(kind, kit.sectionCount());
-
-    return kit.section("Cosmetic", [
-      kit.choice(
-        "Type",
-        kit.rarityOptions(cosmetics),
-        () => kind,
-        (value: Cosmetic) => convertCosmetic(value),
-      ),
-    ]);
-  }
-
-  function keyed(kind: Kind, list: Array<Control>): Array<Control> {
-    attackKeys.set(kind, kit.sectionCount() - 1);
-
-    return list;
-  }
-
-  function settle(kind: Kind, index: number, section: number): void {
-    for (const value of tabs) {
-      value.selected = Math.max(
-        Math.min(value.selected, value.items().length - 1),
-        0,
-      );
-    }
-
-    renameDefault(creations, kind, listOf(creations, kind)[index]!);
-    saveCreations(creations);
-    cleanup();
-    showItem(kind, index);
-    kit.openSection(section);
-    refresh();
-  }
-
-  function convertAttack(to: Attack): void {
-    const from: Kind = tab.name as Kind;
-    const kind: Kind = to === "spell" ? "spell" : "pattern";
-
-    if (from === "pattern" && to !== "spell") {
-      pick.pattern().frame = to;
-      renameDefault(creations, "pattern", pick.pattern());
-      return;
-    }
-
-    if (from === "spell" && to === "spell") {
-      return;
-    }
-
-    settle(
-      kind,
-      convertAttackItem(creations, from, tab.selected, to),
-      attackKeys.get(kind)!,
-    );
-  }
-
-  function convertCosmetic(to: Cosmetic): void {
-    const from: Kind = tab.name as Kind;
-
-    if (from === to) {
-      return;
-    }
-
-    settle(
-      to,
-      convertCosmeticItem(creations, from, tab.selected, to),
-      cosmeticKeys.get(to)!,
-    );
-  }
-
   addPatternTab(studio);
   addEnemyTab(studio);
   addBackgroundTab(studio);
@@ -345,6 +325,8 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   addCutsceneTab(studio);
   addCharacterTab(studio);
+  addRunTab(studio);
+  addGameTab(studio);
 
   const stageTab: StageTab = addStageTab(studio);
   const timeline: Timeline = createTimeline(
@@ -399,17 +381,26 @@ async function createMaker(app: Application): Promise<PageContent> {
     app,
     () => creations,
     (kind: Kind, index: number) => openItem(kind, index),
-    (category: Category) => createItem(category),
+    (deal: Deal) => createItem(deal),
     (kind: Kind, index: number, action: Action) => {
       if (action === "rename") {
         renameItem(kind, index);
       } else if (action === "delete") {
         deleteItem(kind, index);
+      } else if (action === "duplicate") {
+        duplicateItem(kind, index);
+      } else {
+        void exportCard(creations, kind, index);
       }
     },
     cards,
   );
   const drop: Drop = createDrop(app, dropLabel, (file: File | undefined) => {
+    if (active && !editing && file !== undefined) {
+      void receiveCard(file);
+      return;
+    }
+
     if (!active || !editing) {
       return;
     }
@@ -421,7 +412,27 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
   });
 
+  async function receiveCard(file: File): Promise<void> {
+    const imported: Imported | null = await importCard(creations, file);
+
+    if (imported === null) {
+      window.alert('"' + file.name + '" is not a GEREG.NET card file.');
+      return;
+    }
+
+    saveCreations(creations);
+    await Promise.all([
+      ...[...usedSprites(creations)].map(loadTexture),
+      ...creations.sounds.map((value: Sound) => loadAudio(value.file)),
+    ]);
+    gallery.focus(imported.kind, imported.index);
+  }
+
   function dropLabel(): string | null {
+    if (active && !editing) {
+      return "DROP A CARD FILE TO IMPORT";
+    }
+
     if (!active || !editing) {
       return null;
     }
@@ -455,6 +466,17 @@ async function createMaker(app: Application): Promise<PageContent> {
     gallery.refresh();
   }
 
+  function duplicateItem(kind: Kind, index: number): void {
+    const copy: number = duplicateEntry(creations, kind, index);
+
+    if (copy < 0) {
+      return;
+    }
+
+    saveCreations(creations);
+    gallery.focus(kind, copy);
+  }
+
   function deleteItem(kind: Kind, index: number): void {
     const item: Item | undefined = listOf(creations, kind)[index];
 
@@ -476,8 +498,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     gallery.refresh();
   }
 
-  function createItem(category: Category): void {
-    const kind: Kind = createEntry(creations, category);
+  function createItem(deal: Deal): void {
+    const kind: Kind = createEntry(creations, deal);
 
     saveCreations(creations);
     openItem(kind, listOf(creations, kind).length - 1);
@@ -508,6 +530,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     editing = true;
     gallery.setActive(false);
     showItem(kind, index);
+    history.begin();
     swap(gallery.view, editor, true);
   }
 
@@ -655,6 +678,23 @@ async function createMaker(app: Application): Promise<PageContent> {
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (
+      active &&
+      editing &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      !transport.typing() &&
+      (event.code === "KeyZ" || event.code === "KeyY")
+    ) {
+      travel(
+        event.code === "KeyY" || event.shiftKey
+          ? history.redo()
+          : history.undo(),
+      );
+      event.preventDefault();
+      return;
+    }
+
     if (!active || !editing || event.altKey || event.ctrlKey || event.metaKey) {
       return;
     }
@@ -721,6 +761,11 @@ async function createMaker(app: Application): Promise<PageContent> {
     return true;
   }
 
+  onSave(() => {
+    if (editing) {
+      history.record();
+    }
+  });
   tab.panel.visible = true;
   refresh();
   Promise.all([
@@ -748,6 +793,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     leave: () => (editing ? Promise.resolve() : gallery.disappear()),
     leaveTime: () => (editing ? 0 : gallery.disappearTime()),
     back: back,
+    topic: () => (editing ? "editor" : "gallery"),
   };
 }
 

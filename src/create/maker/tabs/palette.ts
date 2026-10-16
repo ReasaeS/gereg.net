@@ -2,7 +2,7 @@ import { menuColors } from "../swatches";
 import type { Studio } from "../studio";
 
 function addPaletteTab(studio: Studio): void {
-  const { creations, preview, addTab, cosmeticSection, showPalette } = studio;
+  const { creations, preview, addTab, showPalette } = studio;
   const { colors, section } = studio.kit;
   const { palette } = studio.pick;
 
@@ -10,7 +10,6 @@ function addPaletteTab(studio: Studio): void {
     "palette",
     () => creations.palettes,
     [
-      ...cosmeticSection("palette"),
       ...section("Colours", [
         colors(
           "Accent",

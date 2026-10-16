@@ -9,15 +9,7 @@ const ringShrink: number = 40; // units
 const spinLimit: number = 180; // deg/s
 
 function addSigilTab(studio: Studio): void {
-  const {
-    creations,
-    preview,
-    cursor,
-    addTab,
-    changed,
-    refresh,
-    cosmeticSection,
-  } = studio;
+  const { creations, preview, cursor, addTab, changed, refresh } = studio;
   const { slider, choice, colors, section, actionRow } = studio.kit;
   const { sigil, ring } = studio.pick;
 
@@ -30,7 +22,6 @@ function addSigilTab(studio: Studio): void {
     "sigil",
     () => creations.sigils,
     [
-      ...cosmeticSection("sigil"),
       ...section("Look", [
         colors(
           "Colour",

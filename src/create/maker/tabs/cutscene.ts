@@ -10,15 +10,7 @@ const lineSpeedMin: number = 5; // chars/s
 const lineSpeedMax: number = 120; // chars/s
 
 function addCutsceneTab(studio: Studio): void {
-  const {
-    creations,
-    preview,
-    addTab,
-    changed,
-    refresh,
-    cosmeticSection,
-    playScene,
-  } = studio;
+  const { creations, preview, addTab, changed, refresh, playScene } = studio;
   const { slider, choice, section, buttonRow } = studio.kit;
   const { cutscene } = studio.pick;
 
@@ -26,7 +18,6 @@ function addCutsceneTab(studio: Studio): void {
     "cutscene",
     () => creations.cutscenes,
     [
-      ...cosmeticSection("cutscene"),
       ...section("Scene", [
         choice(
           "Voice",

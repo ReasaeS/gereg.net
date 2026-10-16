@@ -16,6 +16,9 @@ import type {
   Spawn,
   Keyframe,
   Stage,
+  Run,
+  Game,
+  Difficulty,
   Creations,
 } from "./types";
 
@@ -175,6 +178,30 @@ function repairSpells(creations: Creations): void {
   }
 }
 
+function repairPacks(creations: Creations): void {
+  const stages: Map<string, Difficulty> = new Map(
+    creations.stages.map((stage: Stage) => [stage.id, stage.difficulty]),
+  );
+  const runs: Map<string, Difficulty> = new Map(
+    creations.runs.map((run: Run) => [run.id, run.difficulty]),
+  );
+
+  for (const run of creations.runs) {
+    run.stages = run.stages.map((id: string | null) =>
+      id !== null && stages.get(id) === run.difficulty ? id : null,
+    );
+  }
+
+  for (const game of creations.games) {
+    for (const difficulty of Object.keys(game.runs) as Array<Difficulty>) {
+      const id: string | null = game.runs[difficulty];
+
+      game.runs[difficulty] =
+        id !== null && runs.get(id) === difficulty ? id : null;
+    }
+  }
+}
+
 function defaultSound(): Sound {
   return {
     id: createId(),
@@ -288,6 +315,7 @@ function defaultStage(
     background: background,
     wallpaper: wallpaper,
     palette: palette,
+    music: null,
     difficulty: "normal",
     length: 30,
     keyframes: [
@@ -312,6 +340,23 @@ function defaultStage(
   };
 }
 
+function defaultRun(difficulty: Difficulty, stages: Array<string>): Run {
+  return {
+    id: createId(),
+    name: "Run",
+    difficulty: difficulty,
+    stages: stages.length === 0 ? [null] : stages,
+  };
+}
+
+function defaultGame(): Game {
+  return {
+    id: createId(),
+    name: "Game",
+    runs: { easy: null, normal: null, hard: null, lunatic: null },
+  };
+}
+
 function defaultCreations(): Creations {
   const pattern: Pattern = defaultPattern();
   const enemy: Enemy = defaultEnemy(pattern.id);
@@ -323,6 +368,8 @@ function defaultCreations(): Creations {
 
   return {
     stages: [defaultStage(enemy.id, background.id, wallpaper.id, palette.id)],
+    runs: new Array(),
+    games: new Array(),
     patterns: [pattern],
     enemies: [enemy],
     backgrounds: [background],
@@ -349,6 +396,7 @@ export {
   defaultSigil,
   defaultSpell,
   repairSpells,
+  repairPacks,
   limitBars,
   defaultSound,
   defaultEmotion,
@@ -359,5 +407,7 @@ export {
   defaultSpawn,
   defaultKeyframe,
   defaultStage,
+  defaultRun,
+  defaultGame,
   defaultCreations,
 };

@@ -7,6 +7,7 @@ import {
 } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
 import { createShadowText } from "../ui/text";
+import type { Topic } from "./help";
 
 const titleSize: number = 150; // px
 const hintSize: number = 40; // px
@@ -36,6 +37,7 @@ type PageContent = {
   fullscreen?: () => boolean;
   leave?: () => Promise<void>;
   leaveTime?: () => number;
+  topic?: () => Topic;
 };
 
 type Page = {

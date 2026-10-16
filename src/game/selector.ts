@@ -1,4 +1,11 @@
-import { Container, Graphics, Rectangle, Text, type Ticker } from "pixi.js";
+import {
+  Container,
+  Graphics,
+  Rectangle,
+  Text,
+  type FederatedWheelEvent,
+  type Ticker,
+} from "pixi.js";
 import {
   cubicBezier,
   smoothDamp,
@@ -72,6 +79,9 @@ const downDuration: number = 700; // ms
 const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
 const chooseKeys: Array<string> = ["Enter", "Space", "KeyZ"];
+const visibleRows: number = 8;
+const arrowSize: number = 5; // units
+const arrowGap: number = 6; // units
 
 function drawDoor(door: Graphics): void {
   door.clear();
@@ -107,6 +117,11 @@ function createSelector(ticker: Ticker): Selector {
   const badge: Graphics = new Graphics();
   const heading: Text = createText(titleSize, "#ffffff");
   const highlight: Graphics = new Graphics();
+  const list: Container = new Container();
+  const listMask: Graphics = new Graphics();
+  const arrows: Graphics = new Graphics();
+  const scroll: Spring = { value: 0, velocity: 0 };
+  let scrollTarget: number = 0;
   const entries: Array<Entry> = new Array();
   let texts: Array<Text> = [heading];
   const highlightY: Spring = { value: listY, velocity: 0 };
@@ -131,9 +146,72 @@ function createSelector(ticker: Ticker): Selector {
     }
   }
 
+  function inView(index: number): boolean {
+    const top: number = entryY(index) - scroll.value;
+
+    return (
+      top >= listY - entryHeight / 2 &&
+      top <= listY + (visibleRows - 0.5) * entryHeight
+    );
+  }
+
+  function reveal(): void {
+    const row: number = selected - Math.round(scrollTarget / entryHeight);
+
+    if (row < 0) {
+      scrollTarget = selected * entryHeight;
+    } else if (row >= visibleRows) {
+      scrollTarget = (selected - visibleRows + 1) * entryHeight;
+    }
+  }
+
   function select(index: number): void {
+    if (entries.length === 0) {
+      return;
+    }
+
     selected = (index + entries.length) % entries.length;
+    reveal();
     paint();
+  }
+
+  function drawArrows(): void {
+    const center: number = doorWidth / 2;
+    const top: number = listY - arrowGap;
+    const bottom: number = listY + visibleRows * entryHeight + arrowGap - 4;
+    const more: number =
+      (entries.length - visibleRows) * entryHeight - scroll.value;
+
+    arrows.clear();
+
+    if (scroll.value > 1) {
+      arrows
+        .poly([
+          center - arrowSize,
+          top,
+          center + arrowSize,
+          top,
+          center,
+          top - arrowSize,
+        ])
+        .fill({
+          color: 0xffffff,
+          alpha: Math.min(scroll.value / entryHeight, 1),
+        });
+    }
+
+    if (more > 1) {
+      arrows
+        .poly([
+          center - arrowSize,
+          bottom,
+          center + arrowSize,
+          bottom,
+          center,
+          bottom + arrowSize,
+        ])
+        .fill({ color: 0xffffff, alpha: Math.min(more / entryHeight, 1) });
+    }
   }
 
   function choose(): void {
@@ -161,7 +239,12 @@ function createSelector(ticker: Ticker): Selector {
     .fill(getTheme().accent);
   heading.anchor.set(0.5);
   heading.position.set(doorWidth / 2, titleY);
-  door.addChild(slats, badge, heading, highlight);
+  listMask
+    .rect(0, listY - 2, doorWidth, visibleRows * entryHeight)
+    .fill(0xffffff);
+  list.addChild(highlight);
+  list.mask = listMask;
+  door.addChild(slats, badge, heading, list, listMask, arrows);
 
   function setMenu(menu: Menu): void {
     for (const entry of entries) {
@@ -172,6 +255,9 @@ function createSelector(ticker: Ticker): Selector {
     texts = [heading];
     heading.text = menu.heading;
     selected = 0;
+    scrollTarget = 0;
+    scroll.value = 0;
+    scroll.velocity = 0;
 
     for (let index = 0; index < menu.choices.length; index++) {
       addEntry(menu.choices[index]!, index);
@@ -202,15 +288,19 @@ function createSelector(ticker: Ticker): Selector {
       entryHeight - 4,
     );
     entry.on("pointerover", () => {
-      if (active) {
+      if (active && inView(index)) {
         select(index);
       }
     });
     entry.on("pointertap", () => {
+      if (!inView(index)) {
+        return;
+      }
+
       select(index);
       choose();
     });
-    door.addChild(entry);
+    list.addChild(entry);
     entries.push({
       view: entry,
       name: name,
@@ -234,6 +324,16 @@ function createSelector(ticker: Ticker): Selector {
   view.position.set(doorX, doorY);
   view.addChild(door, mask, rails);
   view.eventMode = "none";
+  view.on("wheel", (event: FederatedWheelEvent) => {
+    if (active && event.deltaY !== 0) {
+      select(
+        Math.min(
+          Math.max(selected + Math.sign(event.deltaY), 0),
+          entries.length - 1,
+        ),
+      );
+    }
+  });
   paint();
   place();
 
@@ -248,6 +348,14 @@ function createSelector(ticker: Ticker): Selector {
       highlightSmoothing,
       current.deltaMS / 1000,
     );
+    smoothDamp(
+      scroll,
+      scrollTarget,
+      highlightSmoothing,
+      current.deltaMS / 1000,
+    );
+    list.y = -scroll.value;
+    drawArrows();
 
     const top: number = highlightY.value;
     const bottom: number = top + entryHeight - 4;

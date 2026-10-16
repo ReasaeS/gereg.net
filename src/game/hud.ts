@@ -27,6 +27,7 @@ type Hud = {
   refresh: () => void;
   setScale: (scale: number) => void;
   setZen: (on: boolean) => void;
+  setBadge: (label: string) => void;
   setElapsed: (seconds: number) => void;
   setLook: (wallpaper: Wallpaper | null, palette: Palette | null) => void;
 };
@@ -312,6 +313,9 @@ async function createHud(): Promise<Hud> {
     refresh: refresh,
     setScale: setScale,
     setZen: setZen,
+    setBadge: (label: string) => {
+      badge.text = label.toUpperCase();
+    },
     setElapsed: setElapsed,
     setLook: setLook,
   };

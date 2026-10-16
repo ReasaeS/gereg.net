@@ -31,6 +31,7 @@ type Bullet = {
   marginY: number; // units
   shownX: number; // units
   shownY: number; // units
+  grazed: boolean;
 };
 
 type Emitter = {
@@ -50,6 +51,7 @@ type Bullets = {
   move: (delta: number) => void;
   clear: () => void;
   collide: (x: number, y: number, bomb: Bomb, vulnerable: boolean) => boolean;
+  graze: (x: number, y: number) => number;
 };
 
 const bulletPath: string = "./sprites/bullets/orb.png";
@@ -57,6 +59,7 @@ const maxBullets: number = 6000;
 const bulletMargin: number = 48; // units
 const bulletLife: number = 20; // s
 const stepSize: number = 1 / 240; // s
+const grazeReach: number = 16; // units
 const none: Array<never> = [];
 const bulletHitbox: number = 0.25; // of size
 const edgeOffset: number = 8; // units
@@ -161,6 +164,7 @@ async function createBullets(
       age: 0,
       launch: launch,
       radius: (source.size * bulletHitbox) / 2,
+      grazed: false,
     });
   }
 
@@ -425,7 +429,33 @@ async function createBullets(
     return hit;
   }
 
-  return { fire: fire, move: move, clear: clear, collide: collide };
+  function graze(x: number, y: number): number {
+    let count: number = 0;
+
+    for (let index = retired; index < bullets.length; index++) {
+      const bullet: Bullet = bullets[index]!;
+      const reach: number = grazeReach + bullet.radius;
+
+      if (
+        !bullet.grazed &&
+        bullet.age !== Infinity &&
+        (bullet.shownX - x) ** 2 + (bullet.shownY - y) ** 2 < reach * reach
+      ) {
+        bullet.grazed = true;
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  return {
+    fire: fire,
+    move: move,
+    clear: clear,
+    collide: collide,
+    graze: graze,
+  };
 }
 
 export { createBullets };

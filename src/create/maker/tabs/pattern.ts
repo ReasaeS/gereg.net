@@ -1,6 +1,6 @@
-import type { Curve, Vector, Wall } from "../../types";
+import type { Curve, Frame, Vector, Wall } from "../../types";
 import { derivativeNames } from "../../defaults";
-import { attacks, type Attack } from "../../rarity";
+import { attacks, type Attack, type Rarity } from "../../rarity";
 import { wallAngle } from "../../geometry";
 import type { Option } from "../../../ui/widgets";
 import { brightColors, curveOptions } from "../swatches";
@@ -24,9 +24,12 @@ const aimOptions: Array<Option<boolean>> = [
   { value: true, label: "At player" },
 ];
 
+const frames: Array<Rarity<Frame>> = attacks.filter(
+  (entry: Rarity<Attack>): entry is Rarity<Frame> => entry.value !== "spell",
+);
+
 function addPatternTab(studio: Studio): void {
-  const { creations, preview, addTab, spriteRow, keyed, convertAttack } =
-    studio;
+  const { creations, preview, addTab, spriteRow, renameDefault } = studio;
   const {
     rarityOptions,
     slider,
@@ -158,110 +161,109 @@ function addPatternTab(studio: Studio): void {
         ],
         () => pattern().frame === "objective",
       ),
-      ...keyed(
-        "pattern",
-        section("Aim", [
-          choice(
-            "Frame",
-            rarityOptions(attacks),
-            () => pattern().frame as Attack,
-            (value: Attack) => convertAttack(value),
-          ),
-          {
-            ...choice(
-              "Wall",
-              () => wallOptions,
-              () => pattern().wall,
-              (value: Wall) => {
-                const turn: number =
-                  wallAngle(value) - wallAngle(pattern().wall);
-                const velocity: Vector = pattern().velocity;
+      ...section("Aim", [
+        choice(
+          "Frame",
+          rarityOptions(frames),
+          () => pattern().frame,
+          (value: Frame) => {
+            pattern().frame = value;
+            renameDefault("pattern", pattern());
+          },
+        ),
+        {
+          ...choice(
+            "Wall",
+            () => wallOptions,
+            () => pattern().wall,
+            (value: Wall) => {
+              const turn: number = wallAngle(value) - wallAngle(pattern().wall);
+              const velocity: Vector = pattern().velocity;
 
-                pattern().velocity = {
-                  x: Math.round(
-                    velocity.x * Math.cos(turn) - velocity.y * Math.sin(turn),
-                  ),
-                  y: Math.round(
-                    velocity.x * Math.sin(turn) + velocity.y * Math.cos(turn),
-                  ),
-                };
-                pattern().wall = value;
-              },
-            ),
-            shown: () => pattern().frame === "objective",
-          },
-          {
-            ...choice(
-              "Aim",
-              () => aimOptions,
-              () => pattern().aim,
-              (value: boolean) => {
-                pattern().aim = value;
-              },
-            ),
-            shown: () => pattern().frame === "subjective",
-          },
-          {
-            ...slider(
-              "Angle",
-              -180,
-              180,
-              5,
-              () => pattern().heading,
-              (value: number) => {
-                pattern().heading = value;
-              },
-            ),
-            shown: () => pattern().frame === "subjective" && !pattern().aim,
-          },
-          {
-            ...choice(
-              "Mode",
-              () => curveOptions,
-              () => pattern().aimCurve,
-              (value: Curve) => {
-                pattern().aimCurve = value;
-              },
-            ),
-            shown: () => pattern().frame === "subjective",
-          },
-          ...derivativeNames.map((name: string, order: number) => ({
-            ...slider(
-              name,
-              -angleLimit,
-              angleLimit,
-              5,
-              () => pattern().angleDerivatives[order] ?? 0,
-              (value: number) => {
-                pattern().angleDerivatives[order] = value;
-              },
-            ),
-            shown: () =>
-              pattern().frame === "subjective" &&
-              pattern().aimCurve === "polynomial" &&
-              pattern().angleDerivatives.length > order,
-          })),
-          {
-            ...derivativeActions(
-              () => pattern().angleDerivatives,
-              derivativeNames,
-              () => 0,
-            ),
-            shown: () =>
-              pattern().frame === "subjective" &&
-              pattern().aimCurve === "polynomial",
-          },
-          ...waveRows(
-            () => pattern().aimWaves,
-            (name: string, get: () => number, set: (value: number) => void) =>
-              slider(name, -phaseLimit, phaseLimit, 5, get, set),
-            () => angleAmplitude,
-            () =>
-              pattern().frame === "subjective" &&
-              pattern().aimCurve === "sinusoidal",
+              pattern().velocity = {
+                x: Math.round(
+                  velocity.x * Math.cos(turn) - velocity.y * Math.sin(turn),
+                ),
+                y: Math.round(
+                  velocity.x * Math.sin(turn) + velocity.y * Math.cos(turn),
+                ),
+              };
+              pattern().wall = value;
+            },
           ),
-        ]),
-      ),
+          shown: () => pattern().frame === "objective",
+        },
+        {
+          ...choice(
+            "Aim",
+            () => aimOptions,
+            () => pattern().aim,
+            (value: boolean) => {
+              pattern().aim = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective",
+        },
+        {
+          ...slider(
+            "Angle",
+            -180,
+            180,
+            5,
+            () => pattern().heading,
+            (value: number) => {
+              pattern().heading = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective" && !pattern().aim,
+        },
+        {
+          ...choice(
+            "Mode",
+            () => curveOptions,
+            () => pattern().aimCurve,
+            (value: Curve) => {
+              pattern().aimCurve = value;
+            },
+          ),
+          shown: () => pattern().frame === "subjective",
+        },
+        ...derivativeNames.map((name: string, order: number) => ({
+          ...slider(
+            name,
+            -angleLimit,
+            angleLimit,
+            5,
+            () => pattern().angleDerivatives[order] ?? 0,
+            (value: number) => {
+              pattern().angleDerivatives[order] = value;
+            },
+          ),
+          shown: () =>
+            pattern().frame === "subjective" &&
+            pattern().aimCurve === "polynomial" &&
+            pattern().angleDerivatives.length > order,
+        })),
+        {
+          ...derivativeActions(
+            () => pattern().angleDerivatives,
+            derivativeNames,
+            () => 0,
+          ),
+          shown: () =>
+            pattern().frame === "subjective" &&
+            pattern().aimCurve === "polynomial",
+        },
+        ...waveRows(
+          () => pattern().aimWaves,
+          (name: string, get: () => number, set: (value: number) => void) =>
+            slider(name, -phaseLimit, phaseLimit, 5, get, set),
+          () => angleAmplitude,
+          () =>
+            pattern().frame === "subjective" &&
+            pattern().aimCurve === "sinusoidal",
+        ),
+      ]),
       ...section("Fire", [
         slider(
           "Rate",

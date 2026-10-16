@@ -6,6 +6,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { createHud, type Hud } from "./hud";
+import type { Vector } from "../create/types";
 import {
   fieldHeight,
   fieldWidth,
@@ -28,6 +29,15 @@ import { createZen, type Zen } from "./zen";
 import { minPower } from "./drones";
 import { startBombs } from "./bomb";
 import { createPilot, type Pilot } from "./pilot";
+import {
+  createCustom,
+  startLives,
+  type Custom,
+  type Outcome,
+  type Run,
+} from "./custom";
+import { createBanner, type Banner } from "./banner";
+import { bestScore, recordScore } from "./records";
 import {
   bombKeys,
   createKeyboard,
@@ -52,10 +62,13 @@ const enterDistance: number = 400; // px
 const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
 const rollLead: number = 200; // ms
+const resultTime: number = 2600; // ms
+const titleTime: number = 2200; // ms
 const modesMenu: Menu = {
   heading: "PLAY",
   choices: [
     { name: "Story", title: "Fight through the stages" },
+    { name: "Custom", title: "Play the stages you made" },
     { name: "Multiplayer", title: "Play alongside others" },
     { name: "Zen", title: "Roam under your own skies" },
   ],
@@ -66,6 +79,14 @@ const stagesMenu: Menu = {
     name: level.name,
     title: level.title,
   })),
+};
+const pauseMenu: Menu = {
+  heading: "PAUSED",
+  choices: [
+    { name: "Resume", title: "Back to the action" },
+    { name: "Retry", title: "Start this run over" },
+    { name: "Quit", title: "Leave this run" },
+  ],
 };
 const multiplayerMenu: Menu = {
   heading: "MULTIPLAYER",
@@ -96,6 +117,14 @@ async function createPlayfield(
   );
   const clock: Clock = createClock();
   const zen: Zen = createZen(hud.setLook);
+  const custom: Custom = await createCustom(texture, droneTexture);
+  const banner: Banner = createBanner(fieldWidth, fieldHeight);
+  const customMenu: Menu = { heading: "CUSTOM", choices: new Array() };
+  let customing: boolean = false;
+  let customIndex: number = 0;
+  let paused: boolean = false;
+  let titleToken: number = 0;
+  let best: number = 0;
   let menu: Menu = modesMenu;
   let zenning: boolean = false;
   let zenElapsed: number = 0;
@@ -104,6 +133,10 @@ async function createPlayfield(
   const keyboard: Keyboard = createKeyboard(() => active);
 
   function reset(): void {
+    hud.stats.score = 0;
+    hud.stats.hiScore = 0;
+    hud.stats.graze = 0;
+    hud.stats.lives = startLives;
     pilot.reset(fieldWidth / 2, fieldHeight * playerStartY);
     keyboard.clear();
     pilot.bomb.setStock(startBombs);
@@ -128,11 +161,19 @@ async function createPlayfield(
     );
     hud.setScale(scale);
     selector.setScale(scale);
+    banner.setScale(scale);
   }
 
   fieldMask.rect(0, 0, fieldWidth, fieldHeight).fill(0xffffff);
   field.position.set(fieldX, fieldY);
-  field.addChild(back, zen.view, fieldMask, ...pilot.layers());
+  field.addChild(
+    back,
+    zen.view,
+    custom.view,
+    fieldMask,
+    ...pilot.layers(),
+    banner.view,
+  );
   field.mask = fieldMask;
   gameMask.rect(0, 0, hudWidth, hudHeight).fill(0xffffff);
   game.addChild(hud.view, selector.view, field, gameMask);
@@ -145,6 +186,11 @@ async function createPlayfield(
   reset();
 
   app.renderer.on("resize", layout);
+  window.addEventListener("blur", () => {
+    if (active && !rolling) {
+      pause();
+    }
+  });
 
   app.ticker.add((ticker: Ticker) => {
     if (!view.visible) {
@@ -166,6 +212,11 @@ async function createPlayfield(
   });
 
   function movePlayer(delta: number): void {
+    if (customing) {
+      playCustom(delta);
+      return;
+    }
+
     pilot.squad.setPower(hud.stats.power);
 
     if (
@@ -202,6 +253,118 @@ async function createPlayfield(
       });
   }
 
+  function setPilotShown(shown: boolean): void {
+    for (const layer of pilot.layers()) {
+      layer.visible = shown;
+    }
+  }
+
+  function playCustom(delta: number): void {
+    const input: Vector = steering(keyboard.pressed);
+
+    custom.update(delta, {
+      x: input.x,
+      y: input.y,
+      focused: keyboard.pressed(focusKeys),
+      shooting: keyboard.pressed(shotKeys),
+      bombing: keyboard.pressed(bombKeys),
+    });
+    hud.stats.score = custom.score();
+    hud.stats.hiScore = Math.max(best, custom.score());
+    hud.stats.lives = Math.max(startLives - custom.hits(), 0);
+    hud.stats.bombs = custom.bombs();
+    hud.stats.graze = custom.grazes();
+    hud.refresh();
+
+    const outcome: Outcome | null = custom.outcome();
+
+    if (outcome !== null) {
+      finishCustom(outcome);
+    }
+  }
+
+  function finishCustom(outcome: Outcome): void {
+    titleToken++;
+    const stageId: string = custom.stage()!.id;
+    const score: number = custom.score();
+    const record: boolean = recordScore(stageId, score);
+
+    active = false;
+    rolling = true;
+    keyboard.clear();
+    banner.show(
+      outcome === "clear" ? "STAGE CLEAR" : "GAME OVER",
+      "SCORE " + score,
+      record,
+    );
+    tween(app.ticker, resultTime, () => undefined).then(() => {
+      if (!customing) {
+        return;
+      }
+
+      banner.hide();
+      stopCustom();
+      openCustomMenu();
+    });
+  }
+
+  function stopCustom(): void {
+    if (!customing) {
+      return;
+    }
+
+    customing = false;
+    custom.stop();
+    setPilotShown(true);
+    hud.setLook(null, null);
+    hud.setBadge("NORMAL");
+  }
+
+  function openCustomMenu(): Promise<void> {
+    customMenu.choices = custom.choices();
+
+    return openMenu(customMenu);
+  }
+
+  async function startCustom(index: number): Promise<void> {
+    selector.setActive(false);
+    rolling = true;
+
+    const run: Run | null = await custom.start(index);
+
+    if (run === null) {
+      rolling = false;
+      selector.setActive(true);
+      return;
+    }
+
+    reset();
+    customing = true;
+    customIndex = index;
+    best = bestScore(run.stage.id);
+    setPilotShown(false);
+    hud.setLook(run.wallpaper, run.palette);
+    hud.setBadge(run.difficulty);
+    hud.stats.hiScore = best;
+    hud.refresh();
+    selector.rollUp().then(() => {
+      const owner: number = ++titleToken;
+
+      rolling = false;
+      active = customing;
+      banner.show(
+        run.stage.name.toUpperCase(),
+        run.difficulty.toUpperCase(),
+        false,
+      );
+      tween(app.ticker, titleTime, () => undefined).then(() => {
+        if (owner === titleToken && active) {
+          banner.hide();
+        }
+      });
+    });
+  }
+
   function startPlaying(zenMode: boolean): void {
     selector.setActive(false);
     rolling = true;
@@ -236,12 +399,24 @@ async function createPlayfield(
       if (index === 0) {
         openMenu(stagesMenu);
       } else if (index === 1) {
+        openCustomMenu();
+      } else if (index === 2) {
         openMenu(multiplayerMenu);
       } else {
         startPlaying(true);
       }
     } else if (menu === stagesMenu) {
       startPlaying(false);
+    } else if (menu === customMenu && custom.count() > 0) {
+      void startCustom(index);
+    } else if (menu === pauseMenu) {
+      if (index === 0) {
+        resume();
+      } else if (index === 1) {
+        retry();
+      } else {
+        quit();
+      }
     }
   });
 
@@ -261,16 +436,67 @@ async function createPlayfield(
     });
   }
 
+  function pause(): void {
+    titleToken++;
+    paused = true;
+    banner.show("PAUSED", "ESC TO RESUME", false);
+    openMenu(pauseMenu);
+  }
+
+  function resume(): void {
+    selector.setActive(false);
+    rolling = true;
+    banner.hide();
+    selector.rollUp().then(() => {
+      rolling = false;
+      paused = false;
+      active = true;
+    });
+  }
+
+  function retry(): void {
+    paused = false;
+    banner.hide();
+
+    if (customing) {
+      stopCustom();
+      void startCustom(customIndex);
+    } else if (zenning) {
+      stopZen();
+      startPlaying(true);
+    } else {
+      startPlaying(false);
+    }
+  }
+
+  function quit(): void {
+    const wasZen: boolean = zenning;
+
+    paused = false;
+    banner.hide();
+
+    if (customing) {
+      stopCustom();
+      openCustomMenu();
+      return;
+    }
+
+    stopZen();
+    openMenu(wasZen ? modesMenu : stagesMenu);
+  }
+
   function goBack(): boolean {
     if (rolling) {
       return true;
     }
 
     if (active) {
-      const wasZen: boolean = zenning;
+      pause();
+      return true;
+    }
 
-      stopZen();
-      openMenu(wasZen ? modesMenu : stagesMenu);
+    if (paused) {
+      resume();
       return true;
     }
 
@@ -293,6 +519,9 @@ async function createPlayfield(
     selector.setActive(false);
     keyboard.clear();
     stopZen();
+    stopCustom();
+    paused = false;
+    banner.hide();
     selector.rollUp();
 
     return tween(app.ticker, door, () => undefined)

@@ -2,7 +2,7 @@ import { skyColors } from "../swatches";
 import type { Studio } from "../studio";
 
 function addBackgroundTab(studio: Studio): void {
-  const { creations, preview, addTab, spriteRow, cosmeticSection } = studio;
+  const { creations, preview, addTab, spriteRow } = studio;
   const { slider, colors, section } = studio.kit;
   const { background } = studio.pick;
 
@@ -10,7 +10,6 @@ function addBackgroundTab(studio: Studio): void {
     "background",
     () => creations.backgrounds,
     [
-      ...cosmeticSection("background"),
       ...section("Look", [
         spriteRow(),
         colors(

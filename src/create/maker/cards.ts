@@ -4,7 +4,9 @@ import type {
   Creations,
   Cutscene,
   Enemy,
+  Game,
   Pattern,
+  Run,
   Sigil,
   Spell,
   Stage,
@@ -16,6 +18,7 @@ import { droneTexture, playerTexture } from "../../editor/drawings";
 import type { Live } from "../gallery/gallery";
 import type { Kind } from "../gallery/kinds";
 import { listOf } from "./items";
+import { gameStages, runStages } from "../packs";
 import type { Item, Selection } from "./studio";
 
 async function createCards(
@@ -69,8 +72,17 @@ async function createCards(
     } else if (kind === "background") {
       cardPreview.setBackground(item as Background);
       cardPreview.setPattern(null);
-    } else if (kind === "stage") {
-      const value: Stage = item as Stage;
+    } else if (kind === "stage" || kind === "run" || kind === "game") {
+      const value: Stage | null =
+        kind === "stage"
+          ? (item as Stage)
+          : ((kind === "run"
+              ? runStages(creations, item as Run)
+              : gameStages(creations, item as Game))[0] ?? null);
+
+      if (value === null) {
+        return null;
+      }
 
       cardPreview.setBackground(pick.backgroundById(value.background));
       cardPreview.setPlayerVisible(true);

@@ -4,7 +4,7 @@ import type { Studio } from "../studio";
 const stripeMax: number = 12; // units
 
 function addWallpaperTab(studio: Studio): void {
-  const { creations, preview, addTab, spriteRow, cosmeticSection } = studio;
+  const { creations, preview, addTab, spriteRow } = studio;
   const { slider, colors, section } = studio.kit;
   const { wallpaper } = studio.pick;
 
@@ -12,7 +12,6 @@ function addWallpaperTab(studio: Studio): void {
     "wallpaper",
     () => creations.wallpapers,
     [
-      ...cosmeticSection("wallpaper"),
       ...section("Look", [
         spriteRow(),
         colors(

@@ -11,15 +11,19 @@ import {
 import { smoothDamp, type Spring } from "../../effects/tween/tween";
 import { createGlide, type Glide } from "../../ui/motion";
 import { downKeys, leftKeys, rightKeys, upKeys } from "../../game/input";
-import type { Creations } from "../types";
+import type { Creations, Game, Run } from "../types";
+import { gameLayers, runLayers } from "../packs";
 import { previewHeight, previewWidth } from "../preview/preview";
 import {
   categoryList,
+  categoryDeals,
+  categoryOf,
   entryRarity,
   itemNames,
   searchEntries,
   type Action,
   type Category,
+  type Deal,
   type Entry,
   type Kind,
 } from "./kinds";
@@ -43,6 +47,7 @@ import {
 } from "./tile";
 import { createTabs, headerY, type Tabs } from "./tabs";
 import { createSearchBar, type SearchBar } from "./search";
+import { createDealer, type Dealer } from "./deal";
 
 type Live = {
   show: (kind: Kind, index: number) => Container | null;
@@ -64,6 +69,7 @@ type Gallery = {
   disappear: () => Promise<void>;
   disappearTime: () => number;
   setActive: (active: boolean) => void;
+  focus: (kind: Kind, index: number) => void;
 };
 
 const tileGap: number = 26; // px
@@ -89,7 +95,7 @@ function createGallery(
   app: Application,
   creations: () => Creations,
   open: (kind: Kind, index: number) => void,
-  create: (category: Category) => void,
+  create: (deal: Deal) => void,
   act: (kind: Kind, index: number, action: Action) => void,
   live: Live,
 ): Gallery {
@@ -107,6 +113,13 @@ function createGallery(
     empty.alpha = value;
   });
   const logo: Texture | null = tintedLogo(app);
+  const dealer: Dealer = createDealer(
+    app,
+    logo,
+    creations,
+    (deal: Deal) => create(deal),
+    () => searchBar.setActive(active),
+  );
   const scroll: Spring = { value: 0, velocity: 0 };
   let category: Category = "stage";
   let selected: number = 0;
@@ -152,8 +165,13 @@ function createGallery(
 
     const entry: Entry | undefined = entries()[index - 1];
 
-    if (index === 0) {
-      create(category);
+    const deals: Array<Deal> = categoryDeals(category);
+
+    if (index === 0 && deals.length === 1) {
+      create(deals[0]!);
+    } else if (index === 0) {
+      searchBar.setActive(false);
+      dealer.open(category, deals);
     } else if (entry !== undefined) {
       open(entry.kind, entry.index);
     }
@@ -361,6 +379,7 @@ function createGallery(
       tile.art.addChild(ring, plus);
       tile.name.text = "NEW " + itemNames.get(category)!.toUpperCase();
       tile.rarity = null;
+      tile.layers = new Array();
       tile.rank.text = "";
       tile.coverRank.text = "";
       fit(tile.name);
@@ -373,6 +392,12 @@ function createGallery(
     const entry: Entry = entries()[index - 1]!;
 
     tile.rarity = entryRarity(entry);
+    tile.layers =
+      entry.kind === "run"
+        ? runLayers(creations(), entry.item as Run)
+        : entry.kind === "game"
+          ? gameLayers(creations(), entry.item as Game)
+          : new Array();
     tile.rank.text = tile.rarity.label.toUpperCase();
     tile.coverRank.text = tile.rank.text;
 
@@ -591,7 +616,7 @@ function createGallery(
   list.addChild(empty);
   grid.addChild(list, mask);
   list.mask = mask;
-  view.addChild(tabs.view, searchBar.view, grid);
+  view.addChild(tabs.view, searchBar.view, grid, dealer.view);
   view.eventMode = "none";
   grid.eventMode = "static";
   grid.on("wheel", (event: FederatedWheelEvent) => {
@@ -642,6 +667,7 @@ function createGallery(
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (
       !active ||
+      dealer.shown() ||
       searchBar.focused() ||
       event.altKey ||
       event.ctrlKey ||
@@ -702,6 +728,20 @@ function createGallery(
     showKind(categoryList[index]!);
   }
 
+  function focus(kind: Kind, index: number): void {
+    showKind(categoryOf(kind));
+    refresh();
+
+    const at: number = shown.findIndex(
+      (entry: Entry) => entry.kind === kind && entry.index === index,
+    );
+
+    if (at >= 0) {
+      onTabs = false;
+      browse(at + 1);
+    }
+  }
+
   function setActive(value: boolean): void {
     active = value;
     searchBar.setActive(value);
@@ -720,6 +760,7 @@ function createGallery(
     disappear: disappear,
     disappearTime: () => Math.min(appearTime, appearEnd()) * 1000,
     setActive: setActive,
+    focus: focus,
   };
 }
 

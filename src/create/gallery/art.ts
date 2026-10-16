@@ -3,6 +3,7 @@ import {
   FillGradient,
   Graphics,
   Sprite,
+  Text,
   type Texture,
 } from "pixi.js";
 import type {
@@ -11,11 +12,14 @@ import type {
   Character,
   Creations,
   Cutscene,
+  Difficulty,
   Enemy,
+  Game,
   Keyframe,
   Line,
   Palette,
   Pattern,
+  Run,
   Sigil,
   Sound,
   Spell,
@@ -32,9 +36,25 @@ import { paintWallpaper } from "../wallpaper";
 import { drawPalette } from "../palette";
 import { castOf, feelingOf, speakerOf } from "../cutscene";
 import type { Entry } from "./kinds";
+import { difficulties, rarityOf, type Rarity } from "../rarity";
+import { gameRuns, gameStages, packLength, runStages } from "../packs";
+import { blend, createSerif } from "./style";
 
 const wallpaperScale: number = 0.6;
 const dotLimit: number = 24;
+const miniWidth: number = 28; // px
+const miniHeight: number = 40; // px
+const miniGap: number = 6; // px
+const miniRadius: number = 4; // px
+const miniSize: number = 13; // px
+const miniMargin: number = 10; // px
+const miniDepth: number = 0.55;
+
+type Mini = {
+  color: string;
+  fill: string | null;
+  label: string;
+};
 
 function byId<T extends { id: string }>(
   list: Array<T>,
@@ -320,6 +340,62 @@ function drawCutsceneArt(
   art.addChild(box);
 }
 
+function clockText(seconds: number): string {
+  return (
+    Math.floor(seconds / 60) +
+    ":" +
+    String(Math.round(seconds % 60)).padStart(2, "0")
+  );
+}
+
+function drawMinis(
+  art: Container,
+  minis: Array<Mini>,
+  width: number,
+  height: number,
+): void {
+  const count: number = minis.length;
+  const step: number =
+    count <= 1
+      ? 0
+      : Math.min(
+          miniWidth + miniGap,
+          (width - miniMargin * 2 - miniWidth) / (count - 1),
+        );
+  const left: number = width / 2 - ((count - 1) * step + miniWidth) / 2;
+  const top: number = height / 2 - miniHeight / 2;
+
+  for (let index = 0; index < count; index++) {
+    const mini: Mini = minis[index]!;
+    const card: Graphics = new Graphics();
+    const label: Text = createSerif(miniSize, "#ffffff");
+    const x: number = left + index * step;
+
+    card
+      .roundRect(x, top, miniWidth, miniHeight, miniRadius)
+      .fill({
+        color:
+          mini.fill === null ? "#01040f" : blend(mini.fill, mini.color, 0.25),
+        alpha: mini.fill === null ? 0.6 : 1,
+      })
+      .roundRect(x, top, miniWidth, miniHeight, miniRadius)
+      .stroke({
+        color:
+          mini.fill === null
+            ? blend(mini.color, "#000000", miniDepth)
+            : mini.color,
+        width: 1.5,
+        alignment: 1,
+      });
+    label.text = mini.label;
+    label.tint =
+      mini.fill === null ? blend(mini.color, "#000000", miniDepth) : mini.color;
+    label.anchor.set(0.5);
+    label.position.set(x + miniWidth / 2, top + miniHeight / 2);
+    art.addChild(card, label);
+  }
+}
+
 function drawEntry(
   art: Container,
   entry: Entry,
@@ -344,6 +420,74 @@ function drawEntry(
       "s  ·  " +
       stage.keyframes.length +
       (stage.keyframes.length === 1 ? " keyframe" : " keyframes");
+  } else if (entry.kind === "run") {
+    const run: Run = item as Run;
+    const stages: Array<Stage> = runStages(creations, run);
+    const color: string = rarityOf(difficulties, run.difficulty).color;
+
+    drawBackground(
+      art,
+      byId(creations.backgrounds, stages[0]?.background ?? null),
+      width,
+      height,
+    );
+    drawMinis(
+      art,
+      run.stages.map((id: string | null, index: number) => {
+        const stage: Stage | null = byId(creations.stages, id);
+
+        return {
+          color: color,
+          fill:
+            stage === null
+              ? null
+              : (byId(creations.backgrounds, stage.background)?.top ??
+                "#01040f"),
+          label: String(index + 1),
+        };
+      }),
+      width,
+      height,
+    );
+    detail =
+      stages.length +
+      (stages.length === 1 ? " stage" : " stages") +
+      "  ·  " +
+      clockText(packLength(stages));
+  } else if (entry.kind === "game") {
+    const game: Game = item as Game;
+    const stages: Array<Stage> = gameStages(creations, game);
+    const runs: number = gameRuns(creations, game).length;
+
+    drawBackground(
+      art,
+      byId(creations.backgrounds, stages[0]?.background ?? null),
+      width,
+      height,
+    );
+    drawMinis(
+      art,
+      difficulties.map((difficulty: Rarity<Difficulty>) => {
+        const run: Run | null = byId(
+          creations.runs,
+          game.runs[difficulty.value],
+        );
+
+        return {
+          color: difficulty.color,
+          fill: run === null ? null : "#01040f",
+          label: run === null ? "-" : String(runStages(creations, run).length),
+        };
+      }),
+      width,
+      height,
+    );
+    detail =
+      runs +
+      (runs === 1 ? " run" : " runs") +
+      "  ·  " +
+      stages.length +
+      (stages.length === 1 ? " stage" : " stages");
   } else if (entry.kind === "pattern") {
     const pattern: Pattern = item as Pattern;
 

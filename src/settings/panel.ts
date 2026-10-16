@@ -696,7 +696,12 @@ function createSettings(app: Application): PageContent {
     }
   }
 
-  return { view: view, setActive: setActive, enter: enter };
+  return {
+    view: view,
+    setActive: setActive,
+    enter: enter,
+    topic: () => "config",
+  };
 }
 
 export { createSettings };

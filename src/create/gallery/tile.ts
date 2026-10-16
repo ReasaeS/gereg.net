@@ -54,6 +54,10 @@ type TileButton = {
 
 type Tile = {
   view: Container;
+  body: Container;
+  stack: Container;
+  layers: Array<string>;
+  layerKey: string;
   face: Container;
   cover: Container;
   coverName: Text;
@@ -83,7 +87,8 @@ type TileEvents = {
   act: (action: Action) => void;
 };
 
-const actions: Array<Action> = ["delete", "rename", "publish"];
+const actions: Array<Action> = ["rename", "duplicate", "export", "delete"];
+const actionColumns: number = 2;
 const actionHeight: number = 22; // px
 const actionGap: number = 5; // px
 const actionSize: number = 10; // px
@@ -103,6 +108,10 @@ const selectDuration: number = 0.18; // s
 const flipDuration: number = 0.4; // s
 const flipShade: number = 0.35;
 const tileLift: number = 0.06;
+const packScale: number = 0.93;
+const packShift: number = 6; // px
+const layerStep: number = 5; // px
+const layerFan: number = 0.7;
 
 function isFaceUp(angle: number): boolean {
   return Math.round(angle / Math.PI) % 2 === 1;
@@ -145,6 +154,61 @@ function applyTransform(tile: Tile): void {
   tile.view.scale.set(lift * Math.max(turn, 0.001), lift);
   tile.face.tint = blend("#000000", "#ffffff", shade);
   tile.cover.tint = tile.face.tint;
+  tile.stack.tint = tile.face.tint;
+}
+
+function drawLayer(layer: Graphics, color: string, lit: number): void {
+  const border: number = blend(color, trimLit, lit * 0.5);
+
+  layer
+    .clear()
+    .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
+    .fill(blend(color, "#000000", rarityDepth + 0.15))
+    .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
+    .stroke({ color: border, width: 2, alignment: 1 })
+    .roundRect(8, 8, tileWidth - 16, tileHeight - 16, tileRadius - 5)
+    .stroke({ color: border, width: 0.75, alpha: 0.6 });
+}
+
+function paintStack(tile: Tile): void {
+  const key: string = tile.layers.join(",");
+  const packed: boolean = tile.layers.length > 0;
+  const spread: number = 1 + layerFan * tile.lit;
+
+  if (key !== tile.layerKey) {
+    tile.layerKey = key;
+
+    for (const child of tile.stack.removeChildren()) {
+      child.destroy();
+    }
+
+    for (let index = tile.layers.length - 1; index >= 0; index--) {
+      const layer: Graphics = new Graphics();
+
+      layer.pivot.set(tileWidth / 2, tileHeight / 2);
+      layer.scale.set(packScale);
+      tile.stack.addChild(layer);
+    }
+  }
+
+  tile.body.scale.set(packed ? packScale : 1);
+  tile.body.position.set(
+    tileWidth / 2 - (packed ? packShift : 0),
+    tileHeight / 2 + (packed ? packShift : 0),
+  );
+
+  for (let index = 0; index < tile.layers.length; index++) {
+    const layer: Graphics = tile.stack.children[
+      tile.layers.length - 1 - index
+    ] as Graphics;
+    const step: number = (index + 1) * spread;
+
+    drawLayer(layer, tile.layers[index]!, tile.lit);
+    layer.position.set(
+      tileWidth / 2 - packShift + layerStep * step,
+      tileHeight / 2 + packShift - layerStep * step,
+    );
+  }
 }
 
 function paintTile(tile: Tile, gems: boolean): void {
@@ -224,6 +288,7 @@ function paintTile(tile: Tile, gems: boolean): void {
   tile.name.tint = border;
   tile.coverName.tint = border;
   tile.detail.tint = blend(detailColor, "#ffffff", lit);
+  paintStack(tile);
   applyTransform(tile);
 
   for (const button of tile.buttons) {
@@ -273,6 +338,8 @@ function createTile(
   events: TileEvents,
 ): Tile {
   const tile: Container = new Container();
+  const body: Container = new Container();
+  const stack: Container = new Container();
   const back: Graphics = new Graphics();
   const art: Container = new Container();
   const artMask: Graphics = new Graphics()
@@ -330,8 +397,8 @@ function createTile(
   detail.position.set(tileWidth / 2, artTop + artHeight + 22 + nameSize);
   const row: Container = new Container();
   const width: number =
-    (tileWidth - artInset * 2 - actionGap * (actions.length - 1)) /
-    actions.length;
+    (tileWidth - artInset * 2 - actionGap * (actionColumns - 1)) /
+    actionColumns;
   const tileButtons: Array<TileButton> = actions.map(
     (action: Action, position: number) => {
       const button: TileButton = {
@@ -348,7 +415,10 @@ function createTile(
       button.label.anchor.set(0.5);
       button.label.position.set(width / 2, actionHeight / 2);
       button.view.addChild(button.back, button.label);
-      button.view.x = position * (width + actionGap);
+      button.view.position.set(
+        (position % actionColumns) * (width + actionGap),
+        Math.floor(position / actionColumns) * (actionHeight + actionGap),
+      );
       button.view.eventMode = "static";
       button.view.cursor = "pointer";
       button.view.hitArea = new Rectangle(0, 0, width, actionHeight);
@@ -373,9 +443,18 @@ function createTile(
     },
   );
 
-  row.position.set(artInset, tileHeight - actionHeight - actionBottom);
+  row.position.set(
+    artInset,
+    tileHeight -
+      Math.ceil(actions.length / actionColumns) * (actionHeight + actionGap) +
+      actionGap -
+      actionBottom,
+  );
   face.addChild(back, art, artMask, name, detail, rank, row);
-  tile.addChild(face, cover);
+  body.addChild(face, cover);
+  body.pivot.set(tileWidth / 2, tileHeight / 2);
+  body.position.set(tileWidth / 2, tileHeight / 2);
+  tile.addChild(stack, body);
   tile.eventMode = "static";
   tile.cursor = "pointer";
   tile.hitArea = new Rectangle(0, 0, tileWidth, tileHeight);
@@ -385,6 +464,10 @@ function createTile(
 
   return {
     view: tile,
+    body: body,
+    stack: stack,
+    layers: new Array(),
+    layerKey: "",
     face: face,
     cover: cover,
     coverName: coverName,

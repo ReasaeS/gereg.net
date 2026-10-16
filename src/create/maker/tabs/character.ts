@@ -17,7 +17,6 @@ function addCharacterTab(studio: Studio): void {
     refresh,
     cleanup,
     pickImage,
-    cosmeticSection,
     playScene,
   } = studio;
   const { choice, colors, section, actionRow, buttonRow } = studio.kit;
@@ -78,7 +77,6 @@ function addCharacterTab(studio: Studio): void {
     "character",
     () => creations.characters,
     [
-      ...cosmeticSection("character"),
       ...section("Character", [
         colors(
           "Name colour",

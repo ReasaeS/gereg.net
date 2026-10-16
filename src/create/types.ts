@@ -195,13 +195,29 @@ type Stage = {
   background: string | null;
   wallpaper: string | null;
   palette: string | null;
+  music: string | null;
   difficulty: Difficulty;
   length: number; // s
   keyframes: Array<Keyframe>;
 };
 
+type Run = {
+  id: string;
+  name: string;
+  difficulty: Difficulty;
+  stages: Array<string | null>;
+};
+
+type Game = {
+  id: string;
+  name: string;
+  runs: Record<Difficulty, string | null>;
+};
+
 type Creations = {
   stages: Array<Stage>;
+  runs: Array<Run>;
+  games: Array<Game>;
   patterns: Array<Pattern>;
   enemies: Array<Enemy>;
   backgrounds: Array<Background>;
@@ -241,6 +257,8 @@ export type {
   Spawn,
   Keyframe,
   Stage,
+  Run,
+  Game,
   Creations,
   Side,
 };

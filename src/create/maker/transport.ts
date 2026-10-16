@@ -7,8 +7,8 @@ import {
   type Bounds,
   type Point,
 } from "pixi.js";
-import type { Vector } from "../types";
-import { playSound } from "../sound";
+import type { Sound, Vector } from "../types";
+import { playSound, playTrack, type Track } from "../sound";
 import {
   bombKeys,
   createKeyboard,
@@ -47,6 +47,7 @@ type Transport = {
 };
 
 const playtestWidth: number = 98; // units
+const packTabs: Array<string> = ["run", "game"];
 const iconSize: number = 3.5; // units
 const iconPop: number = 0.4;
 const clockWidth: number = 46; // units
@@ -63,7 +64,7 @@ function createTransport(
   scened: () => boolean,
 ): Transport {
   const { preview, tab } = studio;
-  const { sound } = studio.pick;
+  const { sound, stage, soundById } = studio.pick;
   const playIcon: Graphics = new Graphics();
   const patternIcon: Graphics = new Graphics();
   const patternBar: Container = new Container();
@@ -81,6 +82,8 @@ function createTransport(
   let typing: string | null = null;
   let typingFresh: boolean = false;
   let caretTime: number = 0;
+  let music: Track | null = null;
+  let musicToken: number = 0;
   const keyboard: Keyboard = createKeyboard(() => live() && playtesting);
 
   function popIcon(icon: Graphics, running: boolean): void {
@@ -154,8 +157,30 @@ function createTransport(
     drawPlayIcon();
   }
 
+  function loopMusic(value: Sound, token: number): void {
+    music = playTrack(value, (played: boolean) => {
+      if (played && token === musicToken) {
+        loopMusic(value, token);
+      }
+    });
+  }
+
+  function setMusic(on: boolean): void {
+    const chosen: Sound | null =
+      on && tab().name === "stage" ? soundById(stage().music) : null;
+
+    musicToken++;
+    music?.stop();
+    music = null;
+
+    if (chosen !== null) {
+      loopMusic(chosen, musicToken);
+    }
+  }
+
   function setPlaytesting(value: boolean): void {
     playtesting = value;
+    setMusic(value);
     keyboard.clear();
     preview.setPlaytest(value);
 
@@ -173,6 +198,10 @@ function createTransport(
   function playtest(): void {
     if (tab().name === "sound") {
       playSound(sound());
+      return;
+    }
+
+    if (packTabs.includes(tab().name)) {
       return;
     }
 
@@ -293,7 +322,8 @@ function createTransport(
     }
 
     patternBar.visible = tab().name === "pattern";
-    playtestBar.visible = tab().name !== "palette";
+    playtestBar.visible =
+      tab().name !== "palette" && !packTabs.includes(tab().name);
     fieldFocus.set(typing !== null ? 1 : 0);
     drawField(clockBox, clockWidth, chipHeight, fieldFocus.value());
 

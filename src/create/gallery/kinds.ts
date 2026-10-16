@@ -4,10 +4,14 @@ import type {
   Creations,
   Cutscene,
   Enemy,
+  Frame,
+  Game,
   Palette,
   Pattern,
+  Rank,
   Sigil,
   Sound,
+  Run,
   Spell,
   Stage,
   Wallpaper,
@@ -17,6 +21,8 @@ import {
   difficulties,
   attacks,
   defaultName,
+  forms,
+  gameRarity,
   ranks,
   rarityOf,
   type Rarity,
@@ -24,6 +30,8 @@ import {
 
 type Kind =
   | "stage"
+  | "run"
+  | "game"
   | "pattern"
   | "enemy"
   | "background"
@@ -37,10 +45,12 @@ type Kind =
 
 type Category = "stage" | "cosmetic" | "enemy" | "pattern";
 
-type Action = "delete" | "rename" | "publish";
+type Action = "rename" | "duplicate" | "export" | "delete";
 
 type Creation =
   | Stage
+  | Run
+  | Game
   | Pattern
   | Enemy
   | Background
@@ -56,6 +66,14 @@ type Entry = {
   kind: Kind;
   index: number;
   item: Creation;
+};
+
+type Deal = {
+  kind: Kind;
+  frame: Frame | null;
+  rank: Rank | null;
+  rarity: Rarity<unknown>;
+  text: string;
 };
 
 type Order = "rarity" | "name" | "created";
@@ -81,6 +99,27 @@ const itemNames: Map<Category, string> = new Map([
   ["pattern", "pattern"],
 ]);
 
+const packOrder: Array<Kind> = ["game", "run", "stage"];
+
+const dealTexts: Map<string, string> = new Map([
+  ["stage", "A level"],
+  ["run", "Stages in a row"],
+  ["game", "Runs for each difficulty"],
+  ["objective", "Fires at the field"],
+  ["subjective", "Fires from the enemy"],
+  ["spell", "A boss spell card"],
+  ["regular", "One health bar"],
+  ["subboss", "A mid-stage threat"],
+  ["boss", "Several spell bars"],
+  ["background", "A scrolling sky"],
+  ["wallpaper", "The frame around play"],
+  ["palette", "Menu colours"],
+  ["sigil", "Rings behind a spell"],
+  ["sound", "An effect or song"],
+  ["cutscene", "A conversation"],
+  ["character", "A speaker"],
+]);
+
 const orderList: Array<Order> = ["rarity", "name", "created"];
 const orderNames: Map<Order, string> = new Map([
   ["rarity", "rarity"],
@@ -88,9 +127,25 @@ const orderNames: Map<Order, string> = new Map([
   ["created", "created"],
 ]);
 
+function categoryOf(kind: Kind): Category {
+  if (kind === "stage" || kind === "enemy") {
+    return kind;
+  }
+
+  if (kind === "run" || kind === "game") {
+    return "stage";
+  }
+
+  if (kind === "pattern" || kind === "spell") {
+    return "pattern";
+  }
+
+  return "cosmetic";
+}
+
 function categoryTypes(category: Category): Array<Rarity<unknown>> {
   if (category === "stage") {
-    return difficulties;
+    return [...difficulties, gameRarity];
   }
 
   if (category === "enemy") {
@@ -104,9 +159,56 @@ function categoryTypes(category: Category): Array<Rarity<unknown>> {
   return cosmetics;
 }
 
+function categoryDeals(category: Category): Array<Deal> {
+  function deal(
+    kind: Kind,
+    frame: Frame | null,
+    rarity: Rarity<unknown>,
+    rank: Rank | null = null,
+  ): Deal {
+    return {
+      kind: kind,
+      frame: frame,
+      rank: rank,
+      rarity: rarity,
+      text: dealTexts.get(frame ?? rank ?? kind) ?? "",
+    };
+  }
+
+  if (category === "stage") {
+    return forms.map((form: Rarity<Kind>) => deal(form.value, null, form));
+  }
+
+  if (category === "pattern") {
+    return attacks.map((attack: Rarity<Frame | "spell">) =>
+      attack.value === "spell"
+        ? deal("spell", null, attack)
+        : deal("pattern", attack.value, attack),
+    );
+  }
+
+  if (category === "enemy") {
+    return ranks.map((rank: Rarity<Rank>) =>
+      deal("enemy", null, rank, rank.value),
+    );
+  }
+
+  return cosmetics.map((cosmetic: Rarity<Kind>) =>
+    deal(cosmetic.value, null, cosmetic),
+  );
+}
+
 function entryRarity(entry: Entry): Rarity<unknown> {
   if (entry.kind === "stage") {
     return rarityOf(difficulties, (entry.item as Stage).difficulty);
+  }
+
+  if (entry.kind === "run") {
+    return rarityOf(difficulties, (entry.item as Run).difficulty);
+  }
+
+  if (entry.kind === "game") {
+    return gameRarity;
   }
 
   if (entry.kind === "enemy") {
@@ -143,6 +245,10 @@ function compareEntries(
     return tier;
   }
 
+  if (first.kind !== second.kind && packOrder.includes(first.kind)) {
+    return packOrder.indexOf(first.kind) - packOrder.indexOf(second.kind);
+  }
+
   if (firstDefault !== null && secondDefault !== null) {
     return Number(firstDefault[2]) - Number(secondDefault[2]);
   }
@@ -164,6 +270,8 @@ function listEntries(source: Creations, category: Category): Array<Entry> {
   }
 
   if (category === "stage") {
+    add("game", source.games);
+    add("run", source.runs);
     add("stage", source.stages);
   } else if (category === "pattern") {
     add("pattern", source.patterns);
@@ -241,8 +349,10 @@ export {
   orderList,
   orderNames,
   categoryTypes,
+  categoryOf,
+  categoryDeals,
   entryRarity,
   listEntries,
   searchEntries,
 };
-export type { Kind, Category, Action, Creation, Entry, Order, Search };
+export type { Kind, Category, Action, Creation, Deal, Entry, Order, Search };

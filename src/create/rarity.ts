@@ -11,6 +11,8 @@ type Cosmetic =
 
 type Attack = Frame | "spell";
 
+type Form = "stage" | "run" | "game";
+
 type Rarity<T> = {
   value: T;
   label: string;
@@ -23,6 +25,19 @@ const difficulties: Array<Rarity<Difficulty>> = [
   { value: "normal", label: "Normal", color: "#7ad8ff", tier: 2 },
   { value: "hard", label: "Hard", color: "#ffb347", tier: 3 },
   { value: "lunatic", label: "Lunatic", color: "#ff6fd8", tier: 4 },
+];
+
+const gameRarity: Rarity<"game"> = {
+  value: "game",
+  label: "Game",
+  color: "#fff1b8",
+  tier: 5,
+};
+
+const forms: Array<Rarity<Form>> = [
+  { value: "stage", label: "Stage", color: "#7ad8ff", tier: 1 },
+  { value: "run", label: "Run", color: "#b48cff", tier: 2 },
+  { value: "game", label: "Game", color: gameRarity.color, tier: 3 },
 ];
 
 const cosmetics: Array<Rarity<Cosmetic>> = [
@@ -48,11 +63,20 @@ const attacks: Array<Rarity<Attack>> = [
 ];
 
 const defaultName: RegExp =
-  /^(Stage|Pattern|Enemy|Background|Wallpaper|Palette|Sigil|Spell|Sound|Character|Cutscene) (\d+)$/;
+  /^(Stage|Run|Game|Pattern|Enemy|Background|Wallpaper|Palette|Sigil|Spell|Sound|Character|Cutscene) (\d+)$/;
 
 function rarityOf<T>(list: Array<Rarity<T>>, value: T): Rarity<T> {
   return list.find((entry: Rarity<T>) => entry.value === value) ?? list[0]!;
 }
 
-export { difficulties, cosmetics, ranks, attacks, defaultName, rarityOf };
-export type { Attack, Cosmetic, Rarity };
+export {
+  difficulties,
+  gameRarity,
+  forms,
+  cosmetics,
+  ranks,
+  attacks,
+  defaultName,
+  rarityOf,
+};
+export type { Attack, Cosmetic, Form, Rarity };

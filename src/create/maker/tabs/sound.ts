@@ -32,16 +32,7 @@ type SoundTab = {
 };
 
 function addSoundTab(studio: Studio): SoundTab {
-  const {
-    creations,
-    preview,
-    tab,
-    addTab,
-    changed,
-    refresh,
-    cleanup,
-    cosmeticSection,
-  } = studio;
+  const { creations, preview, tab, addTab, changed, refresh, cleanup } = studio;
   const { slider, choice, section, actionRow } = studio.kit;
   const { sound } = studio.pick;
   const plot: Container = new Container();
@@ -109,7 +100,6 @@ function addSoundTab(studio: Studio): SoundTab {
     "sound",
     () => creations.sounds,
     [
-      ...cosmeticSection("sound"),
       ...section("Sound", [
         choice(
           "Source",

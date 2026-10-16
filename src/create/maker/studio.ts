@@ -7,10 +7,12 @@ import type {
   Cutscene,
   Emotion,
   Enemy,
+  Game,
   Keyframe,
   Palette,
   Pattern,
   Ring,
+  Run,
   Sigil,
   Sound,
   Spawn,
@@ -18,7 +20,6 @@ import type {
   Stage,
   Wallpaper,
 } from "../types";
-import type { Attack, Cosmetic } from "../rarity";
 import type { Kind } from "../gallery/kinds";
 import type { Preview } from "../preview/preview";
 import type { Scene } from "../cutscene";
@@ -51,6 +52,8 @@ type Cursor = {
 type Selection = {
   current: () => Item;
   stage: () => Stage;
+  run: () => Run;
+  game: () => Game;
   pattern: () => Pattern;
   enemy: () => Enemy;
   background: () => Background;
@@ -97,9 +100,6 @@ type Studio = {
   refreshControls: () => void;
   spriteRow: () => Control;
   pickImage: () => void;
-  cosmeticSection: (kind: Cosmetic) => Array<Control>;
-  keyed: (kind: Kind, list: Array<Control>) => Array<Control>;
-  convertAttack: (to: Attack) => void;
   renameDefault: (kind: Kind, item: Item) => void;
   playScene: () => void;
   showPalette: () => void;
