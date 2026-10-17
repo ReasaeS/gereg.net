@@ -6,6 +6,7 @@ import { drift, series, sway, swayVector } from "../kinematics";
 import { hitboxRadius } from "../../game/player";
 import type { Bomb } from "../../game/bomb";
 import { previewHeight, previewWidth } from "./bounds";
+import type { Threat } from "./autopilot";
 
 type BulletLayers = {
   color: Texture;
@@ -31,6 +32,8 @@ type Bullet = {
   marginY: number; // units
   shownX: number; // units
   shownY: number; // units
+  vx: number; // units/s
+  vy: number; // units/s
   grazed: boolean;
 };
 
@@ -52,6 +55,7 @@ type Bullets = {
   clear: () => void;
   collide: (x: number, y: number, bomb: Bomb, vulnerable: boolean) => boolean;
   graze: (x: number, y: number) => number;
+  threats: () => ReadonlyArray<Threat>;
 };
 
 const bulletPath: string = "./sprites/bullets/orb.png";
@@ -155,6 +159,8 @@ async function createBullets(
       marginY: marginY,
       shownX: x,
       shownY: y,
+      vx: 0,
+      vy: 0,
       derivatives:
         source.frame === "subjective" ? source.speedDerivatives : none,
       drift: source.frame === "objective" ? source.driftDerivatives : none,
@@ -372,9 +378,16 @@ async function createBullets(
 
     for (let index = 0; index < bullets.length; index++) {
       const bullet: Bullet = bullets[index]!;
+      const fromX: number = bullet.shownX;
+      const fromY: number = bullet.shownY;
 
       advance(bullet, delta);
       render(bullet);
+
+      if (delta > 0) {
+        bullet.vx = (bullet.shownX - fromX) / delta;
+        bullet.vy = (bullet.shownY - fromY) / delta;
+      }
 
       if (gone(bullet)) {
         bullet.color.destroy();
@@ -455,6 +468,7 @@ async function createBullets(
     clear: clear,
     collide: collide,
     graze: graze,
+    threats: () => bullets,
   };
 }
 

@@ -73,7 +73,6 @@ const follow: number = 14; // 1/s
 const spreadReach: number = 40; // units
 const shotSpeed: number = 840; // units/s
 const up: number = -Math.PI / 2; // rad
-const homingTurn: number = 540; // deg/s
 const droneSize: number = 14; // units
 const formations: Array<Formation> = [
   {
@@ -330,7 +329,7 @@ function createSquad(
     }
   }
 
-  function steer(shot: Shot, delta: number, targets: Array<Target>): void {
+  function steer(shot: Shot, targets: Array<Target>): void {
     let nearest: Target | null = null;
     let best: number = Infinity;
 
@@ -349,14 +348,7 @@ function createSquad(
     }
 
     const speed: number = Math.hypot(shot.vx, shot.vy);
-    const angle: number = Math.atan2(shot.vy, shot.vx);
-    const wanted: number = Math.atan2(nearest.y - shot.y, nearest.x - shot.x);
-    const turn: number = ((homingTurn * Math.PI) / 180) * delta;
-    const difference: number = Math.atan2(
-      Math.sin(wanted - angle),
-      Math.cos(wanted - angle),
-    );
-    const heading: number = angle + Math.max(Math.min(difference, turn), -turn);
+    const heading: number = Math.atan2(nearest.y - shot.y, nearest.x - shot.x);
 
     shot.vx = Math.cos(heading) * speed;
     shot.vy = Math.sin(heading) * speed;
@@ -370,7 +362,7 @@ function createSquad(
       const shot: Shot = shots[index]!;
 
       if (shot.homing) {
-        steer(shot, delta, targets);
+        steer(shot, targets);
       }
 
       shot.x += shot.vx * delta;

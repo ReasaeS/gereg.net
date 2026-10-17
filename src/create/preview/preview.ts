@@ -1,4 +1,10 @@
-import { Container, Graphics, type Sprite, type Texture } from "pixi.js";
+import {
+  Container,
+  Graphics,
+  type Sprite,
+  type Text,
+  type Texture,
+} from "pixi.js";
 import type { Squad } from "../../game/drones";
 import type {
   Background,
@@ -14,11 +20,19 @@ import { drawSigil } from "../sigil";
 import type { Path } from "../kinematics";
 import { deathbombWindow, startBombs, type Bomb } from "../../game/bomb";
 import { createPilot, type Pilot } from "../../game/pilot";
+import { archetype } from "../../game/archetype";
 import { previewHeight, previewWidth } from "./bounds";
 import { createSky, paintSky, skyKey, type Sky } from "./sky";
 import { createBullets, type Bullets, type Emitter } from "./bullets";
 import { createActors, forward, type Actor, type Actors } from "./actors";
 import { createBossHud, drawBossBar, type BossHud } from "./bosshud";
+import { createItems, type Haul, type Items } from "./items";
+import { createShadowText, createText } from "../../ui/text";
+import type { Capture } from "./actors";
+import { getShake } from "../../settings/settings";
+import { rumble } from "../../game/gamepad";
+import { createAutopilot, type Autopilot, type Decision } from "./autopilot";
+import { maxPower, minPower } from "../../game/drones";
 
 type Resolve = (spawn: Spawn) => Enemy | null;
 
@@ -38,7 +52,7 @@ type Preview = {
   seekPattern: (time: number) => void;
   clear: () => void;
   update: (delta: number) => void;
-  setPlaytest: (on: boolean) => void;
+  setPlaytest: (on: boolean, carry?: boolean) => void;
   steer: (
     x: number,
     y: number,
@@ -52,6 +66,12 @@ type Preview = {
   grazes: () => number;
   setLoop: (loop: boolean) => void;
   setPower: (value: number) => void;
+  power: () => number;
+  themes: () => Array<string>;
+  setAutopilot: (on: boolean) => void;
+  collected: () => number;
+  bombsUsed: () => number;
+  setBombs: (value: number) => void;
   finished: () => boolean;
 };
 
@@ -64,9 +84,30 @@ const emitterX: number = previewWidth / 2; // units
 const emitterY: number = 140; // units
 const playerX: number = previewWidth / 2; // units
 const playerY: number = 400; // units
+const hitPower: number = 0.5;
+const calloutY: number = 90; // units
+const shakeTime: number = 0.35; // s
+const declareY: number = 200; // units
+const declareTime: number = 1.8; // s
+const declareSlide: number = 0.35; // s
+const declareFade: number = 0.45; // s
+const declareDrift: number = 30; // units
+const declareSize: number = 18; // units
+const declareBand: number = 40; // units
+const shakeAmount: number = 6; // units
+const hitRumble: number = 0.9;
+const hitRumbleTime: number = 260; // ms
+const bombRumble: number = 0.45;
+const bombRumbleTime: number = 420; // ms
+const calloutGap: number = 26; // units
+const calloutTime: number = 2.2; // s
+const calloutFade: number = 0.4; // s
+const calloutTitleSize: number = 20; // units
+const calloutValueSize: number = 15; // units
 const hitGrace: number = 1; // s
 const blinkRate: number = 12; // Hz
 const blinkAlpha: number = 0.3;
+const guideSnap: number = 0.5; // units
 const hoverY: number = 120; // units
 const seekLookback: number = 8; // s
 const seekStep: number = 1 / 30; // s
@@ -93,6 +134,7 @@ async function createPreview(
   const bulletLayer: Container = new Container();
   const coreLayer: Container = new Container();
   const actorLayer: Container = new Container();
+  const itemLayer: Container = new Container();
   const overlay: Container = new Container();
   const bossHud: BossHud = createBossHud();
   const pilot: Pilot = createPilot(
@@ -115,6 +157,39 @@ async function createPreview(
     bullets,
   );
   const emitter: Emitter = { timer: 0, time: 0 };
+  const items: Items = createItems(itemLayer);
+  let power: number = maxPower;
+  let itemPoints: number = 0;
+  let calloutLeft: number = 0;
+  let shakeLeft: number = 0;
+  let autopilot: boolean = false;
+  const brain: Autopilot = createAutopilot();
+  let declareLeft: number = 0;
+  const declaration: Container = new Container();
+  const declareBack: Graphics = new Graphics()
+    .rect(0, -declareBand / 2, previewWidth, declareBand)
+    .fill({ color: "#01040f", alpha: 0.6 })
+    .rect(0, -declareBand / 2, previewWidth, 1)
+    .rect(0, declareBand / 2 - 1, previewWidth, 1)
+    .fill({ color: "#ffffff", alpha: 0.5 });
+  const declareText: Text = createShadowText(
+    "",
+    declareSize,
+    "#ffffff",
+    "#020b30",
+    3,
+  );
+  const callout: Container = new Container();
+  const calloutTitle: Text = createShadowText(
+    "SPELL CARD BONUS",
+    calloutTitleSize,
+    "#ffffff",
+    "#020b30",
+    3,
+  );
+  const calloutValue: Text = createText(calloutValueSize, "#ffe27a");
+  let itemCount: number = 0;
+  let bombsUsed: number = 0;
   let blend: number = 0;
   let pattern: Pattern | null = null;
   let spell: Spell | null = null;
@@ -136,8 +211,19 @@ async function createPreview(
   let grazeCount: number = 0;
   let looping: boolean = true;
   let ended: boolean = false;
+  let guiding: boolean = false;
 
   coreLayer.blendMode = "add";
+  calloutTitle.anchor.set(0.5);
+  calloutValue.anchor.set(0.5);
+  calloutValue.y = calloutGap;
+  callout.addChild(calloutTitle, calloutValue);
+  declareText.anchor.set(0.5);
+  declaration.addChild(declareBack, declareText);
+  declaration.y = declareY;
+  declaration.visible = false;
+  callout.position.set(previewWidth / 2, calloutY);
+  callout.visible = false;
   pilot.reset(playerX, playerY);
   squad.view.visible = false;
   sigil.position.set(previewWidth / 2, previewHeight / 2);
@@ -151,11 +237,14 @@ async function createPreview(
     player,
     squad.view,
     actorLayer,
+    itemLayer,
     bulletLayer,
     coreLayer,
     bomb.view,
     hitbox,
     bossHud.view,
+    declaration,
+    callout,
     overlay,
     mask,
   );
@@ -310,11 +399,68 @@ async function createPreview(
     actors.move(delta);
   }
 
+  function think(delta: number): void {
+    const decision: Decision = brain.decide(
+      {
+        x: player.x,
+        y: player.y,
+        threats: bullets.threats(),
+        enemies: actors.targets(),
+        items: items.positions(),
+        bombs: bomb.stock(),
+        dying: dying > 0,
+      },
+      delta,
+    );
+
+    input.x = decision.x;
+    input.y = decision.y;
+    focused = decision.focused;
+    shooting = decision.shooting;
+    bombing = decision.bombing;
+  }
+
+  function guide(delta: number): void {
+    const dx: number = playerX - player.x;
+    const dy: number = playerY - player.y;
+    const distance: number = Math.hypot(dx, dy);
+    const step: number = archetype().speed * delta;
+
+    focused = false;
+    shooting = false;
+    bombing = false;
+
+    if (distance <= guideSnap) {
+      player.position.set(playerX, playerY);
+      input.x = 0;
+      input.y = 0;
+      guiding = false;
+      return;
+    }
+
+    input.x = (dx / distance) * Math.min(distance / step, 1);
+    input.y = (dy / distance) * Math.min(distance / step, 1);
+  }
+
   function movePlayer(delta: number): void {
+    const stock: number = bomb.stock();
+
+    if (guiding) {
+      guide(delta);
+    } else if (autopilot) {
+      think(delta);
+    }
+
     if (
       pilot.update(delta, input, focused, shooting, bombing, actors.targets())
     ) {
       dying = 0;
+    }
+
+    if (bomb.stock() < stock) {
+      bombsUsed++;
+      feel(bombRumble, bombRumbleTime);
+      actors.spoil();
     }
 
     grace = Math.max(grace - delta, 0);
@@ -331,8 +477,11 @@ async function createPreview(
       if (dying <= 0) {
         dying = 0;
         hitCount++;
+        shakeLeft = shakeTime;
+        feel(hitRumble, hitRumbleTime);
         grace = hitGrace;
         bomb.setStock(startBombs);
+        setPower(power - hitPower);
       }
     }
   }
@@ -346,7 +495,10 @@ async function createPreview(
         grace <= 0 && dying <= 0 && !bomb.invincible(),
       )
     ) {
-      dying = deathbombWindow;
+      if (!autopilot) {
+        dying = deathbombWindow;
+        actors.spoil();
+      }
     }
 
     if (dying <= 0) {
@@ -354,8 +506,84 @@ async function createPreview(
     }
   }
 
-  function setPlaytest(on: boolean): void {
+  function setPower(value: number): void {
+    power = Math.min(Math.max(value, minPower), maxPower);
+    squad.setPower(power);
+  }
+
+  function collect(delta: number): void {
+    for (const defeat of actors.defeats()) {
+      items.drop(defeat);
+    }
+
+    const haul: Haul = items.update(delta, player.x, player.y, dying <= 0);
+
+    for (const capture of actors.captures()) {
+      showCallout(capture);
+    }
+
+    for (const name of actors.declarations()) {
+      declareText.text = name.toUpperCase();
+      declareLeft = declareTime;
+    }
+
+    declareLeft = Math.max(declareLeft - delta, 0);
+    placeDeclaration();
+
+    calloutLeft = Math.max(calloutLeft - delta, 0);
+    callout.visible = calloutLeft > 0;
+    callout.alpha = Math.min(
+      (calloutTime - calloutLeft) / calloutFade,
+      calloutLeft / calloutFade,
+      1,
+    );
+
+    itemPoints += haul.points;
+    itemCount += haul.count;
+
+    if (haul.power > 0) {
+      setPower(power + haul.power);
+    }
+  }
+
+  function placeDeclaration(): void {
+    const elapsed: number = declareTime - declareLeft;
+    const slide: number = Math.min(elapsed / declareSlide, 1);
+    const eased: number = 1 - Math.pow(1 - slide, 3);
+
+    declaration.visible = declareLeft > 0;
+    declaration.alpha = Math.min(slide * 2, declareLeft / declareFade, 1);
+    declareText.x =
+      previewWidth / 2 +
+      (1 - eased) * previewWidth -
+      declareDrift * (elapsed / declareTime);
+  }
+
+  function showCallout(capture: Capture): void {
+    calloutValue.text =
+      capture.name.toUpperCase() + "  +" + capture.bonus.toLocaleString();
+    calloutLeft = calloutTime;
+  }
+
+  function setPlaytest(on: boolean, carry: boolean = false): void {
+    const fromX: number = player.x;
+    const fromY: number = player.y;
+
     playtest = on;
+    itemPoints = 0;
+    itemCount = 0;
+    calloutLeft = 0;
+    shakeLeft = 0;
+    declareLeft = 0;
+    declaration.visible = false;
+    actors.declarations();
+    view.pivot.set(0, 0);
+    callout.visible = false;
+    actors.captures();
+    bombsUsed = 0;
+    items.clear();
+    actors.defeats();
+    setPower(maxPower);
     hitCount = 0;
     grazeCount = 0;
     actors.resetPoints();
@@ -364,7 +592,8 @@ async function createPreview(
     shooting = false;
     bombing = false;
     dying = 0;
-    pilot.reset(playerX, playerY);
+    guiding = on && carry;
+    pilot.reset(guiding ? fromX : playerX, guiding ? fromY : playerY);
     bomb.setStock(startBombs);
     squad.view.visible = on;
     input.x = 0;
@@ -376,10 +605,31 @@ async function createPreview(
     }
   }
 
+  function feel(strength: number, duration: number): void {
+    if (getShake()) {
+      rumble(strength, duration);
+    }
+  }
+
+  function shakeView(delta: number): void {
+    shakeLeft = Math.max(shakeLeft - delta, 0);
+
+    const amount: number = getShake()
+      ? (shakeAmount * shakeLeft) / shakeTime
+      : 0;
+
+    view.pivot.set(
+      (Math.random() * 2 - 1) * amount,
+      (Math.random() * 2 - 1) * amount,
+    );
+  }
+
   function update(delta: number): void {
     if (playtest) {
       movePlayer(delta);
     }
+
+    shakeView(delta);
 
     bullets.move(delta);
 
@@ -408,6 +658,10 @@ async function createPreview(
       actors.shoot(squad);
       actors.bomb(bomb, delta);
       collide();
+      collect(delta);
+    } else {
+      actors.declarations();
+      actors.themes();
     }
 
     drawBossBar(bossHud, actors.list, delta);
@@ -415,6 +669,8 @@ async function createPreview(
 
   function clear(): void {
     actors.clear();
+    actors.defeats();
+    items.clear();
     bullets.clear();
     squad.clear();
     bomb.clear();
@@ -546,13 +802,27 @@ async function createPreview(
     },
     hits: () => hitCount,
     bombs: () => bomb.stock(),
-    score: () => actors.points() + grazeCount * grazePoints,
+    score: () => actors.points() + grazeCount * grazePoints + itemPoints,
     grazes: () => grazeCount,
-    setPower: (value: number) => squad.setPower(value),
+    setPower: setPower,
+    power: () => power,
+    themes: actors.themes,
+    setAutopilot: (on: boolean) => {
+      autopilot = on;
+      brain.reset();
+    },
+    collected: () => itemCount,
+    bombsUsed: () => bombsUsed,
+    setBombs: (value: number) => bomb.setStock(value),
     setLoop: (loop: boolean) => {
       looping = loop;
     },
-    finished: () => ended,
+    finished: () =>
+      ended &&
+      !actors.list.some(
+        (actor: Actor) =>
+          actor.staged && !actor.dead && actor.enemy.rank !== "regular",
+      ),
   };
 }
 

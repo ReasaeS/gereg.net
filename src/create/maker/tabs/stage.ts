@@ -22,10 +22,17 @@ const positionMin: number = -0.2;
 const positionMax: number = 1.2;
 const derivativeLimit: number = 400; // units/s^n
 const derivativeStep: number = 5; // units/s^n
+const pasteOffset: number = 0.05; // of field width
 
 type StageTab = {
   selectKeyframe: (index: number) => void;
+  copy: (whole: boolean) => string;
+  paste: () => string | null;
+  duplicate: () => string;
+  mirror: () => string;
 };
+
+type Clip = { spawn: Spawn } | { keyframe: Keyframe };
 
 function addStageTab(studio: Studio): StageTab {
   const {
@@ -58,6 +65,78 @@ function addStageTab(studio: Studio): StageTab {
     pause();
     preview.seek(keyframe().time);
     refresh();
+  }
+
+  let clip: Clip | null = null;
+
+  function cloneSpawn(value: Spawn): Spawn {
+    return { ...structuredClone(value), id: createId() };
+  }
+
+  function addSpawn(value: Spawn): void {
+    keyframe().spawns.push(value);
+    cursor.spawn = keyframe().spawns.length - 1;
+    changed();
+    refresh();
+  }
+
+  function copy(whole: boolean): string {
+    clip = whole
+      ? { keyframe: structuredClone(keyframe()) }
+      : { spawn: structuredClone(spawn()) };
+
+    return whole ? "Copied keyframe" : "Copied enemy";
+  }
+
+  function paste(): string | null {
+    if (clip === null) {
+      return null;
+    }
+
+    if ("spawn" in clip) {
+      addSpawn(cloneSpawn(clip.spawn));
+      return "Pasted enemy";
+    }
+
+    const time: number =
+      Math.round(Math.min(preview.stageTime(), stage().length) * 2) / 2;
+
+    stage().keyframes.push({
+      id: createId(),
+      time: time,
+      spawns: clip.keyframe.spawns.map(cloneSpawn),
+    });
+    saveCreations(creations);
+    selectKeyframe(stage().keyframes.length - 1);
+
+    return "Pasted keyframe at " + time.toFixed(1) + "s";
+  }
+
+  function duplicate(): string {
+    const copied: Spawn = cloneSpawn(spawn());
+
+    copied.x = Math.min(copied.x + pasteOffset, positionMax);
+    addSpawn(copied);
+
+    return "Duplicated enemy";
+  }
+
+  function mirror(): string {
+    const copied: Spawn = cloneSpawn(spawn());
+
+    copied.x = 1 - copied.x;
+    copied.derivatives = copied.derivatives.map((value: Vector) => ({
+      x: -value.x,
+      y: value.y,
+    }));
+
+    for (const wave of copied.waves) {
+      wave.amplitude = { x: -wave.amplitude.x, y: wave.amplitude.y };
+    }
+
+    addSpawn(copied);
+
+    return "Mirrored enemy";
   }
 
   function keyframeLabel(value: Keyframe): string {
@@ -341,7 +420,13 @@ function addStageTab(studio: Studio): StageTab {
     },
   );
 
-  return { selectKeyframe: selectKeyframe };
+  return {
+    selectKeyframe: selectKeyframe,
+    copy: copy,
+    paste: paste,
+    duplicate: duplicate,
+    mirror: mirror,
+  };
 }
 
 export { addStageTab };

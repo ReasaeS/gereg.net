@@ -8,6 +8,7 @@ import type { Squad, Target } from "../../game/drones";
 import type { Bomb } from "../../game/bomb";
 import { previewHeight, previewWidth } from "./bounds";
 import type { Bullets, Emitter } from "./bullets";
+import type { Defeat } from "./items";
 
 type Actor = {
   enemy: Enemy;
@@ -31,6 +32,12 @@ type Actor = {
   hp: number;
   fill: number;
   dead: boolean;
+  capture: boolean;
+};
+
+type Capture = {
+  name: string;
+  bonus: number;
 };
 
 type Lookups = {
@@ -58,6 +65,11 @@ type Actors = {
   bomb: (bomb: Bomb, delta: number) => void;
   points: () => number;
   resetPoints: () => void;
+  defeats: () => Array<Defeat>;
+  captures: () => Array<Capture>;
+  declarations: () => Array<string>;
+  themes: () => Array<string>;
+  spoil: () => void;
 };
 
 const forward: number = Math.PI / 2; // rad
@@ -75,6 +87,8 @@ const defeatPoints: Map<Rank, number> = new Map([
   ["subboss", 10000],
   ["boss", 50000],
 ]);
+const spellBonus: number = 200000;
+const spellDecay: number = 0.5;
 
 function barCount(enemy: Enemy): number {
   return enemy.rank === "boss" ? enemy.bars.length : 1;
@@ -86,6 +100,10 @@ function createActors(
   bullets: Bullets,
 ): Actors {
   const actors: Array<Actor> = new Array();
+  const defeated: Array<Defeat> = new Array();
+  const captured: Array<Capture> = new Array();
+  const declared: Array<string> = new Array();
+  const themed: Array<string> = new Array();
   let points: number = 0;
 
   function dress(actor: Actor): void {
@@ -187,6 +205,23 @@ function createActors(
     }
 
     points += defeatPoints.get(actor.enemy.rank) ?? 0;
+
+    if (actor.capture && actor.spell !== null) {
+      const limit: number = actor.enemy.bars[actor.bar]?.time ?? 0;
+      const bonus: number =
+        Math.round(
+          (spellBonus *
+            (1 -
+              spellDecay *
+                (limit > 0 ? Math.min(actor.barTime / limit, 1) : 0))) /
+            10,
+        ) * 10;
+
+      points += bonus;
+      captured.push({ name: actor.spell.name, bonus: bonus });
+    }
+
+    defeated.push({ x: actor.x, y: actor.y, rank: actor.enemy.rank });
     finishBar(actor);
   }
 
@@ -257,6 +292,11 @@ function createActors(
       find.pattern(actor.spell?.pattern ?? null) ?? find.pattern(enemy.pattern);
     actor.emitter.timer = 0;
     actor.emitter.time = 0;
+    actor.capture = actor.spell !== null && !actor.locked;
+
+    if (actor.capture) {
+      declared.push(actor.spell!.name);
+    }
     dress(actor);
   }
 
@@ -288,6 +328,7 @@ function createActors(
       hp: 1,
       fill: 0,
       dead: false,
+      capture: false,
       locked: bar !== null,
       staged: staged,
     };
@@ -297,6 +338,10 @@ function createActors(
     layer.addChild(actor.view);
     actors.push(actor);
     arm(actor, bar ?? 0);
+
+    if (staged && enemy.rank !== "regular" && enemy.theme !== null) {
+      themed.push(enemy.theme);
+    }
 
     return actor;
   }
@@ -399,8 +444,17 @@ function createActors(
     resetPoints: () => {
       points = 0;
     },
+    defeats: () => defeated.splice(0, defeated.length),
+    captures: () => captured.splice(0, captured.length),
+    declarations: () => declared.splice(0, declared.length),
+    themes: () => themed.splice(0, themed.length),
+    spoil: () => {
+      for (const actor of actors) {
+        actor.capture = false;
+      }
+    },
   };
 }
 
 export { createActors, barCount, forward };
-export type { Actor, Actors };
+export type { Actor, Actors, Capture };

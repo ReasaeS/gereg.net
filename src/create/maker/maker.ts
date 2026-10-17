@@ -58,6 +58,7 @@ import { createMarkers, type Markers } from "./markers";
 import { createTransport, type Transport } from "./transport";
 import { createTimeline, transportWidth, type Timeline } from "./timeline";
 import { createDrop, type Drop } from "./drop";
+import { createToast, type Toast } from "../../ui/toast";
 import { createCards } from "./cards";
 import { exportCard, importCard, type Imported } from "../share";
 import {
@@ -149,6 +150,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   const ticks: Clock = createClock();
   const kit: Kit = createKit(changed, refresh);
+  const toast: Toast = createToast(app);
   let frameScale: number = 1;
   let tab: Tab;
   let active: boolean = false;
@@ -376,7 +378,10 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
   }
 
-  const cards: Live = await createCards(creations, pick);
+  const cards: [Live, Live] = [
+    await createCards(creations, pick),
+    await createCards(creations, pick),
+  ];
   const gallery: Gallery = createGallery(
     app,
     () => creations,
@@ -390,7 +395,9 @@ async function createMaker(app: Application): Promise<PageContent> {
       } else if (action === "duplicate") {
         duplicateItem(kind, index);
       } else {
-        void exportCard(creations, kind, index);
+        void exportCard(creations, kind, index).then(() =>
+          toast.show("Exported " + listOf(creations, kind)[index]!.name),
+        );
       }
     },
     cards,
@@ -426,6 +433,9 @@ async function createMaker(app: Application): Promise<PageContent> {
       ...creations.sounds.map((value: Sound) => loadAudio(value.file)),
     ]);
     gallery.focus(imported.kind, imported.index);
+    toast.show(
+      "Imported " + listOf(creations, imported.kind)[imported.index]!.name,
+    );
   }
 
   function dropLabel(): string | null {
@@ -475,6 +485,7 @@ async function createMaker(app: Application): Promise<PageContent> {
 
     saveCreations(creations);
     gallery.focus(kind, copy);
+    toast.show("Duplicated " + listOf(creations, kind)[copy]!.name);
   }
 
   function deleteItem(kind: Kind, index: number): void {
@@ -618,7 +629,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   gameFrame.mask = frameMask;
   editor.addChild(gameFrame);
-  view.addChild(editor, gallery.view, drop.view);
+  view.addChild(editor, gallery.view, drop.view, toast.view);
 
   function layout(): void {
     const width: number = app.screen.width;
@@ -686,11 +697,43 @@ async function createMaker(app: Application): Promise<PageContent> {
       !transport.typing() &&
       (event.code === "KeyZ" || event.code === "KeyY")
     ) {
-      travel(
-        event.code === "KeyY" || event.shiftKey
-          ? history.redo()
-          : history.undo(),
+      const redo: boolean = event.code === "KeyY" || event.shiftKey;
+      const place: Place | null = redo ? history.redo() : history.undo();
+
+      toast.show(
+        place === null
+          ? redo
+            ? "Nothing to redo"
+            : "Nothing to undo"
+          : redo
+            ? "Redo"
+            : "Undo",
       );
+      travel(place);
+      event.preventDefault();
+      return;
+    }
+
+    if (
+      active &&
+      editing &&
+      tab.name === "stage" &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      !transport.typing() &&
+      !transport.playtesting() &&
+      ["KeyC", "KeyV", "KeyD"].includes(event.code)
+    ) {
+      const message: string | null =
+        event.code === "KeyC"
+          ? stageTab.copy(event.shiftKey)
+          : event.code === "KeyV"
+            ? stageTab.paste()
+            : event.shiftKey
+              ? stageTab.mirror()
+              : stageTab.duplicate();
+
+      toast.show(message ?? "Nothing copied yet");
       event.preventDefault();
       return;
     }
@@ -700,7 +743,12 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     if (event.code === "KeyP" && !transport.typing()) {
-      transport.playtest();
+      if (event.shiftKey) {
+        transport.watch();
+      } else {
+        transport.playtest();
+      }
+
       event.preventDefault();
       return;
     }

@@ -58,6 +58,7 @@ type Enemy = {
   size: number; // units
   rank: Rank;
   pattern: string | null;
+  theme: string | null;
   bars: Array<Bar>;
 };
 

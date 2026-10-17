@@ -1,4 +1,4 @@
-import type { Bar, Pattern, Rank, Spell } from "../../types";
+import type { Bar, Pattern, Rank, Sound, Spell } from "../../types";
 import { defaultBar, limitBars } from "../../defaults";
 import { ranks } from "../../rarity";
 import { brightColors } from "../swatches";
@@ -74,6 +74,25 @@ function addEnemyTab(studio: Studio): void {
             enemy().pattern = value;
           },
         ),
+        {
+          ...choice(
+            "Theme",
+            () => [
+              { value: null, label: "Stage music" },
+              ...creations.sounds
+                .filter((value: Sound) => value.source === "file")
+                .map((value: Sound) => ({
+                  value: value.id as string | null,
+                  label: value.name,
+                })),
+            ],
+            () => enemy().theme,
+            (value: string | null) => {
+              enemy().theme = value;
+            },
+          ),
+          shown: () => enemy().rank !== "regular",
+        },
       ]),
       ...section("Stages", [
         {

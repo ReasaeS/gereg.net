@@ -317,6 +317,45 @@ function setVolume(channel: Channel, value: number): void {
   }
 }
 
+const shakeStorageKey: string = "geregnet.shake";
+const shakeListeners: Array<CrtListener> = new Array();
+let shake: boolean = loadShake();
+
+function loadShake(): boolean {
+  try {
+    return localStorage.getItem(shakeStorageKey) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function getShake(): boolean {
+  return shake;
+}
+
+function setShake(value: boolean): void {
+  if (value === shake) {
+    return;
+  }
+
+  shake = value;
+
+  try {
+    localStorage.setItem(shakeStorageKey, value ? "on" : "off");
+  } catch {
+    console.warn("Could not save the shake setting");
+  }
+
+  for (const listener of shakeListeners) {
+    listener(value);
+  }
+}
+
+function onShake(listener: CrtListener): void {
+  shakeListeners.push(listener);
+  listener(shake);
+}
+
 function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
@@ -344,5 +383,8 @@ export {
   getTuning,
   setTuning,
   onTuning,
+  getShake,
+  setShake,
+  onShake,
 };
 export type { Channel, Tuning };

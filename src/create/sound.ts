@@ -12,6 +12,7 @@ let context: AudioContext | null = null;
 
 type Track = {
   stop: () => void;
+  position: () => number;
 };
 
 function soundLength(sound: Sound): number {
@@ -186,9 +187,14 @@ function playSound(sound: Sound): void {
   }
 }
 
-function playTrack(sound: Sound, ended: (played: boolean) => void): Track {
+function playTrack(
+  sound: Sound,
+  ended: (played: boolean) => void,
+  offset: number = 0,
+): Track {
   let source: AudioBufferSourceNode | null = null;
   let stopped: boolean = false;
+  let startedAt: number = 0;
 
   if (audio().state === "suspended") {
     void audio().resume();
@@ -215,7 +221,8 @@ function playTrack(sound: Sound, ended: (played: boolean) => void): Track {
         ended(true);
       }
     };
-    node.start();
+    startedAt = audio().currentTime - (offset % buffer.duration);
+    node.start(0, offset % buffer.duration);
     source = node;
   });
 
@@ -224,6 +231,8 @@ function playTrack(sound: Sound, ended: (played: boolean) => void): Track {
       stopped = true;
       source?.stop();
     },
+    position: () =>
+      source === null ? offset : audio().currentTime - startedAt,
   };
 }
 

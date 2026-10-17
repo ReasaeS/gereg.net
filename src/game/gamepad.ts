@@ -227,6 +227,18 @@ function startGamepad(
   });
 }
 
+function rumble(strength: number, duration: number): void {
+  for (const pad of navigator.getGamepads()) {
+    void pad?.vibrationActuator
+      ?.playEffect("dual-rumble", {
+        duration: duration,
+        strongMagnitude: strength,
+        weakMagnitude: Math.min(strength * 1.5, 1),
+      })
+      .catch(() => undefined);
+  }
+}
+
 function keyFor(code: string): string {
   const binding: Binding | undefined = [
     ...directionBindings,
@@ -237,4 +249,4 @@ function keyFor(code: string): string {
   return binding?.key ?? code;
 }
 
-export { startGamepad };
+export { startGamepad, rumble };

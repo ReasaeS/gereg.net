@@ -54,6 +54,12 @@ type Live = {
   update: (delta: number) => void;
 };
 
+type Showing = {
+  tile: Tile;
+  view: Container | null;
+  live: Live;
+};
+
 type Place = {
   key: string;
   x: Spring;
@@ -97,7 +103,7 @@ function createGallery(
   open: (kind: Kind, index: number) => void,
   create: (deal: Deal) => void,
   act: (kind: Kind, index: number, action: Action) => void,
-  live: Live,
+  players: [Live, Live],
 ): Gallery {
   const view: Container = new Container();
   const tabs: Tabs = createTabs(app, (value: Category) => showKind(value));
@@ -132,8 +138,8 @@ function createGallery(
   let revealed: number | null = null;
   let appearDirection: number = 1;
   let vanished: (() => void) | null = null;
-  let liveTile: Tile | null = null;
-  let liveView: Container | null = null;
+  let current: Showing | null = null;
+  let fading: Showing | null = null;
   let shown: Array<Entry> = new Array();
 
   function entries(): Array<Entry> {
@@ -293,27 +299,39 @@ function createGallery(
     return tile;
   }
 
-  function release(): void {
-    if (liveTile !== null) {
-      for (const child of liveTile.art.children) {
-        child.visible = true;
-      }
+  function unmount(showing: Showing | null): void {
+    if (showing === null) {
+      return;
     }
 
-    liveView?.removeFromParent();
-    liveTile = null;
-    liveView = null;
+    for (const child of showing.tile.art.children) {
+      child.visible = true;
+    }
+
+    showing.view?.removeFromParent();
   }
 
-  function mount(tile: Tile, index: number): void {
+  function release(tile: Tile | null = null): void {
+    if (tile === null || current?.tile === tile) {
+      unmount(current);
+      current = null;
+    }
+
+    if (tile === null || fading?.tile === tile) {
+      unmount(fading);
+      fading = null;
+    }
+  }
+
+  function mount(tile: Tile, index: number, live: Live): Showing {
     const entry: Entry | undefined = entries()[index - 1];
     const width: number = tileWidth - artInset * 2;
-
-    liveTile = tile;
-    liveView = entry === undefined ? null : live.show(entry.kind, entry.index);
+    const liveView: Container | null =
+      entry === undefined ? null : live.show(entry.kind, entry.index);
+    const showing: Showing = { tile: tile, view: liveView, live: live };
 
     if (entry === undefined || liveView === null) {
-      return;
+      return showing;
     }
 
     const scale: number = Math.max(
@@ -333,31 +351,66 @@ function createGallery(
         : (artHeight - previewHeight * scale) / 2,
     );
     tile.art.addChild(liveView);
+    return showing;
+  }
+
+  function turning(showing: Showing | null): boolean {
+    return (
+      showing !== null &&
+      tiles.includes(showing.tile) &&
+      showing.tile.turnProgress < 1
+    );
   }
 
   function animateLive(delta: number): void {
     const target: Tile | null =
       revealed === null || revealed === 0 ? null : (tiles[revealed] ?? null);
 
-    if (target !== liveTile) {
-      release();
-
-      if (target !== null) {
-        mount(target, revealed!);
-      }
+    if (fading !== null && !turning(fading)) {
+      unmount(fading);
+      fading = null;
     }
 
-    if (liveView !== null && liveTile?.face.visible === true) {
-      live.update(delta);
+    if (target !== (current?.tile ?? null)) {
+      const back: Showing | null = fading?.tile === target ? fading : null;
+
+      if (back !== null) {
+        fading = null;
+      }
+
+      if (turning(current)) {
+        unmount(fading);
+        fading = current;
+      } else {
+        unmount(current);
+      }
+
+      current =
+        back ??
+        (target === null
+          ? null
+          : mount(
+              target,
+              revealed!,
+              fading?.live === players[0] ? players[1] : players[0],
+            ));
+    }
+
+    for (const showing of [current, fading]) {
+      if (
+        showing !== null &&
+        showing.view !== null &&
+        showing.tile.face.visible
+      ) {
+        showing.live.update(delta);
+      }
     }
   }
 
   function describe(tile: Tile, index: number): void {
     const width: number = tileWidth - artInset * 2;
 
-    if (tile === liveTile) {
-      release();
-    }
+    release(tile);
 
     tile.actions.visible = index !== 0;
 
@@ -511,9 +564,7 @@ function createGallery(
     }
 
     for (const tile of previous.values()) {
-      if (tile === liveTile) {
-        release();
-      }
+      release(tile);
 
       tile.view.eventMode = "none";
       leaving.push(tile);
@@ -664,15 +715,46 @@ function createGallery(
     arrange();
   });
 
+  function shortcut(event: KeyboardEvent): Action | null {
+    const command: boolean = event.ctrlKey || event.metaKey;
+
+    if (!command && event.code === "F2") {
+      return "rename";
+    }
+
+    if (!command && event.code === "Delete") {
+      return "delete";
+    }
+
+    if (command && !event.shiftKey && event.code === "KeyD") {
+      return "duplicate";
+    }
+
+    if (command && !event.shiftKey && event.code === "KeyE") {
+      return "export";
+    }
+
+    return null;
+  }
+
   window.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (
-      !active ||
-      dealer.shown() ||
-      searchBar.focused() ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey
-    ) {
+    if (!active || dealer.shown() || searchBar.focused() || event.altKey) {
+      return;
+    }
+
+    const action: Action | null = shortcut(event);
+    const entry: Entry | undefined = entries()[selected - 1];
+
+    if (action !== null) {
+      if (!onTabs && entry !== undefined) {
+        act(entry.kind, entry.index, action);
+      }
+
+      event.preventDefault();
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
       return;
     }
 

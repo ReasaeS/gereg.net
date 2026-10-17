@@ -100,6 +100,7 @@ const itemNames: Map<Category, string> = new Map([
 ]);
 
 const packOrder: Array<Kind> = ["game", "run", "stage"];
+const collections: Array<Kind> = ["game", "run"];
 
 const dealTexts: Map<string, string> = new Map([
   ["stage", "A level"],
@@ -231,6 +232,9 @@ function compareEntries(
   first: Entry,
   second: Entry,
 ): number {
+  const collection: number =
+    Number(collections.includes(second.kind)) -
+    Number(collections.includes(first.kind));
   const tier: number =
     (entryRarity(first).tier - entryRarity(second).tier) *
     (category === "stage" ? -1 : 1);
@@ -240,6 +244,10 @@ function compareEntries(
   const secondDefault: RegExpExecArray | null = defaultName.exec(
     second.item.name,
   );
+
+  if (collection !== 0) {
+    return collection;
+  }
 
   if (tier !== 0) {
     return tier;

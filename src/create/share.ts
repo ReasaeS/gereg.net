@@ -137,6 +137,7 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       const enemy: Enemy = value as Enemy;
 
       add("pattern", enemy.pattern);
+      add("sound", enemy.theme);
 
       for (const bar of enemy.bars) {
         add("spell", bar.spell);

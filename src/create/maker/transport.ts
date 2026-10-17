@@ -42,12 +42,14 @@ type Transport = {
   togglePlaying: () => void;
   pause: () => void;
   playtest: () => void;
+  watch: () => void;
   stopTyping: () => void;
   update: (delta: number) => void;
 };
 
-const playtestWidth: number = 98; // units
+const playtestWidth: number = 95; // units
 const packTabs: Array<string> = ["run", "game"];
+const watchGap: number = 6; // units
 const iconSize: number = 3.5; // units
 const iconPop: number = 0.4;
 const clockWidth: number = 46; // units
@@ -79,6 +81,7 @@ function createTransport(
   let playing: boolean = true;
   let patternPlaying: boolean = true;
   let playtesting: boolean = false;
+  let watching: boolean = false;
   let typing: string | null = null;
   let typingFresh: boolean = false;
   let caretTime: number = 0;
@@ -165,9 +168,9 @@ function createTransport(
     });
   }
 
-  function setMusic(on: boolean): void {
+  function setMusic(on: boolean, theme: string | null = null): void {
     const chosen: Sound | null =
-      on && tab().name === "stage" ? soundById(stage().music) : null;
+      on && tab().name === "stage" ? soundById(theme ?? stage().music) : null;
 
     musicToken++;
     music?.stop();
@@ -178,8 +181,10 @@ function createTransport(
     }
   }
 
-  function setPlaytesting(value: boolean): void {
+  function setPlaytesting(value: boolean, watch: boolean = false): void {
     playtesting = value;
+    watching = value && watch;
+    preview.setAutopilot(watching);
     setMusic(value);
     keyboard.clear();
     preview.setPlaytest(value);
@@ -193,6 +198,15 @@ function createTransport(
     }
 
     playtestChip.paint();
+    watchChip.paint();
+  }
+
+  function watch(): void {
+    if (packTabs.includes(tab().name) || scened() || tab().name === "sound") {
+      return;
+    }
+
+    setPlaytesting(!watching, true);
   }
 
   function playtest(): void {
@@ -210,7 +224,7 @@ function createTransport(
       return;
     }
 
-    setPlaytesting(!playtesting);
+    setPlaytesting(!playtesting || watching);
   }
 
   function steer(): void {
@@ -236,7 +250,13 @@ function createTransport(
     "playtest",
     playtestWidth,
     playtest,
-    () => playtesting,
+    () => playtesting && !watching,
+  );
+  const watchChip: Chip = createChip(
+    "watch",
+    playtestWidth,
+    watch,
+    () => watching,
   );
 
   patternChip.view.addChild(patternIcon);
@@ -315,10 +335,19 @@ function createTransport(
 
   function update(delta: number): void {
     hitsText.visible = playtesting;
+    playtestChip.view.visible = !watching;
+    watchChip.view.visible = !playtesting || watching;
+    watchChip.view.x = watching ? 0 : playtestWidth + watchGap;
     hitsText.text = "HITS " + preview.hits() + "  BOMBS " + preview.bombs();
 
     if (playtesting) {
       steer();
+    }
+
+    for (const id of preview.themes()) {
+      if (playtesting) {
+        setMusic(true, id);
+      }
     }
 
     patternBar.visible = tab().name === "pattern";
@@ -340,7 +369,7 @@ function createTransport(
 
   hitsText.anchor.set(1, 0.5);
   hitsText.position.set(rowWidth, chipHeight / 2);
-  playtestBar.addChild(playtestChip.view, hitsText);
+  playtestBar.addChild(playtestChip.view, watchChip.view, hitsText);
   playChip.view.addChild(playIcon);
   drawPlayIcon();
 
@@ -356,6 +385,7 @@ function createTransport(
     togglePlaying: togglePlaying,
     pause: pause,
     playtest: playtest,
+    watch: watch,
     stopTyping: () => {
       typing = null;
     },

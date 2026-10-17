@@ -95,6 +95,12 @@ function forgetStageLook(creations: Creations, id: string): void {
       stageItem.music = null;
     }
   }
+
+  for (const enemyItem of creations.enemies) {
+    if (enemyItem.theme === id) {
+      enemyItem.theme = null;
+    }
+  }
 }
 
 function forgetCosmetic(creations: Creations, id: string): void {

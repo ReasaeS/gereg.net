@@ -24,11 +24,11 @@ import {
   defaultSpawn,
   defaultKeyframe,
   defaultStage,
-  defaultCreations,
   defaultSpawnY,
   repairPacks,
 } from "./defaults";
 import { wallAngle } from "./geometry";
+import { defaultCreations } from "./starter";
 
 const storageKey: string = "geregnet.creations";
 const saveListeners: Array<() => void> = new Array();
@@ -194,6 +194,7 @@ function loadCreations(): Creations {
       Enemy & { health?: number; spell?: string | null }
     >) {
       enemy.rank = enemy.rank ?? "regular";
+      enemy.theme = enemy.theme ?? null;
       enemy.bars = enemy.bars ?? [
         { ...defaultBar(enemy.health ?? 20), spell: enemy.spell ?? null },
       ];

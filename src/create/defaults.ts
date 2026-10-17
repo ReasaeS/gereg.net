@@ -67,6 +67,7 @@ function defaultEnemy(pattern: string | null): Enemy {
     size: 28,
     rank: "regular",
     pattern: pattern,
+    theme: null,
     bars: [defaultBar(20)],
   };
 }
@@ -249,13 +250,6 @@ function defaultLine(character: Character, text: string): Line {
   };
 }
 
-function defaultCharacters(): Array<Character> {
-  return [
-    defaultCharacter("You", 0, "portraits/you.png"),
-    defaultCharacter("Stranger", 1, "portraits/stranger.png"),
-  ];
-}
-
 function defaultCutscene(cast: Array<Character>): Cutscene {
   const first: Character | undefined = cast[0];
   const second: Character | undefined = cast[1] ?? first;
@@ -357,32 +351,6 @@ function defaultGame(): Game {
   };
 }
 
-function defaultCreations(): Creations {
-  const pattern: Pattern = defaultPattern();
-  const enemy: Enemy = defaultEnemy(pattern.id);
-  const background: Background = defaultBackground();
-  const wallpaper: Wallpaper = defaultWallpaper();
-  const palette: Palette = defaultPalette();
-  const sigil: Sigil = defaultSigil();
-  const characters: Array<Character> = defaultCharacters();
-
-  return {
-    stages: [defaultStage(enemy.id, background.id, wallpaper.id, palette.id)],
-    runs: new Array(),
-    games: new Array(),
-    patterns: [pattern],
-    enemies: [enemy],
-    backgrounds: [background],
-    wallpapers: [wallpaper],
-    palettes: [palette],
-    sigils: [sigil],
-    spells: [{ ...defaultSpell(sigil.id), name: "Spell 1" }],
-    sounds: [defaultSound()],
-    characters: characters,
-    cutscenes: [defaultCutscene(characters)],
-  };
-}
-
 export {
   defaultSpawnY,
   createId,
@@ -409,5 +377,4 @@ export {
   defaultStage,
   defaultRun,
   defaultGame,
-  defaultCreations,
 };
