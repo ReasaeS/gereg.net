@@ -7,7 +7,8 @@ import {
   type Bounds,
   type Point,
 } from "pixi.js";
-import type { Sound, Vector } from "../types";
+import type { Sound, Stage, Vector } from "../types";
+import { gameStages, runStages } from "../packs";
 import { playSound, playTrack, type Track } from "../sound";
 import {
   bombKeys,
@@ -58,6 +59,7 @@ const fieldPadding: number = 4; // units
 const patternGap: number = 6; // units
 const typingLength: number = 7;
 const caretBlink: number = 1; // s
+const outroTime: number = 1.5; // s
 
 function createTransport(
   app: Application,
@@ -66,7 +68,8 @@ function createTransport(
   scened: () => boolean,
 ): Transport {
   const { preview, tab } = studio;
-  const { sound, stage, soundById } = studio.pick;
+  const { sound, stage, soundById, run, game, backgroundById, resolve } =
+    studio.pick;
   const playIcon: Graphics = new Graphics();
   const patternIcon: Graphics = new Graphics();
   const patternBar: Container = new Container();
@@ -87,6 +90,10 @@ function createTransport(
   let caretTime: number = 0;
   let music: Track | null = null;
   let musicToken: number = 0;
+  let legs: Array<Stage> = new Array();
+  let leg: number = 0;
+  let outro: number = 0;
+  let carriedHits: number = 0;
   const keyboard: Keyboard = createKeyboard(() => live() && playtesting);
 
   function popIcon(icon: Graphics, running: boolean): void {
@@ -168,9 +175,57 @@ function createTransport(
     });
   }
 
+  function packed(): boolean {
+    return packTabs.includes(tab().name);
+  }
+
+  function packStages(): Array<Stage> {
+    return tab().name === "run"
+      ? runStages(studio.creations, run())
+      : gameStages(studio.creations, game());
+  }
+
+  function playedStage(): Stage | null {
+    if (packed()) {
+      return legs[leg] ?? null;
+    }
+
+    return tab().name === "stage" ? stage() : null;
+  }
+
+  function startLeg(carry: boolean): void {
+    const chosen: Stage = legs[leg]!;
+
+    outro = 0;
+    preview.clear();
+    preview.setBackground(backgroundById(chosen.background));
+    preview.setPlayerVisible(true);
+    preview.setStage(null, () => null);
+    preview.setLoop(false);
+    preview.setStage(chosen, resolve);
+    preview.setPlaytest(true, carry);
+    preview.themes();
+    setMusic(true);
+  }
+
+  function nextLeg(): void {
+    carriedHits += preview.hits();
+    leg++;
+
+    if (leg < legs.length) {
+      startLeg(true);
+    } else if (watching) {
+      leg = 0;
+      startLeg(true);
+    } else {
+      setPlaytesting(false);
+    }
+  }
+
   function setMusic(on: boolean, theme: string | null = null): void {
+    const played: Stage | null = playedStage();
     const chosen: Sound | null =
-      on && tab().name === "stage" ? soundById(theme ?? stage().music) : null;
+      on && played !== null ? soundById(theme ?? played.music) : null;
 
     musicToken++;
     music?.stop();
@@ -182,12 +237,29 @@ function createTransport(
   }
 
   function setPlaytesting(value: boolean, watch: boolean = false): void {
+    if (value && packed()) {
+      legs = packStages();
+
+      if (legs.length === 0) {
+        return;
+      }
+    }
+
     playtesting = value;
     watching = value && watch;
+    leg = 0;
+    carriedHits = 0;
     preview.setAutopilot(watching);
-    setMusic(value);
     keyboard.clear();
-    preview.setPlaytest(value);
+
+    if (value && packed()) {
+      startLeg(false);
+    } else {
+      legs = new Array();
+      preview.setLoop(true);
+      setMusic(value);
+      preview.setPlaytest(value);
+    }
 
     if (value) {
       playing = true;
@@ -202,7 +274,7 @@ function createTransport(
   }
 
   function watch(): void {
-    if (packTabs.includes(tab().name) || scened() || tab().name === "sound") {
+    if (scened() || tab().name === "sound") {
       return;
     }
 
@@ -212,10 +284,6 @@ function createTransport(
   function playtest(): void {
     if (tab().name === "sound") {
       playSound(sound());
-      return;
-    }
-
-    if (packTabs.includes(tab().name)) {
       return;
     }
 
@@ -338,10 +406,23 @@ function createTransport(
     playtestChip.view.visible = !watching;
     watchChip.view.visible = !playtesting || watching;
     watchChip.view.x = watching ? 0 : playtestWidth + watchGap;
-    hitsText.text = "HITS " + preview.hits() + "  BOMBS " + preview.bombs();
+    hitsText.text =
+      (legs.length > 1 ? leg + 1 + "/" + legs.length + "  " : "") +
+      "HITS " +
+      (carriedHits + preview.hits()) +
+      "  BOMBS " +
+      preview.bombs();
 
     if (playtesting) {
       steer();
+    }
+
+    if (playtesting && legs.length > 0 && preview.finished()) {
+      outro += delta;
+
+      if (outro >= outroTime) {
+        nextLeg();
+      }
     }
 
     for (const id of preview.themes()) {
@@ -351,8 +432,7 @@ function createTransport(
     }
 
     patternBar.visible = tab().name === "pattern";
-    playtestBar.visible =
-      tab().name !== "palette" && !packTabs.includes(tab().name);
+    playtestBar.visible = tab().name !== "palette";
     fieldFocus.set(typing !== null ? 1 : 0);
     drawField(clockBox, clockWidth, chipHeight, fieldFocus.value());
 

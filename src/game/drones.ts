@@ -1,5 +1,10 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, Sprite, type Texture } from "pixi.js";
 import { archetype, type Archetype } from "./archetype";
+import {
+  droneShotDrawing,
+  shotDrawing,
+  type Drawing,
+} from "../editor/drawings";
 
 type Offset = {
   x: number; // units
@@ -62,10 +67,7 @@ const maxPower: number = 4;
 const mainRate: number = 20; // Hz
 const mainGap: number = 6; // units
 const mainDamage: number = 1;
-const mainWidth: number = 3; // units
-const mainLength: number = 14; // units
-const shotWidth: number = 3; // units
-const shotLength: number = 10; // units
+const shotScale: number = 0.5; // units/px
 const shotAlpha: number = 0.85;
 const shotMargin: number = 24; // units
 const muzzle: number = 10; // units
@@ -196,15 +198,14 @@ function createSquad(
     angle: number,
     color: string,
     damage: number,
-    size: [number, number],
+    drawing: Drawing,
     homing: boolean,
   ): void {
-    const sprite: Sprite = new Sprite(Texture.WHITE);
+    const sprite: Sprite = new Sprite(drawing.texture);
 
     sprite.anchor.set(0.5);
-    sprite.width = size[0];
-    sprite.height = size[1];
-    sprite.tint = color;
+    sprite.scale.set(shotScale);
+    sprite.tint = drawing.custom ? "#ffffff" : color;
     sprite.alpha = shotAlpha;
     sprite.rotation = angle - up;
     shotLayer.addChild(sprite);
@@ -301,7 +302,7 @@ function createSquad(
           up,
           settings.mainColor,
           mainDamage,
-          [mainWidth, mainLength],
+          shotDrawing(),
           false,
         );
       }
@@ -322,7 +323,7 @@ function createSquad(
           up + tilt,
           settings.shotColor,
           style.droneDamage,
-          [shotWidth, shotLength],
+          droneShotDrawing(),
           style.homing && !focused,
         );
       }

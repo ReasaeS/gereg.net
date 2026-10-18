@@ -2,6 +2,7 @@ import {
   Container,
   Graphics,
   Point,
+  Rectangle,
   Sprite,
   Text,
   type Application,
@@ -26,20 +27,27 @@ import {
   type Drawing,
 } from "./drawings";
 import { createPower, type Power } from "./power";
-import {
-  buttonWidth,
-  buttonHeight,
-  buttonGap,
-  createButton,
-  paintButton,
-  type Button,
-} from "../ui/button";
 import { createText } from "../ui/text";
-import { createGlide, type Glide } from "../ui/motion";
-import { drawField } from "../ui/widgets";
+import { createGlide, mix, type Glide } from "../ui/motion";
+import { getTheme } from "../theme/theme";
 import type { Topic } from "../menu/help";
 
 type Tool = "pencil" | "eraser" | "fill" | "picker";
+
+type Plate = {
+  view: Container;
+  size: number; // px
+  active: () => boolean;
+  lit: Glide;
+};
+
+type Action = {
+  name: string;
+  key: string;
+  icon: Array<string>;
+  active: () => boolean;
+  run: () => void;
+};
 
 type Editor = {
   view: Container;
@@ -50,28 +58,70 @@ type Editor = {
 };
 
 const maxUndo: number = 100;
-const tabGap: number = 14; // px
-const boardHeight: number = 0.62; // of screen height
-const boardWidth: number = 0.42; // of screen width
-const boardCenterY: number = 0.56; // of screen height
-const panelGap: number = 30; // px
-const boxPadding: number = 18; // px
-const statusGap: number = 12; // px
+const boardHeight: number = 0.56; // of screen height
+const boardWidth: number = 0.4; // of screen width
+const boardCenterY: number = 0.6; // of screen height
+const panelGap: number = 28; // px
+const benchPadding: number = 22; // px
+const benchNotch: number = 8; // px
+const benchColor: string = "#090c1a";
+const benchAlpha: number = 0.94;
+const benchEdge: string = "#2c3560";
+const dotGap: number = 16; // px
+const dotAlpha: number = 0.12;
+const rivetSize: number = 4; // px
+const rivetInset: number = 9; // px
+const plateColor: string = "#141a33";
+const plateEdge: string = "#3b4570";
+const plateNotch: number = 3; // px
+const plateLine: number = 2; // px
+const iconColor: string = "#cfd8ff";
+const iconRows: number = 9;
+const tileSize: number = 44; // px
+const tileGap: number = 6; // px
+const tileColumns: number = 2;
+const tileRise: number = 2; // px
+const keySize: number = 10; // px
+const captionSize: number = 14; // px
+const captionGap: number = 14; // px
+const slotSize: number = 64; // px
+const slotGap: number = 10; // px
+const slotRise: number = 8; // px
+const slotSprite: number = 1.5;
+const slotNotch: number = 4; // px
+const slotLine: number = 3; // px
+const slotBottom: number = 14; // px
+const titleSize: number = 30; // px
+const titleGap: number = 22; // px
+const hintSize: number = 11; // px
+const hintColor: string = "#8f9bd0";
+const rulerSize: number = 16; // px
+const rulerMinor: number = 3; // px
+const rulerMajor: number = 8; // px
+const rulerText: number = 9; // px
+const rulerMinCell: number = 6; // px
+const readoutSize: number = 13; // px
+const readoutGap: number = 10; // px
+const statusGap: number = 14; // px
 const checkerLight: string = "#2a2f45";
 const checkerDark: string = "#1f2335";
 const gridColor: string = "#ffffff";
 const gridAlpha: number = 0.1;
 const gridMajorAlpha: number = 0.25;
 const gridMajor: number = 8; // px
-const frameColor: string = "#ffffff";
-const frameWidth: number = 3; // px
+const frameWidth: number = 2; // px
 const hoverColor: string = "#ffffff";
 const paletteColumns: number = 4;
 const swatchMaxSize: number = 36; // px
-const swatchGap: number = 4; // px
+const swatchGap: number = 3; // px
+const bracketLength: number = 8; // px
+const bracketWidth: number = 3; // px
+const inkHeight: number = 26; // px
+const inkGap: number = 12; // px
 const previewScale: number = 3;
+const previewTop: number = 20; // px
 const transparent: number = 0;
-const statusSize: number = 24; // px
+const statusSize: number = 20; // px
 const statusColor: string = "#cfeeff";
 const statusDuration: number = 2.5; // s
 const statusFade: number = 0.5; // s
@@ -111,8 +161,284 @@ const palette: Array<string> = [
   "#ff4fbf",
 ];
 
+const pencilIcon: Array<string> = [
+  ".......#.",
+  "......###",
+  ".....###.",
+  "....###..",
+  "...###...",
+  "..###....",
+  ".#.#.....",
+  "##.......",
+  "#........",
+];
+const eraserIcon: Array<string> = [
+  ".........",
+  "....####.",
+  "...#####.",
+  "..######.",
+  ".####..#.",
+  ".#..#.#..",
+  ".#..##...",
+  ".####....",
+  ".........",
+];
+const fillIcon: Array<string> = [
+  "..#......",
+  ".#.#.....",
+  "#...#....",
+  "#####.#..",
+  ".###..#..",
+  "..#...##.",
+  "......##.",
+  ".........",
+  ".........",
+];
+const pickIcon: Array<string> = [
+  "......##.",
+  ".....####",
+  "......##.",
+  ".....#.#.",
+  "....#....",
+  "...#.....",
+  "..#......",
+  ".#.......",
+  "#........",
+];
+const mirrorIcon: Array<string> = [
+  "....#....",
+  "#.......#",
+  "##..#..##",
+  "###...###",
+  "####.####",
+  "###...###",
+  "##..#..##",
+  "#.......#",
+  "....#....",
+];
+const gridIcon: Array<string> = [
+  "#########",
+  "#...#...#",
+  "#...#...#",
+  "#...#...#",
+  "#########",
+  "#...#...#",
+  "#...#...#",
+  "#...#...#",
+  "#########",
+];
+const undoIcon: Array<string> = [
+  "..#......",
+  ".##......",
+  "#######..",
+  ".##....#.",
+  "..#.....#",
+  "........#",
+  ".......#.",
+  "....###..",
+  ".........",
+];
+const clearIcon: Array<string> = [
+  "#.......#",
+  ".#.....#.",
+  "..#...#..",
+  "...#.#...",
+  "....#....",
+  "...#.#...",
+  "..#...#..",
+  ".#.....#.",
+  "#.......#",
+];
+const resetIcon: Array<string> = [
+  "..###.#..",
+  ".#...##..",
+  "#...###..",
+  "#........",
+  "#.......#",
+  "#.......#",
+  ".#.....#.",
+  "..#####..",
+  ".........",
+];
+const exportIcon: Array<string> = [
+  "....#....",
+  "...###...",
+  "..#.#.#..",
+  "....#....",
+  "....#....",
+  "#...#...#",
+  "#.......#",
+  "#########",
+  ".........",
+];
+const importIcon: Array<string> = [
+  "....#....",
+  "....#....",
+  "....#....",
+  "..#.#.#..",
+  "...###...",
+  "#...#...#",
+  "#.......#",
+  "#########",
+  ".........",
+];
+const powerIcon: Array<string> = [
+  ".....##..",
+  "....##...",
+  "...##....",
+  "..######.",
+  "....##...",
+  "...##....",
+  "..##.....",
+  ".##......",
+  ".........",
+];
+
 function toColor(hex: string): number {
   return ((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0;
+}
+
+function flipped(rows: Array<string>): Array<string> {
+  return rows.map((row: string) => row.split("").reverse().join(""));
+}
+
+function notched(
+  graphics: Graphics,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  notch: number,
+): Graphics {
+  const right: number = x + width;
+  const bottom: number = y + height;
+
+  return graphics.poly([
+    x + notch * 2,
+    y,
+    right - notch * 2,
+    y,
+    right - notch * 2,
+    y + notch,
+    right - notch,
+    y + notch,
+    right - notch,
+    y + notch * 2,
+    right,
+    y + notch * 2,
+    right,
+    bottom - notch * 2,
+    right - notch,
+    bottom - notch * 2,
+    right - notch,
+    bottom - notch,
+    right - notch * 2,
+    bottom - notch,
+    right - notch * 2,
+    bottom,
+    x + notch * 2,
+    bottom,
+    x + notch * 2,
+    bottom - notch,
+    x + notch,
+    bottom - notch,
+    x + notch,
+    bottom - notch * 2,
+    x,
+    bottom - notch * 2,
+    x,
+    y + notch * 2,
+    x + notch,
+    y + notch * 2,
+    x + notch,
+    y + notch,
+    x + notch * 2,
+    y + notch,
+  ]);
+}
+
+function createIcon(rows: Array<string>, size: number): Graphics {
+  const icon: Graphics = new Graphics();
+  const pixel: number = Math.floor(size / iconRows);
+
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < rows[y]!.length; x++) {
+      if (rows[y]![x] === "#") {
+        icon.rect(x * pixel, y * pixel, pixel, pixel);
+      }
+    }
+  }
+
+  icon.fill(0xffffff);
+  icon.pivot.set((iconRows * pixel) / 2, (iconRows * pixel) / 2);
+
+  return icon;
+}
+
+function createPlate(
+  size: number,
+  content: Container,
+  tinted: boolean,
+  rise: number,
+  active: () => boolean,
+  action: () => void,
+  hovered: (on: boolean) => void,
+): Plate {
+  const view: Container = new Container();
+  const body: Container = new Container();
+  const back: Graphics = new Graphics();
+  const notch: number = tinted ? plateNotch : slotNotch;
+  const line: number = tinted ? plateLine : slotLine;
+  const hover: Glide = createGlide(0, draw);
+  const lit: Glide = createGlide(0, draw);
+
+  function draw(): void {
+    const amount: number = lit.value();
+    const edge: number = Math.max(amount, hover.value());
+
+    notched(back.clear(), 0, 0, size, size, notch)
+      .fill(tinted ? mix(plateColor, getTheme().accent, amount) : plateColor)
+      .stroke({
+        color: mix(
+          plateEdge,
+          tinted ? getTheme().highlight : getTheme().accent,
+          edge,
+        ),
+        width: line,
+        alignment: 1,
+      });
+    body.y = -rise * amount - tileRise * hover.value();
+
+    if (tinted) {
+      content.tint = mix(iconColor, plateColor, amount);
+    }
+  }
+
+  content.position.set(size / 2, size / 2);
+  body.addChild(back, content);
+  view.addChild(body);
+  view.eventMode = "static";
+  view.cursor = "pointer";
+  view.hitArea = new Rectangle(0, -rise, size, size + rise);
+  view.on("pointertap", () => {
+    action();
+
+    if (!active()) {
+      lit.snap(1);
+      lit.set(0);
+    }
+  });
+  view.on("pointerover", () => {
+    hover.set(1);
+    hovered(true);
+  });
+  view.on("pointerout", () => {
+    hover.set(0);
+    hovered(false);
+  });
+  lit.snap(active() ? 1 : 0);
+
+  return { view: view, size: size, active: active, lit: lit };
 }
 
 function createEditor(app: Application): Editor {
@@ -123,19 +449,33 @@ function createEditor(app: Application): Editor {
   const canvas: Sprite = new Sprite(drawing.texture);
   const grid: Graphics = new Graphics();
   const hover: Graphics = new Graphics();
-  const tools: Container = new Container();
-  const swatches: Container = new Container();
   const frame: Graphics = new Graphics();
-  const box: Graphics = new Graphics();
+  const bench: Graphics = new Graphics();
+  const rulers: Container = new Container();
+  const ticks: Graphics = new Graphics();
+  const marks: Graphics = new Graphics();
+  const numbers: Array<Text> = new Array();
+  const readout: Text = createText(readoutSize, hintColor);
+  const size: Text = createText(readoutSize, hintColor);
+  const tools: Container = new Container();
+  const caption: Text = createText(captionSize, iconColor);
+  const slots: Container = new Container();
+  const title: Text = createText(titleSize, "#ffffff");
+  const hint: Text = createText(hintSize, hintColor);
+  const swatches: Container = new Container();
   const selection: Graphics = new Graphics();
+  const ink: Container = new Container();
+  const inkChip: Graphics = new Graphics();
+  const inkLabel: Text = createText(readoutSize, hintColor);
   const preview: Container = new Container();
+  const previewLabel: Text = createText(hintSize, hintColor);
   const small: Sprite = new Sprite(drawing.texture);
   const large: Sprite = new Sprite(drawing.texture);
   const local: Point = new Point();
   const status: Text = createText(statusSize, statusColor);
   let statusTime: number = 0;
-  const buttons: Array<Button> = new Array();
-  const tabs: Container = new Container();
+  const tiles: Array<Plate> = new Array();
+  const cartridges: Array<Plate> = new Array();
   let tool: Tool = "pencil";
   let color: number = toColor(palette[0]!);
   let mirror: boolean = false;
@@ -148,8 +488,16 @@ function createEditor(app: Application): Editor {
   let cell: number = 1;
   let swatchSize: number = swatchMaxSize;
   let powering: boolean = false;
+  let hoveredAction: Action | null = null;
   const power: Power = createPower(app, playerTexture(), droneTexture());
-  const drawingParts: Array<Container> = [board, tools, swatches, preview];
+  const drawingParts: Array<Container> = [
+    board,
+    rulers,
+    tools,
+    swatches,
+    ink,
+    preview,
+  ];
   const mode: Glide = createGlide(0, (amount: number) => {
     for (const part of drawingParts) {
       part.alpha = 1 - amount;
@@ -167,19 +515,38 @@ function createEditor(app: Application): Editor {
     small.alpha = alpha;
     large.alpha = alpha;
   });
+  const titleFade: Glide = createGlide(1, (alpha: number) => {
+    title.alpha = alpha;
+    title.x = slots.x + slotsWidth() + titleGap - (1 - alpha) * titleGap;
+  });
   const chosenX: Glide = createGlide(0, drawSelection);
   const chosenY: Glide = createGlide(0, drawSelection);
   const hoverFade: Glide = createGlide(0, drawSelection);
   let hoverSwatch: number = -1;
   let chosenPlaced: boolean = false;
 
+  function slotsWidth(): number {
+    return cartridges.length * (slotSize + slotGap) - slotGap;
+  }
+
+  function tabName(): string {
+    return powering ? "power" : drawing.name;
+  }
+
   function refresh(): void {
     drawing.source.update();
 
-    for (let index = 0; index < buttons.length; index++) {
-      paintButton(buttons[index]!);
+    for (const plate of [...tiles, ...cartridges]) {
+      plate.lit.set(plate.active() ? 1 : 0);
     }
 
+    if (title.text !== tabName().toUpperCase()) {
+      title.text = tabName().toUpperCase();
+      titleFade.snap(0);
+      titleFade.set(1);
+    }
+
+    caption.text = (hoveredAction ?? currentAction()).name.toUpperCase();
     placeSelection();
     gridFade.set(showGrid ? 1 : 0);
   }
@@ -353,26 +720,48 @@ function createEditor(app: Application): Editor {
     save();
   }
 
-  function drawHover(x: number, y: number): void {
+  function clearHover(): void {
     hover.clear();
+    marks.clear();
+    readout.text = "X --  Y --";
+  }
+
+  function drawHover(x: number, y: number): void {
+    clearHover();
 
     if (!active || !inside(drawing.pixels, x, y)) {
       return;
     }
 
-    hover.rect(x * cell, y * cell, cell, cell);
+    const columns: Array<number> = mirror ? [x, spriteSize - 1 - x] : [x];
 
-    if (mirror) {
-      hover.rect((spriteSize - 1 - x) * cell, y * cell, cell, cell);
+    for (const column of columns) {
+      hover.rect(column * cell, y * cell, cell, cell);
+      marks.rect(board.x + column * cell, board.y - rulerSize, cell, rulerSize);
     }
 
     hover.stroke({ color: hoverColor, width: 2, alpha: 0.8 });
+    marks
+      .rect(board.x - rulerSize, board.y + y * cell, rulerSize, cell)
+      .fill({ color: getTheme().accent, alpha: 0.7 });
+    readout.text =
+      "X " + String(x).padStart(2, "0") + "  Y " + String(y).padStart(2, "0");
   }
 
   function placeSelection(): void {
+    const hex: string =
+      "#" + (color >>> 8).toString(16).padStart(6, "0").toUpperCase();
     const index: number = palette.findIndex(
-      (hex: string) => toColor(hex) === color,
+      (value: string) => toColor(value) === color,
     );
+
+    inkChip
+      .clear()
+      .rect(0, 0, inkHeight, inkHeight)
+      .fill(hex)
+      .rect(0, 0, inkHeight, inkHeight)
+      .stroke({ color: plateEdge, width: plateLine, alignment: 1 });
+    inkLabel.text = "INK  " + hex;
 
     if (index < 0) {
       return;
@@ -393,34 +782,60 @@ function createEditor(app: Application): Editor {
     drawSelection();
   }
 
+  function drawBrackets(
+    x: number,
+    y: number,
+    side: number,
+    tint: string,
+    alpha: number,
+  ): void {
+    const reach: number = Math.min(bracketLength, side / 2);
+    const corners: Array<[number, number, number, number]> = [
+      [x, y, 1, 1],
+      [x + side, y, -1, 1],
+      [x, y + side, 1, -1],
+      [x + side, y + side, -1, -1],
+    ];
+
+    for (const [cornerX, cornerY, toX, toY] of corners) {
+      selection
+        .moveTo(cornerX + toX * reach, cornerY)
+        .lineTo(cornerX, cornerY)
+        .lineTo(cornerX, cornerY + toY * reach);
+    }
+
+    selection.stroke({
+      color: tint,
+      width: bracketWidth,
+      alpha: alpha,
+      cap: "square",
+      join: "miter",
+    });
+  }
+
   function drawSelection(): void {
     const step: number = swatchSize + swatchGap;
+    const outset: number = bracketWidth;
 
     selection.clear();
 
     if (hoverSwatch >= 0 && hoverFade.value() > 0) {
-      selection
-        .rect(
-          (hoverSwatch % paletteColumns) * step - 1,
-          Math.floor(hoverSwatch / paletteColumns) * step - 1,
-          swatchSize + 2,
-          swatchSize + 2,
-        )
-        .stroke({
-          color: hoverColor,
-          width: 2,
-          alpha: hoverFade.value() * 0.5,
-        });
+      drawBrackets(
+        (hoverSwatch % paletteColumns) * step - outset,
+        Math.floor(hoverSwatch / paletteColumns) * step - outset,
+        swatchSize + outset * 2,
+        hoverColor,
+        hoverFade.value() * 0.6,
+      );
     }
 
-    selection
-      .rect(
-        chosenX.value() * step - 2,
-        chosenY.value() * step - 2,
-        swatchSize + 4,
-        swatchSize + 4,
-      )
-      .stroke({ color: hoverColor, width: 3 });
+    drawBrackets(
+      chosenX.value() * step - outset,
+      chosenY.value() * step - outset,
+      swatchSize + outset * 2,
+      getTheme().accent,
+      1,
+    );
   }
 
   function selectDrawing(index: number): void {
@@ -438,14 +853,14 @@ function createEditor(app: Application): Editor {
     canvas.texture = drawing.texture;
     small.texture = drawing.texture;
     large.texture = drawing.texture;
-    hover.clear();
+    clearHover();
     refresh();
   }
 
   function showPower(value: boolean): void {
     powering = value;
     stroking = false;
-    hover.clear();
+    clearHover();
     board.eventMode = value ? "none" : "passive";
     tools.eventMode = value ? "none" : "passive";
     swatches.eventMode = value ? "none" : "passive";
@@ -457,6 +872,72 @@ function createEditor(app: Application): Editor {
   function selectTool(value: Tool): void {
     tool = value;
     refresh();
+  }
+
+  function layoutRulers(boardSize: number): void {
+    ticks.clear();
+
+    for (let line = 0; line <= spriteSize; line++) {
+      const major: boolean = line % gridMajor === 0;
+      const length: number = major ? rulerMajor : rulerMinor;
+      const at: number = line * cell;
+
+      if (!major && cell < rulerMinCell) {
+        continue;
+      }
+
+      ticks
+        .rect(board.x + at - 0.5, board.y - length, 1, length)
+        .rect(board.x - length, board.y + at - 0.5, length, 1);
+    }
+
+    ticks
+      .rect(board.x, board.y - rulerSize, boardSize, 1)
+      .rect(board.x - rulerSize, board.y, 1, boardSize)
+      .fill({ color: iconColor, alpha: 0.5 });
+
+    for (let index = 0; index < numbers.length; index++) {
+      const value: number = (index % (numbers.length / 2)) * gridMajor;
+      const number: Text = numbers[index]!;
+
+      if (index < numbers.length / 2) {
+        number.anchor.set(0, 0);
+        number.position.set(
+          board.x + value * cell + 3,
+          board.y - rulerSize + 1,
+        );
+      } else {
+        number.anchor.set(0, 0);
+        number.position.set(
+          board.x - rulerSize + 1,
+          board.y + value * cell + 2,
+        );
+      }
+
+      number.visible = value < spriteSize;
+    }
+  }
+
+  function layoutTools(boardSize: number): number {
+    const rows: number = Math.ceil(tiles.length / tileColumns);
+    const height: number =
+      rows * (tileSize + tileGap) - tileGap + captionGap + captionSize;
+    const scale: number = Math.min(boardSize / height, 1);
+
+    for (let index = 0; index < tiles.length; index++) {
+      tiles[index]!.view.position.set(
+        (index % tileColumns) * (tileSize + tileGap),
+        Math.floor(index / tileColumns) * (tileSize + tileGap),
+      );
+    }
+
+    caption.position.set(
+      (tileColumns * (tileSize + tileGap) - tileGap) / 2,
+      rows * (tileSize + tileGap) - tileGap + captionGap,
+    );
+    tools.scale.set(scale);
+
+    return (tileColumns * (tileSize + tileGap) - tileGap) * scale;
   }
 
   function layout(): void {
@@ -502,15 +983,27 @@ function createEditor(app: Application): Editor {
     frame
       .clear()
       .rect(0, 0, boardSize, boardSize)
-      .stroke({ color: frameColor, width: frameWidth, alignment: 0 });
-    tabs.position.set(board.x, board.y - boxPadding - buttonHeight - tabGap);
-    tools.position.set(board.x - panelGap - buttonWidth, board.y);
+      .stroke({ color: iconColor, width: frameWidth, alignment: 0 });
+    layoutRulers(boardSize);
+
+    const toolsWidth: number = layoutTools(boardSize);
+
+    tools.position.set(
+      Math.round(board.x - rulerSize - panelGap - toolsWidth),
+      board.y,
+    );
+    readout.position.set(board.x, board.y + boardSize + readoutGap);
+    size.text = spriteSize + " × " + spriteSize + " PX";
+    size.anchor.set(1, 0);
+    size.position.set(board.x + boardSize, board.y + boardSize + readoutGap);
 
     swatchSize = Math.min(
       swatchMaxSize,
-      boardSize / (palette.length / paletteColumns) - swatchGap,
+      (boardSize - inkHeight - inkGap) / (palette.length / paletteColumns) -
+        swatchGap,
     );
-    swatches.position.set(board.x + boardSize + panelGap, board.y);
+    ink.position.set(board.x + boardSize + panelGap, board.y);
+    swatches.position.set(ink.x, board.y + inkHeight + inkGap);
     const old: Array<Container> = swatches.removeChildren();
 
     for (let index = 0; index < old.length; index++) {
@@ -556,101 +1049,284 @@ function createEditor(app: Application): Editor {
         (palette.length / paletteColumns) * (swatchSize + swatchGap) +
         panelGap,
     );
-    large.position.set(spriteSize + panelGap / 2, 0);
-    const right: number =
-      swatches.x + paletteColumns * (swatchSize + swatchGap) - swatchGap;
-    const bottom: number = Math.max(
-      board.y + boardSize,
-      tools.y + toolList.length * (buttonHeight + buttonGap) - buttonGap,
-      preview.y + spriteSize * previewScale,
-    );
+    small.position.set(0, previewTop);
+    large.position.set(spriteSize + panelGap / 2, previewTop);
 
-    box.position.set(tools.x - boxPadding, board.y - boxPadding);
-    drawField(
-      box,
-      right - tools.x + boxPadding * 2,
-      bottom - board.y + boxPadding * 2,
-      0,
-    );
-    status.position.set(
-      board.x + boardSize / 2,
-      bottom + boxPadding + statusGap,
-    );
-    power.layout(
-      tools.x,
-      board.y,
-      swatches.x + paletteColumns * (swatchSize + swatchGap) - tools.x,
-      boardSize,
-    );
+    const left: number = tools.x - benchPadding;
+    const top: number = board.y - rulerSize - benchPadding;
+    const right: number =
+      swatches.x +
+      paletteColumns * (swatchSize + swatchGap) -
+      swatchGap +
+      benchPadding;
+    const bottom: number =
+      Math.max(
+        board.y + boardSize + readoutGap + readoutSize * 1.4,
+        preview.y + previewTop + spriteSize * previewScale,
+      ) + benchPadding;
+
+    drawBench(left, top, right - left, bottom - top);
+    slots.position.set(left, top - slotBottom - slotSize);
+    title.y = slots.y + slotSize / 2;
+    titleFade.snap(titleFade.value());
+    hint.position.set(right, slots.y + slotSize / 2);
+    status.position.set(board.x + boardSize / 2, bottom + statusGap);
+    power.layout(tools.x, board.y, right - benchPadding - tools.x, boardSize);
     refresh();
   }
 
-  const toolList: Array<[string, () => boolean, () => void]> = [
-    ["pencil", () => tool === "pencil", () => selectTool("pencil")],
-    ["eraser", () => tool === "eraser", () => selectTool("eraser")],
-    ["fill", () => tool === "fill", () => selectTool("fill")],
-    ["pick", () => tool === "picker", () => selectTool("picker")],
-    [
-      "mirror",
-      () => mirror,
-      () => {
+  function drawBench(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    notched(bench.clear(), x, y, width, height, benchNotch)
+      .fill({ color: benchColor, alpha: benchAlpha })
+      .stroke({ color: benchEdge, width: plateLine, alignment: 1 });
+
+    for (
+      let dotY = y + dotGap;
+      dotY < y + height - dotGap / 2;
+      dotY += dotGap
+    ) {
+      for (
+        let dotX = x + dotGap;
+        dotX < x + width - dotGap / 2;
+        dotX += dotGap
+      ) {
+        bench.rect(dotX, dotY, 1, 1);
+      }
+    }
+
+    bench.fill({ color: iconColor, alpha: dotAlpha });
+
+    for (const [rivetX, rivetY] of [
+      [x + rivetInset, y + rivetInset],
+      [x + width - rivetInset - rivetSize, y + rivetInset],
+      [x + rivetInset, y + height - rivetInset - rivetSize],
+      [x + width - rivetInset - rivetSize, y + height - rivetInset - rivetSize],
+    ] as Array<[number, number]>) {
+      bench.rect(rivetX, rivetY, rivetSize, rivetSize);
+    }
+
+    bench.fill(plateEdge);
+  }
+
+  function currentAction(): Action {
+    return (
+      actions.find(
+        (value: Action) =>
+          value.icon !== mirrorIcon &&
+          value.icon !== gridIcon &&
+          value.active(),
+      ) ?? actions[0]!
+    );
+  }
+
+  const actions: Array<Action> = [
+    {
+      name: "pencil",
+      key: "B",
+      icon: pencilIcon,
+      active: () => tool === "pencil",
+      run: () => selectTool("pencil"),
+    },
+    {
+      name: "eraser",
+      key: "E",
+      icon: eraserIcon,
+      active: () => tool === "eraser",
+      run: () => selectTool("eraser"),
+    },
+    {
+      name: "fill",
+      key: "F",
+      icon: fillIcon,
+      active: () => tool === "fill",
+      run: () => selectTool("fill"),
+    },
+    {
+      name: "pick",
+      key: "I",
+      icon: pickIcon,
+      active: () => tool === "picker",
+      run: () => selectTool("picker"),
+    },
+    {
+      name: "mirror",
+      key: "M",
+      icon: mirrorIcon,
+      active: () => mirror,
+      run: () => {
         mirror = !mirror;
         refresh();
       },
-    ],
-    [
-      "grid",
-      () => showGrid,
-      () => {
+    },
+    {
+      name: "grid",
+      key: "G",
+      icon: gridIcon,
+      active: () => showGrid,
+      run: () => {
         showGrid = !showGrid;
         refresh();
       },
-    ],
-    ["undo", () => false, undo],
-    ["redo", () => false, redo],
-    ["clear", () => false, clear],
-    ["reset", () => false, reset],
-    ["export", () => false, exportSprite],
-    ["import", () => false, importSprite],
+    },
+    {
+      name: "undo",
+      key: "",
+      icon: undoIcon,
+      active: () => false,
+      run: undo,
+    },
+    {
+      name: "redo",
+      key: "",
+      icon: flipped(undoIcon),
+      active: () => false,
+      run: redo,
+    },
+    {
+      name: "clear",
+      key: "",
+      icon: clearIcon,
+      active: () => false,
+      run: clear,
+    },
+    {
+      name: "reset",
+      key: "",
+      icon: resetIcon,
+      active: () => false,
+      run: reset,
+    },
+    {
+      name: "export",
+      key: "",
+      icon: exportIcon,
+      active: () => false,
+      run: exportSprite,
+    },
+    {
+      name: "import",
+      key: "",
+      icon: importIcon,
+      active: () => false,
+      run: importSprite,
+    },
   ];
 
-  for (let index = 0; index < toolList.length; index++) {
-    const [name, isOn, action] = toolList[index]!;
-    const button: Button = createButton(name, isOn, action);
-    button.view.y = index * (buttonHeight + buttonGap);
-    buttons.push(button);
-    tools.addChild(button.view);
-  }
-
-  for (let index = 0; index < drawings.length; index++) {
-    const target: Drawing = drawings[index]!;
-    const button: Button = createButton(
-      target.name,
-      () => !powering && drawing === target,
-      () => selectDrawing(index),
+  for (const action of actions) {
+    const icon: Container = new Container();
+    const plate: Plate = createPlate(
+      tileSize,
+      icon,
+      true,
+      0,
+      action.active,
+      action.run,
+      (on: boolean) => {
+        hoveredAction = on ? action : null;
+        refresh();
+      },
     );
-    button.view.x = index * (buttonWidth + buttonGap);
-    buttons.push(button);
-    tabs.addChild(button.view);
+
+    icon.addChild(createIcon(action.icon, tileSize * 0.62));
+
+    if (action.key !== "") {
+      const key: Text = createText(keySize, "#ffffff");
+
+      key.text = action.key;
+      key.anchor.set(1, 1);
+      key.position.set(tileSize / 2 - 4, tileSize / 2 - 2);
+      icon.addChild(key);
+    }
+
+    tiles.push(plate);
+    tools.addChild(plate.view);
   }
 
-  const powerButton: Button = createButton(
-    "power",
-    () => powering,
-    () => showPower(true),
-  );
+  for (let index = 0; index <= drawings.length; index++) {
+    const content: Container = new Container();
+    const number: Text = createText(keySize, hintColor);
+    const target: Drawing | undefined = drawings[index];
+    const plate: Plate = createPlate(
+      slotSize,
+      content,
+      false,
+      slotRise,
+      () => (target === undefined ? powering : !powering && drawing === target),
+      () => {
+        if (target === undefined) {
+          showPower(true);
+        } else {
+          selectDrawing(index);
+        }
+      },
+      () => {},
+    );
 
-  powerButton.view.x = drawings.length * (buttonWidth + buttonGap);
-  buttons.push(powerButton);
-  tabs.addChild(powerButton.view);
+    if (target === undefined) {
+      const icon: Graphics = createIcon(powerIcon, slotSize * 0.6);
 
+      icon.tint = getTheme().accent;
+      content.addChild(icon);
+    } else {
+      const sprite: Sprite = new Sprite(target.texture);
+
+      sprite.anchor.set(0.5);
+      sprite.scale.set(slotSprite);
+      content.addChild(sprite);
+    }
+
+    number.text = String(index + 1);
+    number.position.set(-slotSize / 2 + 6, -slotSize / 2 + 4);
+    content.addChild(number);
+    plate.view.x = index * (slotSize + slotGap);
+    cartridges.push(plate);
+    slots.addChild(plate.view);
+  }
+
+  for (let index = 0; index < 2 * (spriteSize / gridMajor + 1); index++) {
+    const number: Text = createText(rulerText, hintColor);
+
+    number.text = String((index % (spriteSize / gridMajor + 1)) * gridMajor);
+    numbers.push(number);
+  }
+
+  caption.anchor.set(0.5, 0);
+  tools.addChild(caption);
+  title.anchor.set(0, 0.5);
+  hint.text = "1 – " + (drawings.length + 1) + "  TO SWITCH";
+  hint.anchor.set(1, 0.5);
+  rulers.addChild(ticks, marks, ...numbers, readout, size);
+  inkChip.position.set(0, 0);
+  inkLabel.anchor.set(0, 0.5);
+  inkLabel.position.set(inkHeight + inkGap, inkHeight / 2);
+  ink.addChild(inkChip, inkLabel);
   large.scale.set(previewScale);
-  preview.addChild(small, large);
+  previewLabel.text = "1X  ·  3X";
+  preview.addChild(previewLabel, small, large);
   board.addChild(checker, canvas, grid, hover, frame);
   status.anchor.set(0.5, 0);
   status.alpha = 0;
   mode.snap(0);
-  view.addChild(box, board, tabs, tools, swatches, preview, status, power.view);
+  clearHover();
+  view.addChild(
+    bench,
+    slots,
+    title,
+    hint,
+    board,
+    rulers,
+    tools,
+    swatches,
+    ink,
+    preview,
+    status,
+    power.view,
+  );
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
     const text: string | undefined = event.clipboardData?.getData("text");
@@ -740,12 +1416,13 @@ function createEditor(app: Application): Editor {
     power.setActive(value && powering);
     view.eventMode = value ? "passive" : "none";
     stroking = false;
-    hover.clear();
+    clearHover();
   }
 
   function enter(): void {
     drawing = drawings[0]!;
     stroking = false;
+    hoveredAction = null;
     showPower(false);
     mode.snap(0);
     canvas.texture = drawing.texture;
@@ -753,9 +1430,10 @@ function createEditor(app: Application): Editor {
     large.texture = drawing.texture;
     canvasFade.snap(1);
     refresh();
+    titleFade.snap(1);
 
-    for (const button of buttons) {
-      button.lit.snap(button.active() ? 1 : 0);
+    for (const plate of [...tiles, ...cartridges]) {
+      plate.lit.snap(plate.active() ? 1 : 0);
     }
   }
 

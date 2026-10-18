@@ -6,7 +6,13 @@ import {
   isEmpty,
   type Pixels,
 } from "./pixels";
-import { drawDroneDefault, drawGameDefault, drawMenuDefault } from "./default";
+import {
+  drawDroneDefault,
+  drawDroneShotDefault,
+  drawGameDefault,
+  drawMenuDefault,
+  drawShotDefault,
+} from "./default";
 
 type Drawing = {
   name: string;
@@ -17,12 +23,15 @@ type Drawing = {
   undo: Array<Uint8Array>;
   redo: Array<Uint8Array>;
   drawDefault: (pixels: Pixels) => void;
+  custom: boolean;
 };
 
 const spriteSize: number = 32; // px
 const gameStorageKey: string = "geregnet.playerSprite";
 const menuStorageKey: string = "geregnet.menuSprite";
 const droneStorageKey: string = "geregnet.droneSprite";
+const shotStorageKey: string = "geregnet.shotSprite";
+const droneShotStorageKey: string = "geregnet.droneShotSprite";
 
 function createDrawing(
   name: string,
@@ -46,6 +55,7 @@ function createDrawing(
     undo: new Array(),
     redo: new Array(),
     drawDefault: drawDefault,
+    custom: false,
   };
 }
 
@@ -53,7 +63,23 @@ const drawings: Array<Drawing> = [
   createDrawing("in game", gameStorageKey, drawGameDefault),
   createDrawing("menu", menuStorageKey, drawMenuDefault),
   createDrawing("drone", droneStorageKey, drawDroneDefault),
+  createDrawing("shot", shotStorageKey, drawShotDefault),
+  createDrawing("drone shot", droneShotStorageKey, drawDroneShotDefault),
 ];
+
+function isDefault(target: Drawing): boolean {
+  const pixels: Pixels = createPixels(spriteSize);
+
+  target.drawDefault(pixels);
+
+  for (let index = 0; index < pixels.data.length; index++) {
+    if (pixels.data[index] !== target.pixels.data[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 function loadDrawing(target: Drawing): void {
   target.drawDefault(target.pixels);
@@ -72,10 +98,13 @@ function loadDrawing(target: Drawing): void {
     console.warn("Could not load the " + target.name + " sprite");
   }
 
+  target.custom = !isDefault(target);
   target.source.update();
 }
 
 function saveDrawing(target: Drawing): void {
+  target.custom = !isDefault(target);
+
   try {
     localStorage.setItem(target.storageKey, encodePixels(target.pixels));
   } catch {
@@ -114,6 +143,14 @@ function droneTexture(): Texture {
   return drawings[2]!.texture;
 }
 
+function shotDrawing(): Drawing {
+  return drawings[3]!;
+}
+
+function droneShotDrawing(): Drawing {
+  return drawings[4]!;
+}
+
 for (let index = 0; index < drawings.length; index++) {
   loadDrawing(drawings[index]!);
 }
@@ -127,5 +164,7 @@ export {
   menuTexture,
   menuPixels,
   droneTexture,
+  shotDrawing,
+  droneShotDrawing,
 };
 export type { Drawing };

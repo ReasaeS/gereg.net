@@ -24,7 +24,11 @@ type Terminal = {
   advance: () => void;
   tip: (list: Array<string>) => void;
   info: (line: () => string) => void;
-  print: (line: string, category?: Category) => (next: string) => void;
+  print: (
+    line: string,
+    category?: Category,
+    blinking?: boolean,
+  ) => (next: string) => void;
   finished: () => boolean;
 };
 
@@ -56,6 +60,8 @@ const barFull: string = "█";
 const barEmpty: string = "░";
 const barSmoothing: number = 0.2; // s
 const tipInterval: number = 8; // s
+const blinkPeriod: number = 1; // s
+const blinkOn: number = 0.6; // of period
 
 function createTerminal(app: Application): Terminal {
   const view: Container = new Container();
@@ -90,6 +96,8 @@ function createTerminal(app: Application): Terminal {
   let tipRow: Text | null = null;
   let tipRetype: Retype | null = null;
   let tipElapsed: number = 0;
+  let blinkTime: number = 0;
+  const blinking: Array<Text> = new Array();
   let total: number = 0;
   let done: number = 0;
   const shown: Glide = createGlide(0, drawBar, barSmoothing);
@@ -260,6 +268,11 @@ function createTerminal(app: Application): Terminal {
       layout();
       update(frameDelta(ticker));
       cycleTip(frameDelta(ticker));
+      blinkTime = (blinkTime + frameDelta(ticker)) % blinkPeriod;
+
+      for (const row of blinking) {
+        row.alpha = blinkTime < blinkPeriod * blinkOn ? 1 : 0;
+      }
 
       for (const info of infos) {
         const text: string = tagged("INFO", info.line());
@@ -297,10 +310,14 @@ function createTerminal(app: Application): Terminal {
       view.addChild(row);
       layout();
     },
-    print: (line: string, category?: Category) => {
+    print: (line: string, category?: Category, blink: boolean = false) => {
       const row: Text =
         rows[print(category === undefined ? line : tagged(category, line))]!;
       const retype: Retype = createRetype(row);
+
+      if (blink) {
+        blinking.push(row);
+      }
 
       return (next: string) => {
         retype.set(

@@ -97,6 +97,10 @@ const droneRadius: number = 13; // px
 const droneLight: string = "#ffffff";
 const droneDark: string = "#ff3b3b";
 const droneOutline: string = "#1d1d2b";
+const shotWidth: number = 6; // px
+const shotLength: number = 28; // px
+const droneShotLength: number = 20; // px
+const shotColor: string = "#ffffff";
 
 function toColor(hex: string): number {
   return ((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0;
@@ -163,4 +167,31 @@ function drawDroneDefault(pixels: Pixels): void {
   }
 }
 
-export { drawGameDefault, drawMenuDefault, drawDroneDefault };
+function drawBar(pixels: Pixels, width: number, length: number): void {
+  const left: number = (pixels.size - width) / 2;
+  const top: number = (pixels.size - length) / 2;
+
+  pixels.data.fill(0);
+
+  for (let y = top; y < top + length; y++) {
+    for (let x = left; x < left + width; x++) {
+      setPixel(pixels, x, y, toColor(shotColor));
+    }
+  }
+}
+
+function drawShotDefault(pixels: Pixels): void {
+  drawBar(pixels, shotWidth, shotLength);
+}
+
+function drawDroneShotDefault(pixels: Pixels): void {
+  drawBar(pixels, shotWidth, droneShotLength);
+}
+
+export {
+  drawGameDefault,
+  drawMenuDefault,
+  drawDroneDefault,
+  drawShotDefault,
+  drawDroneShotDefault,
+};

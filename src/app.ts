@@ -352,6 +352,8 @@ terminal.print("");
 terminal.print("READY.", "SYS");
 const startPrompt: (next: string) => void = terminal.print(
   "PRESS ANY KEY TO START.",
+  undefined,
+  true,
 );
 let padPrompt: boolean = false;
 startPortal(app);

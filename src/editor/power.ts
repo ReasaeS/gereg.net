@@ -47,6 +47,7 @@ import { fieldHeight, fieldWidth, hudScale } from "../game/field";
 import { createPilot, type Pilot } from "../game/pilot";
 import { frameDelta } from "../effects/tween/tween";
 import { bombLook, resetLooks, saveLooks, type Look } from "../game/bomb";
+import { droneShotDrawing, shotDrawing } from "./drawings";
 
 type Power = {
   view: Container;
@@ -205,24 +206,30 @@ function createPower(
           changed();
         },
       ),
-      createColors(
-        "Main shot",
-        shotColors,
-        () => droneSettings().mainColor,
-        (value: string) => {
-          droneSettings().mainColor = value;
-          changed();
-        },
-      ),
-      createColors(
-        "Drone shot",
-        shotColors,
-        () => droneSettings().shotColor,
-        (value: string) => {
-          droneSettings().shotColor = value;
-          changed();
-        },
-      ),
+      {
+        ...createColors(
+          "Main shot",
+          shotColors,
+          () => droneSettings().mainColor,
+          (value: string) => {
+            droneSettings().mainColor = value;
+            changed();
+          },
+        ),
+        shown: () => !shotDrawing().custom,
+      },
+      {
+        ...createColors(
+          "Drone shot",
+          shotColors,
+          () => droneSettings().shotColor,
+          (value: string) => {
+            droneSettings().shotColor = value;
+            changed();
+          },
+        ),
+        shown: () => !droneShotDrawing().custom,
+      },
     ]),
     ...section("Bomb", [
       createColors(
