@@ -59,6 +59,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Shift", "Focus and show your hitbox"],
       ["Esc", "Pause"],
       ["R", "Retry from the results screen"],
+      ["F", "Favourite a custom entry"],
       ["/  or  Ctrl + F", "Search a stage list"],
       ["F7", "Mute or unmute"],
       ["F8", "Save a screenshot"],

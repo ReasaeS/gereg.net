@@ -1,5 +1,6 @@
 import type { Container, Texture } from "pixi.js";
 import { createPreview, type Preview } from "../create/preview/preview";
+import { onDim } from "../settings/settings";
 import { loadCreations, usedSprites } from "../create/storage";
 import { loadTexture } from "../create/images";
 import { minPower } from "./drones";
@@ -88,6 +89,7 @@ type Custom = {
   watch: () => Promise<Leg | null>;
   takeLeg: () => Leg | null;
   stop: () => void;
+  toggleFavourite: (index: number) => number;
   update: (delta: number, controls: Controls) => void;
   outcome: () => Outcome | null;
   score: () => number;
@@ -99,6 +101,27 @@ type Custom = {
 };
 
 const startLives: number = 2;
+const favouriteStorageKey: string = "geregnet.favourites";
+
+function loadFavourites(): Set<string> {
+  try {
+    const saved: unknown = JSON.parse(
+      localStorage.getItem(favouriteStorageKey) ?? "[]",
+    );
+
+    return new Set(
+      Array.isArray(saved)
+        ? saved.filter((key: unknown): key is string => typeof key === "string")
+        : new Array<string>(),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function entryKey(entry: Entry): string {
+  return entry.kind + ":" + entry.id;
+}
 const outroTime: number = 1.5; // s
 
 function byId<T extends { id: string }>(
@@ -130,6 +153,7 @@ async function createCustom(
 ): Promise<Custom> {
   let creations: Creations = loadCreations();
   let entries: Array<Entry> = new Array();
+  const favourites: Set<string> = loadFavourites();
   let plan: Plan | null = null;
   let leg: number = 0;
   let outro: number = 0;
@@ -157,6 +181,7 @@ async function createCustom(
   );
 
   preview.view.visible = false;
+  onDim(preview.setDim);
 
   function gameDifficulties(game: GameCard): Array<Rarity<Difficulty>> {
     return difficulties.filter((entry: Rarity<Difficulty>) => {
@@ -180,54 +205,94 @@ async function createCustom(
         id: stage.id,
       })),
     ];
+    entries.sort(
+      (first: Entry, second: Entry) =>
+        Number(favourites.has(entryKey(second))) -
+        Number(favourites.has(entryKey(first))),
+    );
 
     if (entries.length === 0) {
       return [{ name: "No stages yet", title: "Build one in the create menu" }];
     }
 
-    return entries.map((entry: Entry) => {
-      if (entry.kind === "game") {
-        const game: GameCard = byId(creations.games, entry.id)!;
+    return entries.map((entry: Entry): Choice => {
+      const choice: Choice = describe(entry);
 
-        return {
-          name: game.name,
-          title:
-            "Game  " +
-            gameDifficulties(game).length +
-            (gameDifficulties(game).length === 1
-              ? " difficulty"
-              : " difficulties"),
-        };
-      }
+      return favourites.has(entryKey(entry))
+        ? { ...choice, title: "Favourite  " + choice.title, starred: true }
+        : choice;
+    });
+  }
 
-      if (entry.kind === "run") {
-        const run: RunCard = byId(creations.runs, entry.id)!;
-        const stages: Array<Stage> = runStages(creations, run);
+  function toggleFavourite(index: number): number {
+    const entry: Entry | undefined = entries[index];
 
-        return {
-          name: run.name,
-          title:
-            "Run  " +
-            rarityOf(difficulties, run.difficulty).label +
-            "  " +
-            plural(stages.length, "stage") +
-            "  " +
-            formatLength(packLength(stages)) +
-            bestText(run.id),
-        };
-      }
+    if (entry === undefined) {
+      return index;
+    }
 
-      const stage: Stage = byId(creations.stages, entry.id)!;
+    const key: string = entryKey(entry);
+
+    if (!favourites.delete(key)) {
+      favourites.add(key);
+    }
+
+    try {
+      localStorage.setItem(
+        favouriteStorageKey,
+        JSON.stringify([...favourites]),
+      );
+    } catch {
+      console.warn("Could not save the favourites");
+    }
+
+    choices();
+
+    return entries.findIndex((other: Entry) => entryKey(other) === key);
+  }
+
+  function describe(entry: Entry): Choice {
+    if (entry.kind === "game") {
+      const game: GameCard = byId(creations.games, entry.id)!;
 
       return {
-        name: stage.name,
+        name: game.name,
         title:
-          rarityOf(difficulties, stage.difficulty).label +
-          "  " +
-          formatLength(stage.length) +
-          bestText(stage.id),
+          "Game  " +
+          gameDifficulties(game).length +
+          (gameDifficulties(game).length === 1
+            ? " difficulty"
+            : " difficulties"),
       };
-    });
+    }
+
+    if (entry.kind === "run") {
+      const run: RunCard = byId(creations.runs, entry.id)!;
+      const stages: Array<Stage> = runStages(creations, run);
+
+      return {
+        name: run.name,
+        title:
+          "Run  " +
+          rarityOf(difficulties, run.difficulty).label +
+          "  " +
+          plural(stages.length, "stage") +
+          "  " +
+          formatLength(packLength(stages)) +
+          bestText(run.id),
+      };
+    }
+
+    const stage: Stage = byId(creations.stages, entry.id)!;
+
+    return {
+      name: stage.name,
+      title:
+        rarityOf(difficulties, stage.difficulty).label +
+        "  " +
+        formatLength(stage.length) +
+        bestText(stage.id),
+    };
   }
 
   function gameOf(index: number): GameCard | null {
@@ -605,6 +670,7 @@ async function createCustom(
     continues: () => continues,
     tally: tally,
     stop: stop,
+    toggleFavourite: toggleFavourite,
     update: update,
     outcome: outcome,
     score: () => carriedScore + preview.score(),

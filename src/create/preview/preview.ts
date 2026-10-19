@@ -66,6 +66,7 @@ type Preview = {
   grazes: () => number;
   setLoop: (loop: boolean) => void;
   setPower: (value: number) => void;
+  setDim: (amount: number) => void;
   power: () => number;
   themes: () => Array<string>;
   setAutopilot: (on: boolean) => void;
@@ -81,6 +82,7 @@ type Arrival = {
 };
 
 const emitterX: number = previewWidth / 2; // units
+const maxDim: number = 0.8;
 const emitterY: number = 140; // units
 const playerX: number = previewWidth / 2; // units
 const playerY: number = 400; // units
@@ -148,6 +150,7 @@ async function createPreview(
   const player: Sprite = pilot.player;
   const hitbox: Graphics = pilot.hitbox;
   const sigil: Graphics = new Graphics();
+  const dim: Graphics = new Graphics();
   const input: Vector = { x: 0, y: 0 };
   const mask: Graphics = new Graphics();
   const bullets: Bullets = await createBullets(bulletLayer, coreLayer, player);
@@ -233,6 +236,7 @@ async function createPreview(
     base.view,
     cover.view,
     sigil,
+    dim,
     squad.shotLayer,
     player,
     squad.view,
@@ -699,9 +703,15 @@ async function createPreview(
 
   paintSky(base);
 
+  dim.rect(0, 0, previewWidth, previewHeight).fill("#000000");
+  dim.alpha = 0;
+
   return {
     view: view,
     overlay: overlay,
+    setDim: (amount: number) => {
+      dim.alpha = amount * maxDim;
+    },
     setBackground: (value: Background | null) => {
       base.background = value;
       paintSky(base);

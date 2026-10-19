@@ -394,6 +394,49 @@ function onHitbox(listener: CrtListener): void {
   hitboxListeners.push(listener);
 }
 
+const dimStorageKey: string = "geregnet.dim";
+const dimListeners: Array<RateListener> = new Array();
+let dim: number = loadDim();
+
+function loadDim(): number {
+  try {
+    const saved: number = Number(localStorage.getItem(dimStorageKey) ?? 0);
+
+    return Number.isFinite(saved) ? Math.min(Math.max(saved, 0), 1) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function getDim(): number {
+  return dim;
+}
+
+function setDim(value: number): void {
+  const next: number = Math.min(Math.max(value, 0), 1);
+
+  if (next === dim) {
+    return;
+  }
+
+  dim = next;
+
+  try {
+    localStorage.setItem(dimStorageKey, String(next));
+  } catch {
+    console.warn("Could not save the background dim");
+  }
+
+  for (const listener of dimListeners) {
+    listener(next);
+  }
+}
+
+function onDim(listener: RateListener): void {
+  dimListeners.push(listener);
+  listener(dim);
+}
+
 function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
@@ -427,5 +470,8 @@ export {
   getHitbox,
   setHitbox,
   onHitbox,
+  getDim,
+  setDim,
+  onDim,
 };
 export type { Channel, Tuning };

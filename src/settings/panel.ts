@@ -38,6 +38,7 @@ import {
   getResolution,
   getShake,
   getHitbox,
+  getDim,
   getTv,
   getTuning,
   getVolume,
@@ -46,6 +47,7 @@ import {
   onResolution,
   onShake,
   onHitbox,
+  onDim,
   onTv,
   onTuning,
   onVolume,
@@ -56,6 +58,7 @@ import {
   setResolution,
   setShake,
   setHitbox,
+  setDim,
   setTv,
   setTuning,
   setVolume,
@@ -483,6 +486,7 @@ function createSettings(app: Application): PageContent {
           setHitbox,
           hitboxButtons,
         ),
+        createSliderRow("background dim", getDim, setDim),
       ],
     },
     {
@@ -796,6 +800,7 @@ function createSettings(app: Application): PageContent {
   onCrt(refresh);
   onShake(refresh);
   onHitbox(refresh);
+  onDim(refresh);
   onTv(refresh);
   onTuning(refresh);
   onVolume(refresh);

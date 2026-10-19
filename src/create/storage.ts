@@ -148,7 +148,10 @@ function loadCreations(): Creations {
     const saved: string | null = localStorage.getItem(storageKey);
 
     if (saved === null) {
-      return defaultCreations();
+      const fresh: Creations = defaultCreations();
+
+      saveCreations(fresh);
+      return fresh;
     }
 
     const parsed: Creations = JSON.parse(saved) as Creations;

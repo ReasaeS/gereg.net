@@ -21,6 +21,7 @@ import { createGlide, mix, type Glide } from "../ui/motion";
 type Choice = {
   name: string;
   title: string;
+  starred?: boolean;
 };
 
 type Menu = {
@@ -42,6 +43,8 @@ type Selector = {
   setScale: (scale: number) => void;
   onChoose: (listener: (index: number) => void) => void;
   onSelect: (listener: (index: number) => void) => void;
+  chosenIndex: () => number;
+  reload: (index: number) => void;
 };
 
 type Entry = {
@@ -79,6 +82,10 @@ const subtitleSize: number = 12; // px
 const subtitleColor: string = "#9fd8ff";
 const highlightSmoothing: number = 0.08; // s
 const selectShift: number = 4; // units
+const starRadius: number = 9; // units
+const starInner: number = 0.45;
+const starPoints: number = 5;
+const starSpace: number = 23; // units
 const downDuration: number = 700; // ms
 const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
@@ -247,6 +254,14 @@ function createSelector(ticker: Ticker): Selector {
     for (const listener of selectListeners) {
       listener(shown[selected] ?? -1);
     }
+  }
+
+  function reload(index: number): void {
+    rebuild();
+    selected = Math.max(shown.indexOf(index), 0);
+    reveal();
+    paint();
+    announce();
   }
 
   function choose(): void {
@@ -432,13 +447,30 @@ function createSelector(ticker: Ticker): Selector {
     const name: Text = createText(nameSize, "#ffffff");
     const title: Text = createText(subtitleSize, "#ffffff");
     const top: number = entryY(index);
+    const left: number = entryInset + entrySlant + 6;
+    const nameX: number = left + (choice.starred === true ? starSpace : 0);
+    const star: Graphics = new Graphics();
+
+    if (choice.starred === true) {
+      const points: Array<number> = new Array();
+
+      for (let point = 0; point < starPoints * 2; point++) {
+        const angle: number = (point / (starPoints * 2)) * Math.PI * 2;
+        const reach: number = starRadius * (point % 2 === 0 ? 1 : starInner);
+
+        points.push(Math.sin(angle) * reach, -Math.cos(angle) * reach);
+      }
+
+      star.poly(points).fill(getTheme().accent);
+      star.position.set(left + starRadius, top + 4 + nameSize / 2 + 1);
+    }
 
     name.text = choice.name.toUpperCase();
-    name.position.set(entryInset + entrySlant + 6, top + 4);
+    name.position.set(nameX, top + 4);
     title.text = choice.title;
     title.style.fill = subtitleColor;
     title.position.set(entryInset + entrySlant + 6, top + 4 + nameSize + 1);
-    entry.addChild(name, title);
+    entry.addChild(star, name, title);
     entry.eventMode = "static";
     entry.cursor = "pointer";
     entry.hitArea = new Rectangle(
@@ -466,10 +498,15 @@ function createSelector(ticker: Ticker): Selector {
       name: name,
       title: title,
       lit: createGlide(0, (amount: number) => {
+        if (entry.destroyed) {
+          return;
+        }
+
         name.tint = mix(0xffffff, getTheme().menuSelected, amount);
         title.tint = mix(0xffffff, getTheme().menuSelected, amount);
-        name.x = entryInset + entrySlant + 6 + amount * selectShift;
-        title.x = name.x;
+        name.x = nameX + amount * selectShift;
+        title.x = left + amount * selectShift;
+        star.x = left + starRadius + amount * selectShift;
       }),
     });
     texts.push(name, title);
@@ -675,6 +712,8 @@ function createSelector(ticker: Ticker): Selector {
       place();
     },
     setActive: setActive,
+    chosenIndex: () => shown[selected] ?? -1,
+    reload: reload,
     setScale: setScale,
     onChoose: (listener: (index: number) => void) => {
       listeners.push(listener);

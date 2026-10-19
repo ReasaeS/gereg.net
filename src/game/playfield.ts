@@ -79,6 +79,8 @@ const watchSpeeds: Array<number> = [1, 2, 4];
 const titleTime: number = 2200; // ms
 const attractDelay: number = 350; // ms
 const emptyTime: number = 2200; // ms
+const favouriteTime: number = 1200; // ms
+const previewDetail: string = "ENTER TO PLAY  ·  F TO FAVOURITE";
 const modesMenu: Menu = {
   heading: "PLAY",
   remember: true,
@@ -154,6 +156,7 @@ async function createPlayfield(
   let watchSpeed: number = 1;
   let badge: string = "NORMAL";
   let attractToken: number = 0;
+  let favouriteToken: number = 0;
   const customMenu: Menu = {
     heading: "CUSTOM",
     choices: new Array(),
@@ -265,6 +268,50 @@ async function createPlayfield(
       retryResults();
       event.preventDefault();
     }
+  });
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (
+      !view.visible ||
+      rolling ||
+      active ||
+      menu !== customMenu ||
+      results.shown() ||
+      custom.count() === 0 ||
+      event.code !== "KeyF" ||
+      event.repeat ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    const index: number = custom.toggleFavourite(selector.chosenIndex());
+
+    const owner: number = ++favouriteToken;
+
+    customMenu.choices = custom.choices();
+    selector.reload(index);
+    banner.show(
+      customMenu.choices[index]?.starred === true
+        ? "ADDED TO FAVOURITES"
+        : "REMOVED FROM FAVOURITES",
+      "F TO TOGGLE",
+      false,
+    );
+    tween(app.ticker, favouriteTime, () => undefined).then(() => {
+      if (owner !== favouriteToken || menu !== customMenu || active) {
+        return;
+      }
+
+      if (attracting) {
+        banner.show("PREVIEW CONTENT", previewDetail, false);
+      } else {
+        banner.hide();
+      }
+    });
+    event.preventDefault();
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -394,7 +441,7 @@ async function createPlayfield(
       }
 
       if (!attracting) {
-        banner.show("PREVIEW CONTENT", "ENTER TO PLAY", false);
+        banner.show("PREVIEW CONTENT", previewDetail, false);
       }
 
       attracting = true;
