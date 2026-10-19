@@ -393,6 +393,10 @@ async function createPlayfield(
         return;
       }
 
+      if (!attracting) {
+        banner.show("PREVIEW CONTENT", "ENTER TO PLAY", false);
+      }
+
       attracting = true;
       setPilotShown(false);
       dress(leg);
@@ -410,6 +414,7 @@ async function createPlayfield(
 
     if (attracting) {
       attracting = false;
+      banner.hide();
       setPilotShown(true);
       hud.setLook(null, null);
       hud.setBadge("NORMAL");
