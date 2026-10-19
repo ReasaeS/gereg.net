@@ -29,6 +29,7 @@ import {
   saveDrones,
 } from "../game/drones";
 import {
+  bindingName,
   bombKeys,
   createKeyboard,
   focusKeys,
@@ -348,6 +349,14 @@ function createPower(
 
   function setActive(value: boolean): void {
     active = value;
+    hint.text =
+      "ARROWS  MOVE   ·   " +
+      bindingName("focus") +
+      "  FOCUS   ·   " +
+      bindingName("shot") +
+      "  SHOOT   ·   " +
+      bindingName("bomb") +
+      "  BOMB";
     keyboard.clear();
 
     if (value) {
@@ -364,7 +373,6 @@ function createPower(
   pilot.bomb.setStock(Infinity);
   field.addChild(back, ...pilot.layers(), mask, frame);
   field.mask = mask;
-  hint.text = "ARROWS  MOVE   ·   SHIFT  FOCUS   ·   Z  SHOOT   ·   X  BOMB";
   hint.anchor.set(0.5, 0);
   reset.view.position.set(
     rowWidth - resetWidth,

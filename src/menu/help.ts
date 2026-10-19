@@ -7,8 +7,29 @@ import {
   screenResolution,
   sharpen,
 } from "../ui/text";
+import { bindingName } from "../game/input";
 
 type Topic = "menu" | "play" | "customise" | "gallery" | "editor" | "config";
+
+function playRows(): Array<[string, string]> {
+  const names: Array<string> = [
+    bindingName("up"),
+    bindingName("left"),
+    bindingName("down"),
+    bindingName("right"),
+  ];
+  const move: string = names.join(
+    names.every((name: string) => name.length === 1) ? "" : " ",
+  );
+
+  return [
+    ["Arrows / " + move, "Move"],
+    [bindingName("shot"), "Shoot"],
+    [bindingName("bomb"), "Bomb"],
+    [bindingName("focus"), "Focus and show your hitbox"],
+    ...topics.get("play")!.slice(4),
+  ];
+}
 
 type Help = {
   view: Container;
@@ -24,26 +45,32 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Enter / Space", "Choose"],
       ["Esc", "Back to the title"],
       ["Alt + R", "Reset everything"],
+      ["F8", "Save a screenshot"],
     ],
   ],
   [
     "play",
     [
-      ["Arrows / WASD", "Move"],
+      ["Arrows", "Move"],
       ["Z", "Shoot"],
       ["X", "Bomb"],
       ["Shift", "Focus and show your hitbox"],
       ["Esc", "Pause"],
       ["/  or  Ctrl + F", "Search a stage list"],
+      ["F8", "Save a screenshot"],
     ],
   ],
   [
     "customise",
     [
       ["B / E / F / I", "Pencil, eraser, fill, picker"],
+      ["L / R / O", "Line, rectangle, oval"],
+      ["H", "Flip drawing"],
+      ["Arrows", "Nudge drawing"],
+      ["Drop an image", "Import it into the drawing"],
       ["M", "Mirror drawing"],
       ["G", "Toggle grid"],
-      ["1 - 9", "Switch drawing"],
+      ["1 - 6", "Switch drawing"],
       ["Ctrl + Z", "Undo"],
       ["Ctrl + Y", "Redo"],
       ["Esc", "Back"],
@@ -131,7 +158,8 @@ function createHelp(app: Application): Help {
   }
 
   function build(topic: Topic): void {
-    const rows: Array<[string, string]> = topics.get(topic)!;
+    const rows: Array<[string, string]> =
+      topic === "play" ? playRows() : topics.get(topic)!;
     const keys: Array<Text> = new Array();
     const actions: Array<Text> = new Array();
 

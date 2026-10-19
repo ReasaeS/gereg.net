@@ -17,7 +17,19 @@ import {
   type Button,
 } from "../ui/button";
 import { createText } from "../ui/text";
-import { downKeys, leftKeys, rightKeys, upKeys } from "../game/input";
+import {
+  bindingList,
+  bindingName,
+  bindingNames,
+  downKeys,
+  leftKeys,
+  onBindings,
+  resetBindings,
+  rightKeys,
+  setBinding,
+  upKeys,
+  type Binding,
+} from "../game/input";
 import { createGlide, type Glide } from "../ui/motion";
 import {
   channels,
@@ -89,6 +101,7 @@ const listTop: number = 0.3; // of screen height
 const listBottom: number = 0.9; // of screen height
 const scrollSmoothing: number = 0.1; // s
 const rateButtonWidth: number = 88; // px
+const keyButtonWidth: number = 220; // px
 const toggleStates: Array<boolean> = [true, false];
 const channelNames: Map<Channel, string> = new Map([
   ["master", "master volume"],
@@ -212,6 +225,57 @@ function createChoiceRow(
   };
 }
 
+function createBindingRow(
+  binding: Binding,
+  listening: () => Binding | null,
+  listen: (binding: Binding) => void,
+  buttons: Array<Button>,
+): Row {
+  const [view, label] = createRow(bindingNames.get(binding)!);
+  const button: Button = createButton(
+    bindingName(binding),
+    () => listening() === binding,
+    () => listen(binding),
+    keyButtonWidth,
+  );
+
+  button.view.position.set(labelWidth, 0);
+  buttons.push(button);
+  view.addChild(button.view);
+
+  return {
+    view: view,
+    label: label,
+    adjust: () => listen(binding),
+    refresh: () => {
+      button.label.text =
+        listening() === binding ? "PRESS A KEY" : bindingName(binding);
+      paintButton(button);
+    },
+  };
+}
+
+function createActionRow(
+  name: string,
+  title: string,
+  action: () => void,
+  buttons: Array<Button>,
+): Row {
+  const [view, label] = createRow(name);
+  const button: Button = createButton(title, () => false, action);
+
+  button.view.position.set(labelWidth, 0);
+  buttons.push(button);
+  view.addChild(button.view);
+
+  return {
+    view: view,
+    label: label,
+    adjust: action,
+    refresh: () => paintButton(button),
+  };
+}
+
 function createSliderRow(
   name: string,
   get: () => number,
@@ -320,6 +384,13 @@ function createSettings(app: Application): PageContent {
   const rateButtons: Array<Button> = new Array();
   const resolutionButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
+  const keyButtons: Array<Button> = new Array();
+  let listening: Binding | null = null;
+
+  function listen(binding: Binding): void {
+    listening = listening === binding ? null : binding;
+    refresh();
+  }
   const scroll: Spring = { value: 0, velocity: 0 };
   const categories: Array<Category> = [
     {
@@ -402,6 +473,23 @@ function createSettings(app: Application): PageContent {
       name: "gameplay",
       rows: [
         createToggleRow("shake & rumble", getShake, setShake, shakeButtons),
+      ],
+    },
+    {
+      name: "controls",
+      rows: [
+        ...bindingList.map((binding: Binding) =>
+          createBindingRow(binding, () => listening, listen, keyButtons),
+        ),
+        createActionRow(
+          "reset controls",
+          "reset",
+          () => {
+            listening = null;
+            resetBindings();
+          },
+          keyButtons,
+        ),
       ],
     },
     {
@@ -645,6 +733,22 @@ function createSettings(app: Application): PageContent {
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (!active || listening === null) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (event.code !== "Escape" && !setBinding(listening, event.code)) {
+      return;
+    }
+
+    listening = null;
+    refresh();
+  });
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (!active || event.altKey) {
       return;
     }
@@ -674,9 +778,11 @@ function createSettings(app: Application): PageContent {
 
   function setActive(value: boolean): void {
     active = value;
+    listening = null;
     view.eventMode = value ? "passive" : "none";
   }
 
+  onBindings(refresh);
   onCrt(refresh);
   onShake(refresh);
   onTv(refresh);

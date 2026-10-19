@@ -45,6 +45,7 @@ import {
   bombKeys,
   createKeyboard,
   focusKeys,
+  bindingName,
   shotKeys,
   steering,
   type Keyboard,
@@ -66,6 +67,7 @@ const enterEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const leaveDuration: number = 250; // ms
 const rollLead: number = 200; // ms
 const resultsDelay: number = 700; // ms
+const watchSpeeds: Array<number> = [1, 2, 4];
 const titleTime: number = 2200; // ms
 const attractDelay: number = 350; // ms
 const emptyTime: number = 2200; // ms
@@ -138,6 +140,8 @@ async function createPlayfield(
   let resultsReady: boolean = false;
   let attracting: boolean = false;
   let watching: boolean = false;
+  let watchSpeed: number = 1;
+  let badge: string = "NORMAL";
   let attractToken: number = 0;
   const customMenu: Menu = {
     heading: "CUSTOM",
@@ -239,11 +243,29 @@ async function createPlayfield(
     if (
       view.visible &&
       results.shown() &&
-      ["Enter", "NumpadEnter", "Space", "KeyZ"].includes(event.code)
+      (["Enter", "NumpadEnter", "Space"].includes(event.code) ||
+        shotKeys.includes(event.code))
     ) {
       closeResults();
       event.preventDefault();
     }
+  });
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (
+      !view.visible ||
+      !watching ||
+      rolling ||
+      event.repeat ||
+      !shotKeys.includes(event.code)
+    ) {
+      return;
+    }
+
+    watchSpeed =
+      watchSpeeds[(watchSpeeds.indexOf(watchSpeed) + 1) % watchSpeeds.length]!;
+    showBadge();
+    event.preventDefault();
   });
 
   app.ticker.add((ticker: Ticker) => {
@@ -255,7 +277,9 @@ async function createPlayfield(
 
     if (!active) {
       if (attracting || watching) {
-        runClock(clock, frameDelta(ticker), stepShow);
+        for (let pass = 0; pass < (watching ? watchSpeed : 1); pass++) {
+          runClock(clock, frameDelta(ticker), stepShow);
+        }
       }
 
       return;
@@ -395,9 +419,11 @@ async function createPlayfield(
 
       reset();
       watching = true;
+      watchSpeed = 1;
       setPilotShown(false);
       dress(leg);
-      hud.setBadge("WATCH");
+      badge = "WATCH";
+      showBadge();
       hud.refresh();
       selector.rollUp().then(() => {
         rolling = false;
@@ -412,6 +438,7 @@ async function createPlayfield(
     }
 
     watching = false;
+    watchSpeed = 1;
     custom.stop();
     setPilotShown(true);
     hud.setLook(null, null);
@@ -518,7 +545,11 @@ async function createPlayfield(
     banner.show(
       leg.stage.name.toUpperCase(),
       watching
-        ? "WATCH  ·  " + leg.difficulty.toUpperCase() + "  ·  ESC TO EXIT"
+        ? "WATCH  ·  " +
+            leg.difficulty.toUpperCase() +
+            "  ·  " +
+            bindingName("shot") +
+            " TO SPEED UP  ·  ESC TO EXIT"
         : (plan?.practice === true ? "PRACTICE  ·  " : "") +
             (leg.total > 1 || plan?.practice === true
               ? (plan?.name.toUpperCase() ?? "") +
@@ -538,7 +569,12 @@ async function createPlayfield(
 
   function dress(leg: Leg): void {
     hud.setLook(leg.wallpaper, leg.palette);
-    hud.setBadge(leg.difficulty);
+    badge = leg.difficulty;
+    showBadge();
+  }
+
+  function showBadge(): void {
+    hud.setBadge(watching && watchSpeed > 1 ? watchSpeed + "X SPEED" : badge);
   }
 
   function nextStage(): void {

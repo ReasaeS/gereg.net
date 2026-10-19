@@ -76,6 +76,97 @@ function drawLine(
   }
 }
 
+function drawRect(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  plot: (x: number, y: number) => void,
+): void {
+  const left: number = Math.min(fromX, toX);
+  const right: number = Math.max(fromX, toX);
+  const top: number = Math.min(fromY, toY);
+  const bottom: number = Math.max(fromY, toY);
+
+  for (let x = left; x <= right; x++) {
+    plot(x, top);
+    plot(x, bottom);
+  }
+
+  for (let y = top; y <= bottom; y++) {
+    plot(left, y);
+    plot(right, y);
+  }
+}
+
+function drawOval(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  plot: (x: number, y: number) => void,
+): void {
+  const left: number = Math.min(fromX, toX);
+  const right: number = Math.max(fromX, toX);
+  const top: number = Math.min(fromY, toY);
+  const bottom: number = Math.max(fromY, toY);
+  const centerX: number = (left + right) / 2;
+  const centerY: number = (top + bottom) / 2;
+  const radiusX: number = (right - left) / 2;
+  const radiusY: number = (bottom - top) / 2;
+
+  if (radiusX === 0 || radiusY === 0) {
+    drawRect(left, top, right, bottom, plot);
+    return;
+  }
+
+  for (let x = left; x <= right; x++) {
+    const reach: number =
+      radiusY * Math.sqrt(Math.max(1 - ((x - centerX) / radiusX) ** 2, 0));
+
+    plot(x, Math.round(centerY - reach));
+    plot(x, Math.round(centerY + reach));
+  }
+
+  for (let y = top; y <= bottom; y++) {
+    const reach: number =
+      radiusX * Math.sqrt(Math.max(1 - ((y - centerY) / radiusY) ** 2, 0));
+
+    plot(Math.round(centerX - reach), y);
+    plot(Math.round(centerX + reach), y);
+  }
+}
+
+function flipPixels(pixels: Pixels): void {
+  const source: Uint8Array = pixels.data.slice();
+
+  for (let y = 0; y < pixels.size; y++) {
+    for (let x = 0; x < pixels.size; x++) {
+      const from: number = (y * pixels.size + (pixels.size - 1 - x)) * 4;
+
+      pixels.data.set(
+        source.subarray(from, from + 4),
+        (y * pixels.size + x) * 4,
+      );
+    }
+  }
+}
+
+function shiftPixels(pixels: Pixels, shiftX: number, shiftY: number): void {
+  const source: Uint8Array = pixels.data.slice();
+  const size: number = pixels.size;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const fromX: number = (x - shiftX + size) % size;
+      const fromY: number = (y - shiftY + size) % size;
+      const from: number = (fromY * size + fromX) * 4;
+
+      pixels.data.set(source.subarray(from, from + 4), (y * size + x) * 4);
+    }
+  }
+}
+
 function floodFill(
   pixels: Pixels,
   startX: number,
@@ -222,6 +313,10 @@ export {
   getPixel,
   setPixel,
   drawLine,
+  drawRect,
+  drawOval,
+  flipPixels,
+  shiftPixels,
   floodFill,
   isEmpty,
   encodePixels,

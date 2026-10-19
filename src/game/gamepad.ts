@@ -1,5 +1,5 @@
 import type { Ticker } from "pixi.js";
-import { playing } from "./input";
+import { getBinding, onBindings, playing } from "./input";
 
 type Binding = {
   code: string;
@@ -21,13 +21,16 @@ const directionBindings: Array<Binding> = [
   upBinding,
   downBinding,
 ];
+const shotBinding: Binding = { code: "", key: "" };
+const bombBinding: Binding = { code: "", key: "" };
+const focusBinding: Binding = { code: "", key: "" };
 const playBindings: Array<[number, Binding]> = [
-  [0, { code: "KeyZ", key: "z" }],
-  [1, { code: "KeyX", key: "x" }],
-  [4, { code: "ShiftLeft", key: "Shift" }],
-  [5, { code: "ShiftLeft", key: "Shift" }],
-  [6, { code: "ShiftLeft", key: "Shift" }],
-  [7, { code: "ShiftLeft", key: "Shift" }],
+  [0, shotBinding],
+  [1, bombBinding],
+  [4, focusBinding],
+  [5, focusBinding],
+  [6, focusBinding],
+  [7, focusBinding],
   [8, { code: "Escape", key: "Escape" }],
   [9, { code: "Enter", key: "Enter" }],
 ];
@@ -40,6 +43,16 @@ const padUp: number = 12;
 const padDown: number = 13;
 const padLeft: number = 14;
 const padRight: number = 15;
+
+function bindPad(): void {
+  shotBinding.code = getBinding("shot");
+  bombBinding.code = getBinding("bomb");
+  focusBinding.code = getBinding("focus");
+
+  for (const binding of [shotBinding, bombBinding, focusBinding]) {
+    binding.key = binding.code;
+  }
+}
 
 function send(type: string, binding: Binding, repeat: boolean): void {
   window.dispatchEvent(
@@ -248,5 +261,8 @@ function keyFor(code: string): string {
 
   return binding?.key ?? code;
 }
+
+bindPad();
+onBindings(bindPad);
 
 export { startGamepad, rumble };

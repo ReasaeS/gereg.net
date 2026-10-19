@@ -1,5 +1,6 @@
 import { Container, Graphics, type Text } from "pixi.js";
 import { getTheme } from "../theme/theme";
+import { bindingName } from "./input";
 import { createGlide, type Glide } from "../ui/motion";
 import { createShadowText, createText, screenResolution } from "../ui/text";
 
@@ -127,6 +128,7 @@ function createResults(width: number, height: number): Results {
     rows: Array<[string, string]>,
     record: boolean,
   ): void {
+    hint.text = "PRESS " + bindingName("shot") + " OR ENTER TO CONTINUE";
     open = true;
     title.text = heading;
     best.text = record ? "NEW BEST" : "";
@@ -158,7 +160,6 @@ function createResults(width: number, height: number): Results {
   title.anchor.set(0.5);
   best.anchor.set(0.5);
   hint.anchor.set(0.5);
-  hint.text = "PRESS Z OR ENTER TO CONTINUE";
   content.position.set(width / 2, height / 2);
   content.addChild(panel, title, lines, best, hint);
   view.addChild(shade, content);

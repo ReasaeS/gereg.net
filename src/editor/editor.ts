@@ -14,6 +14,10 @@ import {
   getPixel,
   setPixel,
   drawLine,
+  drawRect,
+  drawOval,
+  flipPixels,
+  shiftPixels,
   floodFill,
   exportPixels,
   importPixels,
@@ -28,11 +32,12 @@ import {
 } from "./drawings";
 import { createPower, type Power } from "./power";
 import { createText } from "../ui/text";
+import { createDrop, type Drop } from "../create/maker/drop";
 import { createGlide, mix, type Glide } from "../ui/motion";
 import { getTheme } from "../theme/theme";
 import type { Topic } from "../menu/help";
 
-type Tool = "pencil" | "eraser" | "fill" | "picker";
+type Tool = "pencil" | "eraser" | "fill" | "picker" | "line" | "rect" | "oval";
 
 type Plate = {
   view: Container;
@@ -122,9 +127,17 @@ const previewScale: number = 3;
 const previewTop: number = 20; // px
 const transparent: number = 0;
 const statusSize: number = 20; // px
+const alphaCutoff: number = 128;
 const statusColor: string = "#cfeeff";
 const statusDuration: number = 2.5; // s
 const statusFade: number = 0.5; // s
+
+const nudges: Map<string, [number, number]> = new Map([
+  ["ArrowLeft", [-1, 0]],
+  ["ArrowRight", [1, 0]],
+  ["ArrowUp", [0, -1]],
+  ["ArrowDown", [0, 1]],
+]);
 
 const palette: Array<string> = [
   "#000000",
@@ -193,6 +206,50 @@ const fillIcon: Array<string> = [
   "......##.",
   ".........",
   ".........",
+];
+const lineIcon: Array<string> = [
+  "........#",
+  ".......#.",
+  "......#..",
+  ".....#...",
+  "....#....",
+  "...#.....",
+  "..#......",
+  ".#.......",
+  "#........",
+];
+const rectIcon: Array<string> = [
+  ".........",
+  "#########",
+  "#.......#",
+  "#.......#",
+  "#.......#",
+  "#.......#",
+  "#.......#",
+  "#########",
+  ".........",
+];
+const ovalIcon: Array<string> = [
+  "...###...",
+  ".##...##.",
+  ".#.....#.",
+  "#.......#",
+  "#.......#",
+  "#.......#",
+  ".#.....#.",
+  ".##...##.",
+  "...###...",
+];
+const flipIcon: Array<string> = [
+  "....#....",
+  "..#.#.#..",
+  ".##.#.##.",
+  "###.#.###",
+  ".##.#.##.",
+  "..#.#.#..",
+  "....#....",
+  "....#....",
+  "....#....",
 ];
 const pickIcon: Array<string> = [
   "......##.",
@@ -474,6 +531,11 @@ function createEditor(app: Application): Editor {
   const local: Point = new Point();
   const status: Text = createText(statusSize, statusColor);
   let statusTime: number = 0;
+  const drop: Drop = createDrop(
+    app,
+    () => (active && !powering ? "DROP TO IMPORT" : null),
+    (file: File | undefined) => void importImage(file),
+  );
   const tiles: Array<Plate> = new Array();
   const cartridges: Array<Plate> = new Array();
   let tool: Tool = "pencil";
@@ -485,6 +547,7 @@ function createEditor(app: Application): Editor {
   let erasing: boolean = false;
   let lastX: number = 0;
   let lastY: number = 0;
+  let shapeBase: Uint8Array | null = null;
   let cell: number = 1;
   let swatchSize: number = swatchMaxSize;
   let powering: boolean = false;
@@ -628,6 +691,65 @@ function createEditor(app: Application): Editor {
       .then(importText, () => tell("Press Ctrl+V to paste a sprite"));
   }
 
+  async function importImage(file: File | undefined): Promise<void> {
+    if (!active || powering || file === undefined) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      tell("That is not an image");
+      return;
+    }
+
+    try {
+      const image: ImageBitmap = await createImageBitmap(file);
+      const scratch: HTMLCanvasElement = document.createElement("canvas");
+      const context: CanvasRenderingContext2D = scratch.getContext("2d")!;
+      const scale: number = Math.min(
+        spriteSize / image.width,
+        spriteSize / image.height,
+      );
+      const width: number = Math.max(Math.round(image.width * scale), 1);
+      const height: number = Math.max(Math.round(image.height * scale), 1);
+
+      scratch.width = spriteSize;
+      scratch.height = spriteSize;
+      context.imageSmoothingEnabled = false;
+      context.drawImage(
+        image,
+        Math.floor((spriteSize - width) / 2),
+        Math.floor((spriteSize - height) / 2),
+        width,
+        height,
+      );
+      image.close();
+
+      const pixels: Uint8ClampedArray = context.getImageData(
+        0,
+        0,
+        spriteSize,
+        spriteSize,
+      ).data;
+
+      remember();
+
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        const solid: boolean = pixels[offset + 3]! >= alphaCutoff;
+
+        drawing.pixels.data[offset] = solid ? pixels[offset]! : 0;
+        drawing.pixels.data[offset + 1] = solid ? pixels[offset + 1]! : 0;
+        drawing.pixels.data[offset + 2] = solid ? pixels[offset + 2]! : 0;
+        drawing.pixels.data[offset + 3] = solid ? 255 : 0;
+      }
+
+      refresh();
+      save();
+      tell("Image imported");
+    } catch {
+      tell("Could not read that image");
+    }
+  }
+
   function reset(): void {
     remember();
     drawing.drawDefault(drawing.pixels);
@@ -692,8 +814,50 @@ function createEditor(app: Application): Editor {
     stroking = true;
     lastX = x;
     lastY = y;
+
+    if (shaping()) {
+      shapeBase = drawing.pixels.data.slice();
+    }
+
     plot(x, y);
     refresh();
+  }
+
+  function shaping(): boolean {
+    return tool === "line" || tool === "rect" || tool === "oval";
+  }
+
+  function drawShape(x: number, y: number): void {
+    const toX: number = Math.min(Math.max(x, 0), spriteSize - 1);
+    const toY: number = Math.min(Math.max(y, 0), spriteSize - 1);
+
+    if (shapeBase === null) {
+      return;
+    }
+
+    drawing.pixels.data.set(shapeBase);
+
+    if (tool === "line") {
+      drawLine(drawing.pixels, lastX, lastY, toX, toY, plot);
+    } else if (tool === "rect") {
+      drawRect(lastX, lastY, toX, toY, plot);
+    } else {
+      drawOval(lastX, lastY, toX, toY, plot);
+    }
+  }
+
+  function flip(): void {
+    remember();
+    flipPixels(drawing.pixels);
+    refresh();
+    save();
+  }
+
+  function nudge(shiftX: number, shiftY: number): void {
+    remember();
+    shiftPixels(drawing.pixels, shiftX, shiftY);
+    refresh();
+    save();
   }
 
   function move(event: FederatedPointerEvent): void {
@@ -702,6 +866,12 @@ function createEditor(app: Application): Editor {
     drawHover(x, y);
 
     if (!stroking) {
+      return;
+    }
+
+    if (shaping()) {
+      drawShape(x, y);
+      refresh();
       return;
     }
 
@@ -717,6 +887,7 @@ function createEditor(app: Application): Editor {
     }
 
     stroking = false;
+    shapeBase = null;
     save();
   }
 
@@ -1071,6 +1242,7 @@ function createEditor(app: Application): Editor {
     titleFade.snap(titleFade.value());
     hint.position.set(right, slots.y + slotSize / 2);
     status.position.set(board.x + boardSize / 2, bottom + statusGap);
+    drop.layout();
     power.layout(tools.x, board.y, right - benchPadding - tools.x, boardSize);
     refresh();
   }
@@ -1118,6 +1290,7 @@ function createEditor(app: Application): Editor {
       actions.find(
         (value: Action) =>
           value.icon !== mirrorIcon &&
+          value.icon !== flipIcon &&
           value.icon !== gridIcon &&
           value.active(),
       ) ?? actions[0]!
@@ -1152,6 +1325,34 @@ function createEditor(app: Application): Editor {
       icon: pickIcon,
       active: () => tool === "picker",
       run: () => selectTool("picker"),
+    },
+    {
+      name: "line",
+      key: "L",
+      icon: lineIcon,
+      active: () => tool === "line",
+      run: () => selectTool("line"),
+    },
+    {
+      name: "rectangle",
+      key: "R",
+      icon: rectIcon,
+      active: () => tool === "rect",
+      run: () => selectTool("rect"),
+    },
+    {
+      name: "oval",
+      key: "O",
+      icon: ovalIcon,
+      active: () => tool === "oval",
+      run: () => selectTool("oval"),
+    },
+    {
+      name: "flip",
+      key: "H",
+      icon: flipIcon,
+      active: () => false,
+      run: flip,
     },
     {
       name: "mirror",
@@ -1326,6 +1527,7 @@ function createEditor(app: Application): Editor {
     preview,
     status,
     power.view,
+    drop.view,
   );
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
@@ -1340,6 +1542,7 @@ function createEditor(app: Application): Editor {
   });
 
   app.ticker.add((ticker: Ticker) => {
+    drop.update(ticker.deltaMS / 1000);
     statusTime = Math.max(statusTime - ticker.deltaMS / 1000, 0);
     status.alpha = Math.min(statusTime / statusFade, 1);
   });
@@ -1398,6 +1601,18 @@ function createEditor(app: Application): Editor {
       selectTool("fill");
     } else if (event.code === "KeyI") {
       selectTool("picker");
+    } else if (event.code === "KeyL") {
+      selectTool("line");
+    } else if (event.code === "KeyR") {
+      selectTool("rect");
+    } else if (event.code === "KeyO") {
+      selectTool("oval");
+    } else if (event.code === "KeyH") {
+      flip();
+    } else if (nudges.has(event.code)) {
+      const [shiftX, shiftY] = nudges.get(event.code)!;
+
+      nudge(shiftX, shiftY);
     } else if (event.code === "KeyM") {
       mirror = !mirror;
       refresh();
@@ -1417,6 +1632,10 @@ function createEditor(app: Application): Editor {
     view.eventMode = value ? "passive" : "none";
     stroking = false;
     clearHover();
+
+    if (!value) {
+      drop.hide();
+    }
   }
 
   function enter(): void {

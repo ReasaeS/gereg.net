@@ -14,7 +14,7 @@ import {
   type Spring,
 } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
-import { downKeys, upKeys } from "./input";
+import { downKeys, shotKeys, upKeys } from "./input";
 import { createText, screenResolution } from "../ui/text";
 import { createGlide, mix, type Glide } from "../ui/motion";
 
@@ -82,7 +82,7 @@ const selectShift: number = 4; // units
 const downDuration: number = 700; // ms
 const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
-const chooseKeys: Array<string> = ["Enter", "Space", "KeyZ"];
+const chooseKeys: Array<string> = ["Enter", "Space"];
 const visibleRows: number = 8;
 const arrowSize: number = 5; // units
 const arrowGap: number = 6; // units
@@ -617,7 +617,10 @@ function createSelector(ticker: Ticker): Selector {
       select(selected - 1);
     } else if (downKeys.includes(event.code)) {
       select(selected + 1);
-    } else if (chooseKeys.includes(event.code)) {
+    } else if (
+      chooseKeys.includes(event.code) ||
+      shotKeys.includes(event.code)
+    ) {
       choose();
     } else {
       return;

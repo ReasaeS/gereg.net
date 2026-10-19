@@ -82,6 +82,7 @@ import { getResolution, onResolution } from "./settings/settings";
 import { startGamepad } from "./game/gamepad";
 import { createCredits, type Credits } from "./menu/credits";
 import { createHelp, type Help, type Topic } from "./menu/help";
+import { createToast, type Toast } from "./ui/toast";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -93,6 +94,8 @@ const diveDuration: number = 850; // ms
 const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
 const diveFlip: number = -Math.PI; // rad
 const transitionLead: number = 200; // ms
+const screenshotKey: string = "F8";
+const revokeDelay: number = 1000; // ms
 const terminalColor: string = "#000000";
 const beamRetractTime: number = 500; // ms
 const visitorNumber: number = 1;
@@ -466,8 +469,43 @@ function play(): void {
 }
 
 const help: Help = createHelp(app);
+const toast: Toast = createToast(app);
 
-screenLayer.addChild(help.view);
+screenLayer.addChild(help.view, toast.view);
+
+function takeScreenshot(): void {
+  const capture: HTMLCanvasElement = app.renderer.extract.canvas(
+    app.stage,
+  ) as HTMLCanvasElement;
+  const stamp: string = new Date()
+    .toISOString()
+    .slice(0, 19)
+    .replace(/[:T]/g, "-");
+
+  capture.toBlob((blob: Blob | null) => {
+    if (blob === null) {
+      toast.show("Could not take a screenshot");
+      return;
+    }
+
+    const link: HTMLAnchorElement = document.createElement("a");
+
+    link.href = URL.createObjectURL(blob);
+    link.download = "geregnet-" + stamp + ".png";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), revokeDelay);
+    toast.show("Screenshot saved");
+  }, "image/png");
+}
+
+window.addEventListener("keydown", (event: KeyboardEvent) => {
+  if (event.code !== screenshotKey || event.repeat) {
+    return;
+  }
+
+  event.preventDefault();
+  takeScreenshot();
+});
 
 function helpTopic(): Topic | null {
   if (screen === "main") {

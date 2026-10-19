@@ -9,7 +9,7 @@ import { droneTexture, playerTexture } from "../../editor/drawings";
 import { loadAudio, playSound } from "../sound";
 import { cleanName } from "../transcript";
 import { createClock, runClock, type Clock } from "../../game/clock";
-import { playKeys } from "../../game/input";
+import { bombKeys, playKeys, shotKeys } from "../../game/input";
 import {
   fieldHeight,
   fieldWidth,
@@ -99,7 +99,7 @@ const swapLead: number = 100; // ms
 const swapDistance: number = 80; // px
 const swapEasing: Easing = cubicBezier(0.34, 1.56, 0.64, 1);
 const frameSmoothing: number = 0.25; // s
-const sceneKeys: Array<string> = ["KeyZ", "KeyX", "Enter", "NumpadEnter"];
+const sceneKeys: Array<string> = ["Enter", "NumpadEnter"];
 
 async function createMaker(app: Application): Promise<PageContent> {
   const view: Container = new Container();
@@ -766,7 +766,9 @@ async function createMaker(app: Application): Promise<PageContent> {
     if (
       scenes.shown() &&
       !transport.typing() &&
-      sceneKeys.includes(event.code)
+      (sceneKeys.includes(event.code) ||
+        shotKeys.includes(event.code) ||
+        bombKeys.includes(event.code))
     ) {
       scenes.scene.advance();
       event.preventDefault();
