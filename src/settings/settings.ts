@@ -356,6 +356,44 @@ function onShake(listener: CrtListener): void {
   listener(shake);
 }
 
+const hitboxStorageKey: string = "geregnet.hitbox";
+const hitboxListeners: Array<CrtListener> = new Array();
+let hitbox: boolean = loadHitbox();
+
+function loadHitbox(): boolean {
+  try {
+    return localStorage.getItem(hitboxStorageKey) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function getHitbox(): boolean {
+  return hitbox;
+}
+
+function setHitbox(value: boolean): void {
+  if (value === hitbox) {
+    return;
+  }
+
+  hitbox = value;
+
+  try {
+    localStorage.setItem(hitboxStorageKey, value ? "on" : "off");
+  } catch {
+    console.warn("Could not save the hitbox setting");
+  }
+
+  for (const listener of hitboxListeners) {
+    listener(hitbox);
+  }
+}
+
+function onHitbox(listener: CrtListener): void {
+  hitboxListeners.push(listener);
+}
+
 function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
@@ -386,5 +424,8 @@ export {
   getShake,
   setShake,
   onShake,
+  getHitbox,
+  setHitbox,
+  onHitbox,
 };
 export type { Channel, Tuning };

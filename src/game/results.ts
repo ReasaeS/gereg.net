@@ -128,7 +128,7 @@ function createResults(width: number, height: number): Results {
     rows: Array<[string, string]>,
     record: boolean,
   ): void {
-    hint.text = "PRESS " + bindingName("shot") + " OR ENTER TO CONTINUE";
+    hint.text = bindingName("shot") + " CONTINUE  ·  R RETRY";
     open = true;
     title.text = heading;
     best.text = record ? "NEW BEST" : "";

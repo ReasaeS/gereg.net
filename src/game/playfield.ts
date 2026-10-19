@@ -23,7 +23,12 @@ import {
   type Easing,
 } from "../effects/tween/tween";
 import { createClock, runClock, type Clock } from "./clock";
-import { createSelector, type Menu, type Selector } from "./selector";
+import {
+  createSelector,
+  type Choice,
+  type Menu,
+  type Selector,
+} from "./selector";
 import { levels, type Level } from "./levels";
 import { createZen, type Zen } from "./zen";
 import { minPower } from "./drones";
@@ -41,6 +46,7 @@ import {
 import { createBanner, type Banner } from "./banner";
 import { createResults, type Results } from "./results";
 import { bestScore, recordScore } from "./records";
+import { addStats } from "./stats";
 import {
   bombKeys,
   createKeyboard,
@@ -90,13 +96,16 @@ const stagesMenu: Menu = {
     title: level.title,
   })),
 };
+const resumeChoice: Choice = { name: "Resume", title: "Back to the action" };
+const retryChoice: Choice = { name: "Retry", title: "Start this run over" };
+const stageChoice: Choice = {
+  name: "Retry stage",
+  title: "Practice from this stage",
+};
+const quitChoice: Choice = { name: "Quit", title: "Leave this run" };
 const pauseMenu: Menu = {
   heading: "PAUSED",
-  choices: [
-    { name: "Resume", title: "Back to the action" },
-    { name: "Retry", title: "Start this run over" },
-    { name: "Quit", title: "Leave this run" },
-  ],
+  choices: [resumeChoice, retryChoice, quitChoice],
 };
 const continueMenu: Menu = {
   heading: "CONTINUE?",
@@ -165,6 +174,7 @@ async function createPlayfield(
   let customing: boolean = false;
   let customPick: number = 0;
   let customPlan: Plan | null = null;
+  let legOrder: number = 0;
   let paused: boolean = false;
   let titleToken: number = 0;
   let best: number = 0;
@@ -247,6 +257,9 @@ async function createPlayfield(
         shotKeys.includes(event.code))
     ) {
       closeResults();
+      event.preventDefault();
+    } else if (view.visible && results.shown() && event.code === "KeyR") {
+      retryResults();
       event.preventDefault();
     }
   });
@@ -585,6 +598,7 @@ async function createPlayfield(
       return;
     }
 
+    legOrder = leg.order;
     dress(leg);
     showTitle(leg);
   }
@@ -616,6 +630,17 @@ async function createPlayfield(
       continued === 0 && !plan.practice && recordScore(plan.id, score);
 
     const tally: Tally = custom.tally(outcome);
+
+    addStats({
+      clears: outcome === "over" ? 0 : 1,
+      gameOvers: outcome === "over" ? 1 : 0,
+      misses: tally.misses,
+      bombs: tally.bombs,
+      grazes: tally.graze,
+      items: tally.items,
+      score: score,
+      best: plan.practice ? 0 : score,
+    });
     const rows: Array<[string, string]> = [
       ["Score", score.toLocaleString()],
       ["Best", Math.max(best, record ? score : 0).toLocaleString()],
@@ -664,6 +689,19 @@ async function createPlayfield(
     results.hide();
     stopCustom();
     openCustomMenu();
+  }
+
+  function retryResults(): void {
+    const plan: Plan | null = customPlan;
+
+    if (!results.shown() || !resultsReady || plan === null) {
+      return;
+    }
+
+    resultsReady = false;
+    results.hide();
+    stopCustom();
+    void startCustom(plan);
   }
 
   function stopCustom(): void {
@@ -730,7 +768,9 @@ async function createPlayfield(
     }
 
     reset();
+    addStats({ runs: 1 });
     customing = true;
+    legOrder = leg.order;
     customPlan = plan;
     best = plan.practice ? 0 : bestScore(plan.id);
     setPilotShown(false);
@@ -766,6 +806,7 @@ async function createPlayfield(
 
   function stopZen(): void {
     if (zenning) {
+      addStats({ zen: zenElapsed });
       zenning = false;
       zen.stop();
       hud.setZen(false);
@@ -820,10 +861,14 @@ async function createPlayfield(
         giveUp();
       }
     } else if (menu === pauseMenu) {
-      if (index === 0) {
+      const choice: Choice | undefined = pauseMenu.choices[index];
+
+      if (choice === resumeChoice) {
         resume();
-      } else if (index === 1) {
+      } else if (choice === retryChoice) {
         retry();
+      } else if (choice === stageChoice) {
+        retryStage();
       } else {
         quit();
       }
@@ -850,6 +895,12 @@ async function createPlayfield(
     titleToken++;
     custom.setPaused(true);
     paused = true;
+    pauseMenu.choices = [
+      resumeChoice,
+      retryChoice,
+      ...(customing && legOrder > 0 ? [stageChoice] : new Array<Choice>()),
+      quitChoice,
+    ];
     banner.show("PAUSED", "ESC TO RESUME", false);
     openMenu(pauseMenu);
   }
@@ -878,6 +929,23 @@ async function createPlayfield(
       startPlaying(true);
     } else {
       startPlaying(false);
+    }
+  }
+
+  function retryStage(): void {
+    const plan: Plan | null = customPlan;
+
+    paused = false;
+    banner.hide();
+    stopCustom();
+
+    if (plan !== null) {
+      void startCustom({
+        ...plan,
+        stages: plan.stages.slice(legOrder),
+        first: plan.first + legOrder,
+        practice: true,
+      });
     }
   }
 

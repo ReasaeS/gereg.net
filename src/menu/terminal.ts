@@ -140,7 +140,10 @@ function createTerminal(app: Application): Terminal {
   }
 
   function barText(value: number): string {
-    const filled: number = Math.round(value * barWidth);
+    const filled: number = Math.min(
+      Math.max(Math.round(value * barWidth), 0),
+      barWidth,
+    );
 
     return tagged(
       "LOADING",

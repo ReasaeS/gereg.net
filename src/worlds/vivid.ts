@@ -104,6 +104,16 @@ const diveDistance: number = 2.2; // screen heights
 const witchFade: number = 0.2; // s
 const sceneries: Map<string, Scenery> = new Map([
   [
+    "stats",
+    {
+      glow: "#2ec8ff",
+      glowY: 0.6,
+      moteColor: "#bfefff",
+      army: false,
+      sigils: false,
+    },
+  ],
+  [
     "config",
     {
       glow: "#ffb02e",

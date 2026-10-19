@@ -3,6 +3,7 @@ import type { Vector } from "../create/types";
 import { createSquad, type Squad, type Target } from "./drones";
 import { createBomb, type Bomb } from "./bomb";
 import { drawHitbox, movePlayer, sizePlayer } from "./player";
+import { getHitbox } from "../settings/settings";
 
 type Pilot = {
   player: Sprite;
@@ -21,6 +22,8 @@ type Pilot = {
   reset: (x: number, y: number) => void;
   redraw: () => void;
 };
+
+const idleHitboxAlpha: number = 0.6;
 
 function createPilot(
   playerTexture: Texture,
@@ -47,7 +50,8 @@ function createPilot(
 
     movePlayer(player, input, focused, delta, width, height);
     hitbox.position.copyFrom(player.position);
-    hitbox.visible = focused;
+    hitbox.visible = focused || getHitbox();
+    hitbox.alpha = focused ? 1 : idleHitboxAlpha;
     squad.update(delta, player.x, player.y, focused, shooting, targets);
     bombHeld = bombing;
     bomb.update(delta, player.x, player.y);

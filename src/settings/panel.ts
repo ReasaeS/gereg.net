@@ -37,6 +37,7 @@ import {
   getRate,
   getResolution,
   getShake,
+  getHitbox,
   getTv,
   getTuning,
   getVolume,
@@ -44,6 +45,7 @@ import {
   onRate,
   onResolution,
   onShake,
+  onHitbox,
   onTv,
   onTuning,
   onVolume,
@@ -53,6 +55,7 @@ import {
   setRate,
   setResolution,
   setShake,
+  setHitbox,
   setTv,
   setTuning,
   setVolume,
@@ -381,6 +384,7 @@ function createSettings(app: Application): PageContent {
   const crtButtons: Array<Button> = new Array();
   const tvButtons: Array<Button> = new Array();
   const shakeButtons: Array<Button> = new Array();
+  const hitboxButtons: Array<Button> = new Array();
   const rateButtons: Array<Button> = new Array();
   const resolutionButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
@@ -473,6 +477,12 @@ function createSettings(app: Application): PageContent {
       name: "gameplay",
       rows: [
         createToggleRow("shake & rumble", getShake, setShake, shakeButtons),
+        createToggleRow(
+          "always show hitbox",
+          getHitbox,
+          setHitbox,
+          hitboxButtons,
+        ),
       ],
     },
     {
@@ -785,6 +795,7 @@ function createSettings(app: Application): PageContent {
   onBindings(refresh);
   onCrt(refresh);
   onShake(refresh);
+  onHitbox(refresh);
   onTv(refresh);
   onTuning(refresh);
   onVolume(refresh);

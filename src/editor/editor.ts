@@ -123,6 +123,14 @@ const bracketLength: number = 8; // px
 const bracketWidth: number = 3; // px
 const inkHeight: number = 26; // px
 const inkGap: number = 12; // px
+const mixerSteps: number = 48;
+const mixerBarHeight: number = 22; // px
+const mixerLabelGap: number = 6; // px
+const mixerRowGap: number = 16; // px
+const knobWidth: number = 4; // px
+const knobOutset: number = 3; // px
+const knobEdge: string = "#01040f";
+const mixerNames: Array<string> = ["HUE", "SATURATION", "BRIGHTNESS"];
 const previewScale: number = 3;
 const previewTop: number = 20; // px
 const transparent: number = 0;
@@ -355,6 +363,57 @@ function toColor(hex: string): number {
   return ((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0;
 }
 
+function hexOf(color: number): string {
+  return "#" + (color >>> 8).toString(16).padStart(6, "0").toUpperCase();
+}
+
+function fromHsv(hue: number, saturation: number, value: number): number {
+  const chroma: number = value * saturation;
+  const sector: number = hue * 6;
+  const second: number = chroma * (1 - Math.abs((sector % 2) - 1));
+  const base: number = value - chroma;
+  const [red, green, blue] =
+    sector < 1
+      ? [chroma, second, 0]
+      : sector < 2
+        ? [second, chroma, 0]
+        : sector < 3
+          ? [0, chroma, second]
+          : sector < 4
+            ? [0, second, chroma]
+            : sector < 5
+              ? [second, 0, chroma]
+              : [chroma, 0, second];
+
+  return (
+    ((Math.round((red + base) * 255) << 24) |
+      (Math.round((green + base) * 255) << 16) |
+      (Math.round((blue + base) * 255) << 8) |
+      0xff) >>>
+    0
+  );
+}
+
+function toHsv(color: number): Array<number> {
+  const red: number = (color >>> 24) / 255;
+  const green: number = ((color >>> 16) & 0xff) / 255;
+  const blue: number = ((color >>> 8) & 0xff) / 255;
+  const high: number = Math.max(red, green, blue);
+  const spread: number = high - Math.min(red, green, blue);
+  let hue: number = 0;
+
+  if (spread > 0) {
+    hue =
+      high === red
+        ? ((green - blue) / spread + 6) % 6
+        : high === green
+          ? (blue - red) / spread + 2
+          : (red - green) / spread + 4;
+  }
+
+  return [hue / 6, high > 0 ? spread / high : 0, high];
+}
+
 function flipped(rows: Array<string>): Array<string> {
   return rows.map((row: string) => row.split("").reverse().join(""));
 }
@@ -520,6 +579,7 @@ function createEditor(app: Application): Editor {
   const title: Text = createText(titleSize, "#ffffff");
   const hint: Text = createText(hintSize, hintColor);
   const swatches: Container = new Container();
+  const colorPanel: Container = new Container();
   const selection: Graphics = new Graphics();
   const ink: Container = new Container();
   const inkChip: Graphics = new Graphics();
@@ -557,7 +617,7 @@ function createEditor(app: Application): Editor {
     board,
     rulers,
     tools,
-    swatches,
+    colorPanel,
     ink,
     preview,
   ];
@@ -587,6 +647,26 @@ function createEditor(app: Application): Editor {
   const hoverFade: Glide = createGlide(0, drawSelection);
   let hoverSwatch: number = -1;
   let chosenPlaced: boolean = false;
+  const mixer: Container = new Container();
+  const mixerBars: Array<Graphics> = mixerNames.map(() => new Graphics());
+  const mixerLabels: Array<Text> = mixerNames.map((name: string) => {
+    const label: Text = createText(readoutSize, hintColor);
+
+    label.text = name;
+    return label;
+  });
+  let hsv: Array<number> = toHsv(color);
+  let mixed: number = color;
+  let mixing: boolean = false;
+  let mixerWidth: number = 1;
+  let dragging: number = -1;
+  let inPalette: boolean = true;
+  const mixFade: Glide = createGlide(0, (amount: number) => {
+    swatches.alpha = 1 - amount;
+    swatches.visible = amount < 1;
+    mixer.alpha = amount;
+    mixer.visible = amount > 0;
+  });
 
   function slotsWidth(): number {
     return cartridges.length * (slotSize + slotGap) - slotGap;
@@ -920,11 +1000,21 @@ function createEditor(app: Application): Editor {
   }
 
   function placeSelection(): void {
-    const hex: string =
-      "#" + (color >>> 8).toString(16).padStart(6, "0").toUpperCase();
+    const hex: string = hexOf(color);
     const index: number = palette.findIndex(
       (value: string) => toColor(value) === color,
     );
+
+    if (color !== mixed) {
+      hsv = toHsv(color);
+      mixed = color;
+    }
+
+    if (mixing) {
+      drawMixer();
+    }
+
+    inPalette = index >= 0;
 
     inkChip
       .clear()
@@ -935,6 +1025,7 @@ function createEditor(app: Application): Editor {
     inkLabel.text = "INK  " + hex;
 
     if (index < 0) {
+      drawSelection();
       return;
     }
 
@@ -1000,13 +1091,94 @@ function createEditor(app: Application): Editor {
       );
     }
 
-    drawBrackets(
-      chosenX.value() * step - outset,
-      chosenY.value() * step - outset,
-      swatchSize + outset * 2,
-      getTheme().accent,
-      1,
-    );
+    if (inPalette) {
+      drawBrackets(
+        chosenX.value() * step - outset,
+        chosenY.value() * step - outset,
+        swatchSize + outset * 2,
+        getTheme().accent,
+        1,
+      );
+    }
+  }
+
+  function drawMixer(): void {
+    for (let index = 0; index < mixerBars.length; index++) {
+      const bar: Graphics = mixerBars[index]!;
+      const width: number = mixerWidth / mixerSteps;
+
+      bar.clear();
+
+      for (let step = 0; step < mixerSteps; step++) {
+        const amount: number = (step + 0.5) / mixerSteps;
+        const shade: number =
+          index === 0
+            ? fromHsv(amount, 1, 1)
+            : index === 1
+              ? fromHsv(hsv[0]!, amount, hsv[2]!)
+              : fromHsv(hsv[0]!, hsv[1]!, amount);
+
+        bar
+          .rect(step * width, 0, width + 0.5, mixerBarHeight)
+          .fill(hexOf(shade));
+      }
+
+      bar
+        .rect(0, 0, mixerWidth, mixerBarHeight)
+        .stroke({ color: plateEdge, width: plateLine, alignment: 1 })
+        .rect(
+          hsv[index]! * mixerWidth - knobWidth / 2,
+          -knobOutset,
+          knobWidth,
+          mixerBarHeight + knobOutset * 2,
+        )
+        .fill(hoverColor)
+        .stroke({ color: knobEdge, width: 1.5, alignment: 1 });
+    }
+  }
+
+  function layoutMixer(): void {
+    const rowHeight: number =
+      readoutSize + mixerLabelGap + mixerBarHeight + mixerRowGap;
+
+    for (let index = 0; index < mixerBars.length; index++) {
+      const bar: Graphics = mixerBars[index]!;
+
+      mixerLabels[index]!.position.set(0, index * rowHeight);
+      bar.position.set(0, index * rowHeight + readoutSize + mixerLabelGap);
+      bar.hitArea = new Rectangle(
+        -knobOutset,
+        -knobOutset,
+        mixerWidth + knobOutset * 2,
+        mixerBarHeight + knobOutset * 2,
+      );
+    }
+
+    drawMixer();
+  }
+
+  function pickMix(index: number, event: FederatedPointerEvent): void {
+    const x: number = mixerBars[index]!.toLocal(event.global).x;
+
+    hsv[index] = Math.min(Math.max(x / mixerWidth, 0), 1);
+    color = fromHsv(hsv[0]!, hsv[1]!, hsv[2]!);
+    mixed = color;
+
+    if (tool === "eraser" || tool === "picker") {
+      tool = "pencil";
+    }
+
+    refresh();
+  }
+
+  function toggleMixer(): void {
+    mixing = !mixing;
+    dragging = -1;
+    swatches.eventMode = mixing ? "none" : "passive";
+    mixer.eventMode = mixing ? "passive" : "none";
+    mixFade.set(mixing ? 1 : 0);
+    hoverFade.set(0);
+    refresh();
   }
 
   function selectDrawing(index: number): void {
@@ -1034,7 +1206,8 @@ function createEditor(app: Application): Editor {
     clearHover();
     board.eventMode = value ? "none" : "passive";
     tools.eventMode = value ? "none" : "passive";
-    swatches.eventMode = value ? "none" : "passive";
+    colorPanel.eventMode = value ? "none" : "passive";
+    ink.eventMode = value ? "none" : "static";
     mode.set(value ? 1 : 0);
     power.setActive(active && value);
     refresh();
@@ -1174,7 +1347,7 @@ function createEditor(app: Application): Editor {
         swatchGap,
     );
     ink.position.set(board.x + boardSize + panelGap, board.y);
-    swatches.position.set(ink.x, board.y + inkHeight + inkGap);
+    colorPanel.position.set(ink.x, board.y + inkHeight + inkGap);
     const old: Array<Container> = swatches.removeChildren();
 
     for (let index = 0; index < old.length; index++) {
@@ -1214,9 +1387,11 @@ function createEditor(app: Application): Editor {
     }
 
     swatches.addChild(selection);
+    mixerWidth = paletteColumns * (swatchSize + swatchGap) - swatchGap;
+    layoutMixer();
     preview.position.set(
-      swatches.x,
-      swatches.y +
+      colorPanel.x,
+      colorPanel.y +
         (palette.length / paletteColumns) * (swatchSize + swatchGap) +
         panelGap,
     );
@@ -1226,7 +1401,7 @@ function createEditor(app: Application): Editor {
     const left: number = tools.x - benchPadding;
     const top: number = board.y - rulerSize - benchPadding;
     const right: number =
-      swatches.x +
+      colorPanel.x +
       paletteColumns * (swatchSize + swatchGap) -
       swatchGap +
       benchPadding;
@@ -1506,6 +1681,36 @@ function createEditor(app: Application): Editor {
   inkLabel.anchor.set(0, 0.5);
   inkLabel.position.set(inkHeight + inkGap, inkHeight / 2);
   ink.addChild(inkChip, inkLabel);
+  ink.eventMode = "static";
+  ink.cursor = "pointer";
+  ink.on("pointertap", toggleMixer);
+
+  for (let index = 0; index < mixerBars.length; index++) {
+    const bar: Graphics = mixerBars[index]!;
+
+    bar.eventMode = "static";
+    bar.cursor = "pointer";
+    bar.on("pointerdown", (event: FederatedPointerEvent) => {
+      dragging = index;
+      pickMix(index, event);
+    });
+    bar.on("globalpointermove", (event: FederatedPointerEvent) => {
+      if (dragging === index) {
+        pickMix(index, event);
+      }
+    });
+    bar.on("pointerup", () => {
+      dragging = -1;
+    });
+    bar.on("pointerupoutside", () => {
+      dragging = -1;
+    });
+  }
+
+  mixer.addChild(...mixerLabels, ...mixerBars);
+  mixer.eventMode = "none";
+  colorPanel.addChild(swatches, mixer);
+  mixFade.snap(0);
   large.scale.set(previewScale);
   previewLabel.text = "1X  ·  3X";
   preview.addChild(previewLabel, small, large);
@@ -1522,7 +1727,7 @@ function createEditor(app: Application): Editor {
     board,
     rulers,
     tools,
-    swatches,
+    colorPanel,
     ink,
     preview,
     status,
@@ -1619,6 +1824,8 @@ function createEditor(app: Application): Editor {
     } else if (event.code === "KeyG") {
       showGrid = !showGrid;
       refresh();
+    } else if (event.code === "KeyC") {
+      toggleMixer();
     } else {
       return;
     }

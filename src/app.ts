@@ -32,6 +32,7 @@ import { createEditor } from "./editor/editor";
 import { droneTexture, playerTexture } from "./editor/drawings";
 import { createPlayfield, type Playfield } from "./game/playfield";
 import { createSettings } from "./settings/panel";
+import { createStats } from "./menu/stats";
 import { createMaker } from "./create/maker/maker";
 import { createGuides } from "./dev/guides";
 import { resetApp } from "./dev/reset";
@@ -279,7 +280,7 @@ async function load<T>(task: () => T | Promise<T>): Promise<T> {
   return result;
 }
 
-terminal.progress(rainEnabled ? 8 : 7);
+terminal.progress(rainEnabled ? 9 : 8);
 
 const city: Container = new Container();
 const vivid: Container = new Container();
@@ -324,7 +325,7 @@ if (rainEnabled) {
   }
 }
 
-const pageNames: Array<string> = ["customise", "create", "config"];
+const pageNames: Array<string> = ["customise", "create", "stats", "config"];
 const pages: Map<string, Page> = new Map();
 
 vivid.addChild(menu);
@@ -332,6 +333,7 @@ vivid.addChild(menu);
 const pageContents: Map<string, PageContent> = new Map([
   ["customise", await load(() => createEditor(app))],
   ["create", await load(() => createMaker(app))],
+  ["stats", await load(() => createStats(app))],
   ["config", await load(() => createSettings(app))],
 ]);
 

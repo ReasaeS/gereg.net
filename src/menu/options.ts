@@ -50,6 +50,7 @@ const names: Array<string> = [
   "play",
   "customise",
   "create",
+  "stats",
   "config",
   "credits",
 ];
