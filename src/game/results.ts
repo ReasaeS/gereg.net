@@ -1,6 +1,6 @@
 import { Container, Graphics, type Text } from "pixi.js";
 import { getTheme } from "../theme/theme";
-import { bindingName } from "./input";
+import { promptName, usingPad } from "./input";
 import { createGlide, type Glide } from "../ui/motion";
 import { createShadowText, createText, screenResolution } from "../ui/text";
 
@@ -134,7 +134,8 @@ function createResults(width: number, height: number): Results {
     rows: Array<[string, string]>,
     record: boolean,
   ): void {
-    hint.text = bindingName("shot") + " CONTINUE  ·  R RETRY";
+    hint.text =
+      promptName("shot") + " CONTINUE" + (usingPad() ? "" : "  ·  R RETRY");
     open = true;
     title.text = heading;
     best.text = record ? "NEW BEST" : "";

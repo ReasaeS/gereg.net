@@ -53,7 +53,7 @@ import {
   bombKeys,
   createKeyboard,
   focusKeys,
-  bindingName,
+  promptName,
   shotKeys,
   steering,
   type Keyboard,
@@ -617,7 +617,7 @@ async function createPlayfield(
         ? "WATCH  ·  " +
             leg.difficulty.toUpperCase() +
             "  ·  " +
-            bindingName("shot") +
+            promptName("shot") +
             " TO SPEED UP  ·  ESC TO EXIT"
         : (plan?.practice === true ? "PRACTICE  ·  " : "") +
             (leg.total > 1 || plan?.practice === true

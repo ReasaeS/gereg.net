@@ -29,7 +29,8 @@ import {
   saveDrones,
 } from "../game/drones";
 import {
-  bindingName,
+  promptName,
+  usingPad,
   bombKeys,
   createKeyboard,
   focusKeys,
@@ -350,12 +351,13 @@ function createPower(
   function setActive(value: boolean): void {
     active = value;
     hint.text =
-      "ARROWS  MOVE   ·   " +
-      bindingName("focus") +
+      (usingPad() ? "STICK" : "ARROWS") +
+      "  MOVE   ·   " +
+      promptName("focus") +
       "  FOCUS   ·   " +
-      bindingName("shot") +
+      promptName("shot") +
       "  SHOOT   ·   " +
-      bindingName("bomb") +
+      promptName("bomb") +
       "  BOMB";
     keyboard.clear();
 

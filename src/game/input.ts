@@ -219,6 +219,32 @@ function bindingName(binding: Binding): string {
   return keyName(getBinding(binding));
 }
 
+const padNames: Map<Binding, string> = new Map([
+  ["left", "D-PAD"],
+  ["right", "D-PAD"],
+  ["up", "D-PAD"],
+  ["down", "D-PAD"],
+  ["focus", "RB"],
+  ["shot", "A"],
+  ["bomb", "B"],
+]);
+let padInput: boolean = false;
+
+function usingPad(): boolean {
+  return padInput;
+}
+
+function promptName(binding: Binding): string {
+  return padInput ? padNames.get(binding)! : bindingName(binding);
+}
+
+window.addEventListener(
+  "keydown",
+  (event: KeyboardEvent) => {
+    padInput = !event.isTrusted;
+  },
+  true,
+);
 loadBindings();
 applyBindings();
 
@@ -277,6 +303,8 @@ export {
   onBindings,
   keyName,
   bindingName,
+  promptName,
+  usingPad,
   leftKeys,
   rightKeys,
   upKeys,
