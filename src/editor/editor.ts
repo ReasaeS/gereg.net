@@ -131,6 +131,8 @@ const knobWidth: number = 4; // px
 const knobOutset: number = 3; // px
 const knobEdge: string = "#01040f";
 const mixerNames: Array<string> = ["HUE", "SATURATION", "BRIGHTNESS"];
+const recentCount: number = 8;
+const recentStorageKey: string = "geregnet.recentColors";
 const previewScale: number = 3;
 const previewTop: number = 20; // px
 const transparent: number = 0;
@@ -361,6 +363,25 @@ const powerIcon: Array<string> = [
 
 function toColor(hex: string): number {
   return ((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0;
+}
+
+function loadRecent(): Array<number> {
+  try {
+    const saved: unknown = JSON.parse(
+      localStorage.getItem(recentStorageKey) ?? "[]",
+    );
+
+    return Array.isArray(saved)
+      ? saved
+          .filter(
+            (value: unknown): value is number =>
+              typeof value === "number" && Number.isInteger(value),
+          )
+          .slice(0, recentCount)
+      : new Array();
+  } catch {
+    return new Array();
+  }
 }
 
 function hexOf(color: number): string {
@@ -661,6 +682,9 @@ function createEditor(app: Application): Editor {
   let mixerWidth: number = 1;
   let dragging: number = -1;
   let inPalette: boolean = true;
+  const recentLabel: Text = createText(readoutSize, hintColor);
+  const recentSwatches: Container = new Container();
+  const recent: Array<number> = loadRecent();
   const mixFade: Glide = createGlide(0, (amount: number) => {
     swatches.alpha = 1 - amount;
     swatches.visible = amount < 1;
@@ -877,6 +901,10 @@ function createEditor(app: Application): Editor {
 
     remember();
     erasing = event.button === 2 || tool === "eraser";
+
+    if (!erasing) {
+      pushRecent(color);
+    }
 
     if (tool === "fill") {
       const value: number = event.button === 2 ? transparent : color;
@@ -1154,7 +1182,73 @@ function createEditor(app: Application): Editor {
       );
     }
 
+    recentLabel.position.set(0, mixerNames.length * rowHeight);
+    recentSwatches.position.set(0, recentLabel.y + readoutSize + mixerLabelGap);
     drawMixer();
+    drawRecent();
+  }
+
+  function pushRecent(value: number): void {
+    const index: number = recent.indexOf(value);
+
+    if (index === 0) {
+      return;
+    }
+
+    if (index > 0) {
+      recent.splice(index, 1);
+    }
+
+    recent.unshift(value);
+    recent.length = Math.min(recent.length, recentCount);
+
+    try {
+      localStorage.setItem(recentStorageKey, JSON.stringify(recent));
+    } catch {
+      console.warn("Could not save the recent colours");
+    }
+
+    drawRecent();
+  }
+
+  function drawRecent(): void {
+    for (const child of recentSwatches.removeChildren()) {
+      child.destroy();
+    }
+
+    for (let index = 0; index < recentCount; index++) {
+      const value: number | undefined = recent[index];
+      const swatch: Graphics = new Graphics().rect(
+        0,
+        0,
+        swatchSize,
+        swatchSize,
+      );
+
+      swatch.position.set(
+        (index % paletteColumns) * (swatchSize + swatchGap),
+        Math.floor(index / paletteColumns) * (swatchSize + swatchGap),
+      );
+
+      if (value === undefined) {
+        swatch.stroke({ color: plateEdge, width: plateLine, alignment: 1 });
+      } else {
+        swatch.fill(hexOf(value));
+        swatch.eventMode = "static";
+        swatch.cursor = "pointer";
+        swatch.on("pointertap", () => {
+          color = value;
+
+          if (tool === "eraser" || tool === "picker") {
+            tool = "pencil";
+          }
+
+          refresh();
+        });
+      }
+
+      recentSwatches.addChild(swatch);
+    }
   }
 
   function pickMix(index: number, event: FederatedPointerEvent): void {
@@ -1707,7 +1801,8 @@ function createEditor(app: Application): Editor {
     });
   }
 
-  mixer.addChild(...mixerLabels, ...mixerBars);
+  recentLabel.text = "RECENT";
+  mixer.addChild(...mixerLabels, ...mixerBars, recentLabel, recentSwatches);
   mixer.eventMode = "none";
   colorPanel.addChild(swatches, mixer);
   mixFade.snap(0);

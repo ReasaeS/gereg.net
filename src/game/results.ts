@@ -17,6 +17,8 @@ const rowSize: number = 16; // px
 const bestSize: number = 14; // px
 const hintSize: number = 12; // px
 const rowGap: number = 30; // units
+const minRowGap: number = 22; // units
+const panelFill: number = 0.96; // of field height
 const titleGap: number = 64; // units
 const bestGap: number = 26; // units
 const hintGap: number = 44; // units
@@ -63,8 +65,12 @@ function createResults(width: number, height: number): Results {
     const inner: number = width * panelWidth;
     const left: number = -inner / 2 + panelPadding;
     const right: number = inner / 2 - panelPadding;
-    const tall: number =
-      titleGap + rows.length * rowGap + bestGap + hintGap + panelPadding * 2;
+    const fixed: number = titleGap + bestGap + hintGap + panelPadding * 2;
+    const gap: number = Math.max(
+      Math.min(rowGap, (height * panelFill - fixed) / rows.length),
+      minRowGap,
+    );
+    const tall: number = fixed + rows.length * gap;
     const top: number = -tall / 2;
 
     for (const child of lines.removeChildren()) {
@@ -78,7 +84,7 @@ function createResults(width: number, height: number): Results {
       const row: Container = new Container();
       const label: Text = createText(rowSize, "#9fd8ff");
       const amount: Text = createText(rowSize, "#ffffff");
-      const y: number = top + panelPadding + titleGap + index * rowGap;
+      const y: number = top + panelPadding + titleGap + index * gap;
 
       label.text = name.toUpperCase();
       label.anchor.set(0, 0.5);
@@ -103,7 +109,7 @@ function createResults(width: number, height: number): Results {
     title.position.set(0, top + panelPadding + titleSize / 2);
     best.position.set(
       0,
-      top + panelPadding + titleGap + rows.length * rowGap + bestGap / 2,
+      top + panelPadding + titleGap + rows.length * gap + bestGap / 2,
     );
     hint.position.set(0, -top - panelPadding);
     panel

@@ -66,6 +66,8 @@ const bindingKeys: Map<Binding, Array<string>> = new Map([
 ]);
 const reservedKeys: Array<string> = [
   "Escape",
+  "F7",
+  "F8",
   "ArrowLeft",
   "ArrowRight",
   "ArrowUp",

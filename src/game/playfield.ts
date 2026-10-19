@@ -36,6 +36,7 @@ import { startBombs } from "./bomb";
 import { createPilot, type Pilot } from "./pilot";
 import {
   createCustom,
+  formatLength,
   startLives,
   type Custom,
   type Leg,
@@ -47,6 +48,7 @@ import { createBanner, type Banner } from "./banner";
 import { createResults, type Results } from "./results";
 import { bestScore, recordScore } from "./records";
 import { addStats } from "./stats";
+import { checkAchievements } from "./achievements";
 import {
   bombKeys,
   createKeyboard,
@@ -175,6 +177,7 @@ async function createPlayfield(
   let customPick: number = 0;
   let customPlan: Plan | null = null;
   let legOrder: number = 0;
+  let runTime: number = 0;
   let paused: boolean = false;
   let titleToken: number = 0;
   let best: number = 0;
@@ -525,6 +528,7 @@ async function createPlayfield(
   function playCustom(delta: number): void {
     const input: Vector = steering(keyboard.pressed);
 
+    runTime += delta;
     custom.update(delta, {
       x: input.x,
       y: input.y,
@@ -641,6 +645,13 @@ async function createPlayfield(
       score: score,
       best: plan.practice ? 0 : score,
     });
+    checkAchievements({
+      cleared: outcome !== "over",
+      misses: tally.misses,
+      bombs: tally.bombs,
+      continues: continued,
+      stages: plan.stages.length,
+    });
     const rows: Array<[string, string]> = [
       ["Score", score.toLocaleString()],
       ["Best", Math.max(best, record ? score : 0).toLocaleString()],
@@ -651,6 +662,7 @@ async function createPlayfield(
     }
 
     rows.push(
+      ["Time", formatLength(runTime)],
       ["Graze", String(tally.graze)],
       ["Items", String(tally.items)],
       ["Bombs used", String(tally.bombs)],
@@ -769,6 +781,7 @@ async function createPlayfield(
 
     reset();
     addStats({ runs: 1 });
+    runTime = 0;
     customing = true;
     legOrder = leg.order;
     customPlan = plan;
@@ -901,7 +914,11 @@ async function createPlayfield(
       ...(customing && legOrder > 0 ? [stageChoice] : new Array<Choice>()),
       quitChoice,
     ];
-    banner.show("PAUSED", "ESC TO RESUME", false);
+    banner.show(
+      "PAUSED",
+      (customing ? formatLength(runTime) + "  ·  " : "") + "ESC TO RESUME",
+      false,
+    );
     openMenu(pauseMenu);
   }
 

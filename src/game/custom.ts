@@ -616,5 +616,5 @@ async function createCustom(
   };
 }
 
-export { createCustom, startLives };
+export { createCustom, formatLength, startLives };
 export type { Custom, Outcome, Leg, Plan, Tally };

@@ -79,11 +79,17 @@ import { seaHeight, createVivid, type Vivid } from "./worlds/vivid";
 import { createNightSea } from "./worlds/nightsea";
 import { getTheme, onTheme, type Theme } from "./theme/theme";
 import { startMotion } from "./ui/motion";
-import { getResolution, onResolution } from "./settings/settings";
+import {
+  getResolution,
+  getVolume,
+  onResolution,
+  setVolume,
+} from "./settings/settings";
 import { startGamepad } from "./game/gamepad";
 import { createCredits, type Credits } from "./menu/credits";
 import { createHelp, type Help, type Topic } from "./menu/help";
 import { createToast, type Toast } from "./ui/toast";
+import { onUnlock, type Achievement } from "./game/achievements";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -96,6 +102,9 @@ const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
 const diveFlip: number = -Math.PI; // rad
 const transitionLead: number = 200; // ms
 const screenshotKey: string = "F8";
+const muteKey: string = "F7";
+const unmuteStorageKey: string = "geregnet.unmuted";
+const unmuteDefault: number = 0.8;
 const revokeDelay: number = 1000; // ms
 const terminalColor: string = "#000000";
 const beamRetractTime: number = 500; // ms
@@ -473,6 +482,10 @@ function play(): void {
 const help: Help = createHelp(app);
 const toast: Toast = createToast(app);
 
+onUnlock((achievement: Achievement) =>
+  toast.show("Achievement  ·  " + achievement.name),
+);
+
 screenLayer.addChild(help.view, toast.view);
 
 function takeScreenshot(): void {
@@ -500,13 +513,49 @@ function takeScreenshot(): void {
   }, "image/png");
 }
 
+function toggleMute(): void {
+  const master: number = getVolume("master");
+
+  if (master > 0) {
+    try {
+      localStorage.setItem(unmuteStorageKey, String(master));
+    } catch {
+      console.warn("Could not save the volume to restore");
+    }
+
+    setVolume("master", 0);
+    toast.show("Sound off");
+    return;
+  }
+
+  let restore: number = unmuteDefault;
+
+  try {
+    const saved: number = Number(localStorage.getItem(unmuteStorageKey));
+
+    restore = saved > 0 && saved <= 1 ? saved : unmuteDefault;
+  } catch {
+    restore = unmuteDefault;
+  }
+
+  setVolume("master", restore);
+  toast.show("Sound on");
+}
+
 window.addEventListener("keydown", (event: KeyboardEvent) => {
-  if (event.code !== screenshotKey || event.repeat) {
+  if (event.repeat) {
+    return;
+  }
+
+  if (event.code === screenshotKey) {
+    takeScreenshot();
+  } else if (event.code === muteKey) {
+    toggleMute();
+  } else {
     return;
   }
 
   event.preventDefault();
-  takeScreenshot();
 });
 
 function helpTopic(): Topic | null {

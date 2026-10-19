@@ -9,7 +9,8 @@ import {
 } from "../ui/text";
 import { bindingName } from "../game/input";
 
-type Topic = "menu" | "play" | "customise" | "gallery" | "editor" | "config";
+type Topic =
+  "menu" | "play" | "customise" | "gallery" | "editor" | "config" | "stats";
 
 function playRows(): Array<[string, string]> {
   const names: Array<string> = [
@@ -45,6 +46,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Enter / Space", "Choose"],
       ["Esc", "Back to the title"],
       ["Alt + R", "Reset everything"],
+      ["F7", "Mute or unmute"],
       ["F8", "Save a screenshot"],
     ],
   ],
@@ -58,6 +60,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Esc", "Pause"],
       ["R", "Retry from the results screen"],
       ["/  or  Ctrl + F", "Search a stage list"],
+      ["F7", "Mute or unmute"],
       ["F8", "Save a screenshot"],
     ],
   ],
@@ -105,6 +108,14 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Ctrl + Shift + D", "Mirrored copy of enemy"],
       ["Drop an image", "Use it as the sprite"],
       ["Esc", "Back to your cards"],
+    ],
+  ],
+  [
+    "stats",
+    [
+      ["Left / Right", "Browse achievements"],
+      ["R", "Reset stats and achievements"],
+      ["Esc", "Back"],
     ],
   ],
   [

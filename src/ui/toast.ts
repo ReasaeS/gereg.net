@@ -29,6 +29,7 @@ function createToast(app: Application): Toast {
   const back: Graphics = new Graphics();
   const label: Text = createText(toastSize, "#ffffff");
   const shown: Glide = createGlide(0, place, toastSmoothing);
+  const queue: Array<string> = new Array();
   let remaining: number = 0;
 
   function place(value: number): void {
@@ -41,6 +42,15 @@ function createToast(app: Application): Toast {
   }
 
   function show(message: string): void {
+    if (remaining > 0) {
+      queue.push(message);
+      return;
+    }
+
+    display(message);
+  }
+
+  function display(message: string): void {
     label.text = message.toUpperCase();
 
     const width: number = label.width + toastPadding * 2;
@@ -75,7 +85,9 @@ function createToast(app: Application): Toast {
 
     remaining -= ticker.deltaMS / 1000;
 
-    if (remaining <= 0) {
+    if (remaining <= 0 && queue.length > 0) {
+      display(queue.shift()!);
+    } else if (remaining <= 0) {
       shown.set(0);
     }
   });
