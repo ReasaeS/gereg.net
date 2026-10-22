@@ -30,6 +30,7 @@ type Hud = {
   setBadge: (label: string) => void;
   setElapsed: (seconds: number) => void;
   setLook: (wallpaper: Wallpaper | null, palette: Palette | null) => void;
+  setReadout: (shown: boolean, instant: boolean) => void;
 };
 
 type Shade = "accent" | "highlight" | "text" | "label";
@@ -49,6 +50,7 @@ const badgeSize: number = 20; // units
 const rowSize: number = 17; // units
 const shades: Array<Shade> = ["accent", "highlight", "text", "label"];
 const lookSmoothing: number = 0.6; // s
+const readoutSmoothing: number = 0.25; // s
 const lifeColor: string = "#ff6fa8";
 const bombColor: string = "#5cff8a";
 const starRadius: number = 6.5; // units
@@ -119,6 +121,14 @@ async function createHud(): Promise<Hud> {
   const badge: Text = createText(badgeSize);
   const stage: Container = new Container();
   const zen: Container = new Container();
+  const readout: Container = new Container();
+  const reveal: Glide = createGlide(
+    1,
+    (value: number) => {
+      readout.alpha = value;
+    },
+    readoutSmoothing,
+  );
   const elapsedLabel: Text = createText(rowSize);
   const elapsedValue: Text = createText(rowSize);
   const rows: Array<Row> = new Array();
@@ -149,11 +159,12 @@ async function createHud(): Promise<Hud> {
 
   wall.show(null);
   drawBadge(badgeBack);
-  view.addChild(wall.view, badgeBack);
+  view.addChild(wall.view, readout);
+  readout.addChild(badgeBack);
   badge.text = "NORMAL";
   badge.anchor.set(0.5);
   badge.position.set((panelX + panelRight) / 2, badgeY + badgeHeight / 2);
-  view.addChild(badge);
+  readout.addChild(badge);
 
   for (let index = 0; index < rowLayout.length; index++) {
     const [name, y] = rowLayout[index]!;
@@ -189,7 +200,7 @@ async function createHud(): Promise<Hud> {
   elapsedValue.position.set(panelRight, elapsedValueY);
   zen.addChild(elapsedLabel, elapsedValue);
   zen.visible = false;
-  view.addChild(stage, zen);
+  readout.addChild(stage, zen);
 
   trackLogo(logo);
   logo.anchor.set(0.5, 1);
@@ -318,6 +329,13 @@ async function createHud(): Promise<Hud> {
     },
     setElapsed: setElapsed,
     setLook: setLook,
+    setReadout: (shown: boolean, instant: boolean) => {
+      if (instant) {
+        reveal.snap(shown ? 1 : 0);
+      } else {
+        reveal.set(shown ? 1 : 0);
+      }
+    },
   };
 }
 

@@ -509,8 +509,10 @@ async function createPlayfield(
       badge = "WATCH";
       showBadge();
       hud.refresh();
+      hud.setReadout(false, true);
       selector.rollUp().then(() => {
         rolling = false;
+        hud.setReadout(true, false);
         showTitle(leg);
       });
     });
@@ -573,6 +575,10 @@ async function createPlayfield(
     keyboard.clear();
     pilot.hitbox.visible = false;
     selector.setActive(false);
+
+    if (next !== pauseMenu && next !== continueMenu) {
+      hud.setReadout(false, false);
+    }
 
     return selector
       .rollUp()
@@ -859,8 +865,10 @@ async function createPlayfield(
     dress(leg);
     hud.stats.hiScore = best;
     hud.refresh();
+    hud.setReadout(false, true);
     selector.rollUp().then(() => {
       rolling = false;
+      hud.setReadout(true, false);
       active = customing;
       showTitle(leg);
     });
@@ -880,8 +888,10 @@ async function createPlayfield(
       zen.start();
     }
 
+    hud.setReadout(false, true);
     selector.rollUp().then(() => {
       rolling = false;
+      hud.setReadout(true, false);
       active = true;
     });
   }
@@ -956,6 +966,7 @@ async function createPlayfield(
   function show(): Promise<void> {
     reset();
     hud.refresh();
+    hud.setReadout(false, true);
     selector.close();
     pilot.hitbox.visible = false;
     view.visible = true;

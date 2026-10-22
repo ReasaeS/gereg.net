@@ -13,7 +13,7 @@ import {
   type Easing,
   type Spring,
 } from "../effects/tween/tween";
-import { getTheme } from "../theme/theme";
+import { getTheme, type Theme } from "../theme/theme";
 import { downKeys, shotKeys, upKeys } from "./input";
 import { createText, screenResolution } from "../ui/text";
 import { createGlide, mix, type Glide } from "../ui/motion";
@@ -60,44 +60,48 @@ const doorWidth: number = 208; // units
 const doorHeight: number = 464; // units
 const railWidth: number = 5; // units
 const railColor: string = "#01040f";
-const backTop: string = "#0a1440";
-const backBottom: string = "#02040c";
-const backBands: number = 16;
 const frameColor: string = "#1f4aa0";
-const lineGap: number = 10; // units
-const lineDiamond: number = 4; // units
-const textRight: number = 186; // units
-const bandSteps: number = 12;
-const bandAlpha: number = 0.6;
-const edgeWidth: number = 2; // units
-const bracketSize: number = 7; // units
-const bracketGap: number = 5; // units
-const bracketSpread: number = 14; // units
-const bracketWidth: number = 2; // units
-const restShift: number = 10; // units
-const pullShift: number = 8; // units
-const dimAlpha: number = 0.5;
-const slideDistance: number = 120; // units
-const rowStagger: number = 0.07;
+const skyBands: number = 24;
+const seaBands: number = 6;
+const seaTop: number = 404; // units
+const shadeAlpha: number = 0.5;
+const cardColor: string = "#0c2669";
+const cardAlpha: number = 0.88;
+const cardWidth: number = 178; // units
+const cardHeight: number = 40; // units
+const cardSlant: number = 10; // units
+const cardPadding: number = 8; // units
+const stripeWidth: number = 4; // units
+const wheelY: number = 262; // units
+const wheelTop: number = 80; // units
+const wheelBottom: number = 448; // units
+const wheelSpacing: number = 50; // units
+const wheelCurve: number = 5; // units
+const wheelShrink: number = 0.12;
+const wheelFade: number = 0.26;
+const wheelReach: number = 4.5;
+const slideDistance: number = 90; // units
+const cardStagger: number = 0.08;
 const fadeSpeed: number = 2;
 const titleY: number = 30; // units
+const titleHeight: number = 26; // units
+const titleSlant: number = 8; // units
 const titleSize: number = 20; // px
-const listY: number = 82; // units
-const entryHeight: number = 44; // units
 const entryInset: number = 14; // units
 const entrySlant: number = 10; // units
 const nameSize: number = 20; // px
 const subtitleSize: number = 12; // px
 const subtitleColor: string = "#9fd8ff";
 const highlightSmoothing: number = 0.08; // s
+const selectShift: number = 4; // units
 const starRadius: number = 9; // units
 const starInner: number = 0.45;
 const starPoints: number = 5;
+const starSpace: number = 23; // units
 const downDuration: number = 700; // ms
 const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
 const chooseKeys: Array<string> = ["Enter", "Space"];
-const visibleRows: number = 8;
 const arrowSize: number = 5; // units
 const arrowGap: number = 6; // units
 const searchY: number = 58; // units
@@ -109,38 +113,62 @@ const queryLength: number = 16;
 const caretBlink: number = 1; // s
 const searchPlaceholder: string = "PRESS / TO SEARCH";
 
-function drawBackdrop(back: Graphics): void {
-  back.clear();
+function drawSky(sky: Graphics): void {
+  const theme: Theme = getTheme();
 
-  for (let band = 0; band < backBands; band++) {
-    back
+  sky.clear();
+
+  for (let band = 0; band < skyBands; band++) {
+    sky
       .rect(
         0,
-        (band * doorHeight) / backBands,
+        (band * seaTop) / skyBands,
         doorWidth,
-        Math.ceil(doorHeight / backBands) + 1,
+        Math.ceil(seaTop / skyBands) + 1,
       )
-      .fill(mix(backTop, backBottom, band / (backBands - 1)));
+      .fill(
+        band < skyBands / 2
+          ? mix(theme.skyTop, theme.skyMiddle, band / (skyBands / 2))
+          : mix(
+              theme.skyMiddle,
+              theme.horizon,
+              (band - skyBands / 2) / (skyBands / 2),
+            ),
+      );
   }
+
+  for (let band = 0; band < seaBands; band++) {
+    sky
+      .rect(
+        0,
+        seaTop + (band * (doorHeight - seaTop)) / seaBands,
+        doorWidth,
+        Math.ceil((doorHeight - seaTop) / seaBands) + 1,
+      )
+      .fill(mix(theme.seaSurface, theme.seaDeep, band / (seaBands - 1)));
+  }
+
+  sky
+    .rect(0, 0, doorWidth, doorHeight)
+    .fill({ color: 0x000000, alpha: shadeAlpha })
+    .rect(0, seaTop, doorWidth, 1)
+    .fill(theme.light);
 }
 
 function createSelector(ticker: Ticker): Selector {
   const view: Container = new Container();
   const door: Container = new Container();
-  const backdrop: Graphics = new Graphics();
-  const rule: Graphics = new Graphics();
+  const sky: Graphics = new Graphics();
   const rails: Graphics = new Graphics();
   const mask: Graphics = new Graphics();
+  const badge: Graphics = new Graphics();
   const heading: Text = createText(titleSize, "#ffffff");
-  const highlight: Graphics = new Graphics();
   const list: Container = new Container();
   const listMask: Graphics = new Graphics();
   const arrows: Graphics = new Graphics();
   const scroll: Spring = { value: 0, velocity: 0 };
-  let scrollTarget: number = 0;
   const entries: Array<Entry> = new Array();
   let texts: Array<Text> = [heading];
-  const highlightY: Spring = { value: listY, velocity: 0 };
   const listeners: Array<(index: number) => void> = new Array();
   const selectListeners: Array<(index: number) => void> = new Array();
   let selected: number = 0;
@@ -159,72 +187,40 @@ function createSelector(ticker: Ticker): Selector {
   let textScale: number = 1;
 
   function place(): void {
-    const first: number = Math.round(scroll.value / entryHeight);
-
     view.alpha = Math.min(roll * fadeSpeed, 1);
     view.visible = roll > 0;
-    rule.scale.x = roll;
 
     for (let index = 0; index < entries.length; index++) {
-      const order: number = Math.min(Math.max(index - first, 0), visibleRows);
+      const entry: Container = entries[index]!.view;
+      const offset: number = index - scroll.value;
+      const distance: number = Math.abs(offset);
       const amount: number = Math.min(
-        Math.max(roll * (1 + visibleRows * rowStagger) - order * rowStagger, 0),
+        Math.max(
+          roll * (1 + wheelReach * cardStagger) - distance * cardStagger,
+          0,
+        ),
         1,
       );
 
-      entries[index]!.view.x = slideDistance * (1 - amount) * (1 - amount);
-      entries[index]!.view.alpha = amount;
+      entry.visible = distance < wheelReach;
+      entry.zIndex = -distance;
+      entry.scale.set(1 - wheelShrink * Math.min(distance, wheelReach));
+      entry.alpha = Math.max(1 - wheelFade * distance, 0) * amount;
+      entry.position.set(
+        doorWidth / 2 +
+          wheelCurve * offset * offset +
+          slideDistance * (1 - amount) * (1 - amount),
+        wheelY +
+          Math.sign(offset) *
+            wheelSpacing *
+            (distance - (wheelShrink * distance * distance) / 2),
+      );
     }
-  }
-
-  function drawRule(): void {
-    const end: number = textRight - heading.width - lineGap;
-
-    rule.position.set(end, titleY);
-    rule
-      .clear()
-      .moveTo(0, 0)
-      .lineTo(entryInset + lineDiamond * 2 - end, 0)
-      .stroke({ color: getTheme().accent, width: 1.5 })
-      .poly([
-        entryInset - end,
-        0,
-        entryInset + lineDiamond - end,
-        -lineDiamond,
-        entryInset + lineDiamond * 2 - end,
-        0,
-        entryInset + lineDiamond - end,
-        lineDiamond,
-      ])
-      .fill(getTheme().accent);
-  }
-
-  function entryY(index: number): number {
-    return listY + index * entryHeight;
   }
 
   function paint(): void {
     for (let index = 0; index < entries.length; index++) {
       entries[index]!.lit.set(index === selected ? 1 : 0);
-    }
-  }
-
-  function inView(index: number): boolean {
-    const top: number = entryY(index) - scroll.value;
-
-    return (
-      top >= listY - entryHeight / 2 &&
-      top <= listY + (visibleRows - 0.5) * entryHeight
-    );
-  }
-
-  function reveal(): void {
-    const row: number = selected - Math.round(scrollTarget / entryHeight);
-
-    if (row < 0) {
-      scrollTarget = selected * entryHeight;
-    } else if (row >= visibleRows) {
-      scrollTarget = (selected - visibleRows + 1) * entryHeight;
     }
   }
 
@@ -236,7 +232,6 @@ function createSelector(ticker: Ticker): Selector {
     const before: number = selected;
 
     selected = (index + entries.length) % entries.length;
-    reveal();
     paint();
 
     if (selected !== before) {
@@ -246,14 +241,12 @@ function createSelector(ticker: Ticker): Selector {
 
   function drawArrows(): void {
     const center: number = doorWidth / 2;
-    const top: number = listY - arrowGap;
-    const bottom: number = listY + visibleRows * entryHeight + arrowGap - 4;
-    const more: number =
-      (entries.length - visibleRows) * entryHeight - scroll.value;
+    const top: number = wheelTop + arrowGap;
+    const bottom: number = wheelBottom - arrowGap;
 
     arrows.clear();
 
-    if (scroll.value > 1) {
+    if (selected > 0) {
       arrows
         .poly([
           center - arrowSize,
@@ -263,13 +256,10 @@ function createSelector(ticker: Ticker): Selector {
           center,
           top - arrowSize,
         ])
-        .fill({
-          color: 0xffffff,
-          alpha: Math.min(scroll.value / entryHeight, 1),
-        });
+        .fill({ color: 0xffffff, alpha: 0.7 });
     }
 
-    if (more > 1) {
+    if (selected < entries.length - 1) {
       arrows
         .poly([
           center - arrowSize,
@@ -279,7 +269,7 @@ function createSelector(ticker: Ticker): Selector {
           center,
           bottom + arrowSize,
         ])
-        .fill({ color: 0xffffff, alpha: Math.min(more / entryHeight, 1) });
+        .fill({ color: 0xffffff, alpha: 0.7 });
     }
   }
 
@@ -292,7 +282,6 @@ function createSelector(ticker: Ticker): Selector {
   function reload(index: number): void {
     rebuild();
     selected = Math.max(shown.indexOf(index), 0);
-    reveal();
     paint();
     announce();
   }
@@ -319,13 +308,23 @@ function createSelector(ticker: Ticker): Selector {
     }
   }
 
-  drawBackdrop(backdrop);
-  heading.anchor.set(1, 0.5);
-  heading.position.set(textRight, titleY);
-  listMask
-    .rect(0, listY - 2, doorWidth, visibleRows * entryHeight)
-    .fill(0xffffff);
-  list.addChild(highlight);
+  drawSky(sky);
+  badge
+    .poly([
+      entryInset + titleSlant,
+      titleY - titleHeight / 2,
+      doorWidth - entryInset,
+      titleY - titleHeight / 2,
+      doorWidth - entryInset - titleSlant,
+      titleY + titleHeight / 2,
+      entryInset,
+      titleY + titleHeight / 2,
+    ])
+    .fill(getTheme().accent);
+  heading.anchor.set(0.5);
+  heading.position.set(doorWidth / 2, titleY);
+  listMask.rect(0, wheelTop, doorWidth, wheelBottom - wheelTop).fill(0xffffff);
+  list.sortableChildren = true;
   list.mask = listMask;
   searchText.anchor.set(0, 0.5);
   searchCount.anchor.set(1, 0.5);
@@ -344,7 +343,7 @@ function createSelector(ticker: Ticker): Selector {
       setTyping(true);
     }
   });
-  door.addChild(backdrop, rule, heading, search, list, listMask, arrows);
+  door.addChild(sky, badge, heading, search, list, listMask, arrows);
 
   function matches(choice: Choice): boolean {
     const needle: string = query.trim().toLowerCase();
@@ -387,7 +386,7 @@ function createSelector(ticker: Ticker): Selector {
     caret = 0;
     rebuild();
     selected = 0;
-    scrollTarget = 0;
+    scroll.value = 0;
     paint();
     announce();
   }
@@ -447,7 +446,6 @@ function createSelector(ticker: Ticker): Selector {
 
   function setMenu(menu: Menu): void {
     heading.text = menu.heading;
-    drawRule();
     current = menu;
     query = "";
     typing = false;
@@ -457,9 +455,7 @@ function createSelector(ticker: Ticker): Selector {
       menu.remember === true
         ? Math.max(shown.indexOf(menu.selected ?? 0), 0)
         : 0;
-    scrollTarget = 0;
-    reveal();
-    scroll.value = scrollTarget;
+    scroll.value = selected;
     scroll.velocity = 0;
     paint();
     announce();
@@ -467,19 +463,13 @@ function createSelector(ticker: Ticker): Selector {
 
   function addEntry(choice: Choice, index: number): void {
     const entry: Container = new Container();
+    const card: Graphics = new Graphics();
     const name: Text = createText(nameSize, "#ffffff");
     const title: Text = createText(subtitleSize, "#ffffff");
-    const brackets: Graphics = new Graphics();
+    const top: number = -cardHeight / 2;
+    const left: number = -cardWidth / 2 + cardSlant + cardPadding;
+    const nameX: number = left + (choice.starred === true ? starSpace : 0);
     const star: Graphics = new Graphics();
-    const top: number = entryY(index);
-
-    name.text = choice.name.toUpperCase();
-    name.anchor.set(1, 0);
-    name.position.set(textRight, top + 4);
-    title.text = choice.title;
-    title.style.fill = subtitleColor;
-    title.anchor.set(1, 0);
-    title.position.set(textRight, top + 4 + nameSize + 1);
 
     if (choice.starred === true) {
       const points: Array<number> = new Array();
@@ -491,75 +481,84 @@ function createSelector(ticker: Ticker): Selector {
         points.push(Math.sin(angle) * reach, -Math.cos(angle) * reach);
       }
 
-      star.poly(points).fill(getTheme().accent);
-      star.y = top + 4 + nameSize / 2 + 1;
+      star.poly(points).fill(getTheme().highlight);
+      star.position.set(left + starRadius, top + 2 + nameSize / 2 + 1);
     }
 
-    entry.addChild(brackets, star, name, title);
+    name.text = choice.name.toUpperCase();
+    name.position.set(nameX, top + 2);
+    title.text = choice.title;
+    title.style.fill = subtitleColor;
+    title.position.set(left, top + 2 + nameSize);
+    entry.addChild(card, star, name, title);
     entry.eventMode = "static";
     entry.cursor = "pointer";
     entry.hitArea = new Rectangle(
-      entryInset,
-      top,
-      doorWidth - entryInset * 2,
-      entryHeight - 4,
+      -cardWidth / 2,
+      -cardHeight / 2,
+      cardWidth,
+      cardHeight,
     );
-    entry.on("pointerover", () => {
-      if (active && inView(index)) {
+    entry.on("pointertap", () => {
+      if (!active) {
+        return;
+      }
+
+      if (index === selected) {
+        choose();
+      } else {
         select(index);
       }
     });
-    entry.on("pointertap", () => {
-      if (!inView(index)) {
-        return;
-      }
-
-      select(index);
-      choose();
-    });
+    drawCard(card, 0, getTheme());
     list.addChild(entry);
-
-    function apply(amount: number): void {
-      if (entry.destroyed) {
-        return;
-      }
-
-      const right: number =
-        textRight + restShift * (1 - amount) - pullShift * amount;
-      const spread: number = bracketGap + bracketSpread * (1 - amount);
-      const left: number = right - name.width - spread;
-      const upper: number = top + 6;
-      const lower: number = top + 4 + nameSize + 1;
-
-      name.x = right;
-      title.x = right;
-      star.x = right - name.width - bracketGap * 2 - starRadius - 4;
-      name.alpha = dimAlpha + (1 - dimAlpha) * amount;
-      title.alpha = name.alpha;
-      star.alpha = name.alpha;
-      brackets
-        .clear()
-        .moveTo(left, upper + bracketSize)
-        .lineTo(left, upper)
-        .lineTo(left + bracketSize, upper)
-        .moveTo(right + spread, lower - bracketSize)
-        .lineTo(right + spread, lower)
-        .lineTo(right + spread - bracketSize, lower)
-        .stroke({
-          color: getTheme().highlight,
-          width: bracketWidth,
-          alpha: amount,
-        });
-    }
-
-    apply(0);
     entries.push({
       view: entry,
       name: name,
       title: title,
-      lit: createGlide(0, apply),
+      lit: createGlide(0, (amount: number) => {
+        if (entry.destroyed) {
+          return;
+        }
+
+        drawCard(card, amount, getTheme());
+        name.x = nameX + amount * selectShift;
+        title.x = left + amount * selectShift;
+        star.x = left + starRadius + amount * selectShift;
+      }),
     });
     texts.push(name, title);
+  }
+
+  function drawCard(card: Graphics, amount: number, theme: Theme): void {
+    const top: number = -cardHeight / 2;
+    const left: number = -cardWidth / 2;
+
+    card
+      .clear()
+      .poly([
+        left + cardSlant,
+        top,
+        -left,
+        top,
+        -left - cardSlant,
+        -top,
+        left,
+        -top,
+      ])
+      .fill({ color: mix(cardColor, theme.accent, amount), alpha: cardAlpha })
+      .stroke({ color: theme.highlight, width: 2, alpha: amount })
+      .poly([
+        left + cardSlant,
+        top,
+        left + cardSlant + stripeWidth,
+        top,
+        left + stripeWidth,
+        -top,
+        left,
+        -top,
+      ])
+      .fill(amount > 0.5 ? theme.highlight : theme.accent);
   }
 
   rails
@@ -589,19 +588,8 @@ function createSelector(ticker: Ticker): Selector {
       return;
     }
 
-    smoothDamp(
-      highlightY,
-      entryY(selected),
-      highlightSmoothing,
-      current.deltaMS / 1000,
-    );
-    smoothDamp(
-      scroll,
-      scrollTarget,
-      highlightSmoothing,
-      current.deltaMS / 1000,
-    );
-    list.y = -scroll.value;
+    smoothDamp(scroll, selected, highlightSmoothing, current.deltaMS / 1000);
+    place();
     drawArrows();
 
     if (typing) {
@@ -613,26 +601,6 @@ function createSelector(ticker: Ticker): Selector {
         drawSearch();
       }
     }
-
-    const top: number = highlightY.value;
-    const height: number = entryHeight - 4;
-    const width: number = doorWidth - entryInset * 2;
-    const step: number = width / bandSteps;
-
-    highlight.clear();
-
-    for (let band = 0; band < bandSteps; band++) {
-      highlight.rect(entryInset + band * step, top, step + 0.5, height).fill({
-        color: getTheme().accent,
-        alpha: (bandAlpha * (band + 1)) / bandSteps,
-      });
-    }
-
-    highlight
-      .rect(doorWidth - entryInset - edgeWidth, top, edgeWidth, height)
-      .fill(getTheme().highlight);
-    highlight.x = entries[selected]?.view.x ?? 0;
-    highlight.alpha = entries[selected]?.view.alpha ?? 1;
   });
 
   window.addEventListener(
@@ -754,8 +722,8 @@ function createSelector(ticker: Ticker): Selector {
     view: view,
     setMenu: setMenu,
     rollDown: () => {
-      highlightY.value = entryY(selected);
-      highlightY.velocity = 0;
+      scroll.value = selected;
+      scroll.velocity = 0;
       return rollTo(1, downDuration);
     },
     rollUp: () => rollTo(0, upDuration),
