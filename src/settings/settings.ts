@@ -437,6 +437,28 @@ function onDim(listener: RateListener): void {
   listener(dim);
 }
 
+function getFullscreen(): boolean {
+  return document.fullscreenElement !== null;
+}
+
+function setFullscreen(value: boolean): void {
+  if (value === getFullscreen()) {
+    return;
+  }
+
+  const request: Promise<void> = value
+    ? document.documentElement.requestFullscreen()
+    : document.exitFullscreen();
+
+  request.catch(() => console.warn("Could not change fullscreen"));
+}
+
+function onFullscreen(listener: CrtListener): void {
+  document.addEventListener("fullscreenchange", () =>
+    listener(getFullscreen()),
+  );
+}
+
 function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
@@ -470,6 +492,9 @@ export {
   getHitbox,
   setHitbox,
   onHitbox,
+  getFullscreen,
+  setFullscreen,
+  onFullscreen,
   getDim,
   setDim,
   onDim,

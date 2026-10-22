@@ -38,6 +38,7 @@ import {
   getResolution,
   getShake,
   getHitbox,
+  getFullscreen,
   getDim,
   getTv,
   getTuning,
@@ -47,6 +48,7 @@ import {
   onResolution,
   onShake,
   onHitbox,
+  onFullscreen,
   onDim,
   onTv,
   onTuning,
@@ -58,6 +60,7 @@ import {
   setResolution,
   setShake,
   setHitbox,
+  setFullscreen,
   setDim,
   setTv,
   setTuning,
@@ -388,6 +391,7 @@ function createSettings(app: Application): PageContent {
   const tvButtons: Array<Button> = new Array();
   const shakeButtons: Array<Button> = new Array();
   const hitboxButtons: Array<Button> = new Array();
+  const fullscreenButtons: Array<Button> = new Array();
   const rateButtons: Array<Button> = new Array();
   const resolutionButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
@@ -458,6 +462,12 @@ function createSettings(app: Application): PageContent {
     {
       name: "display",
       rows: [
+        createToggleRow(
+          "fullscreen",
+          getFullscreen,
+          setFullscreen,
+          fullscreenButtons,
+        ),
         createChoiceRow(
           "resolution",
           resolutions,
@@ -800,6 +810,7 @@ function createSettings(app: Application): PageContent {
   onCrt(refresh);
   onShake(refresh);
   onHitbox(refresh);
+  onFullscreen(refresh);
   onDim(refresh);
   onTv(refresh);
   onTuning(refresh);

@@ -60,7 +60,7 @@ type Tally = {
 };
 
 type Entry = {
-  kind: "stage" | "run" | "game";
+  kind: "game";
   id: string;
 };
 
@@ -76,7 +76,6 @@ type Custom = {
   view: Container;
   choices: () => Array<Choice>;
   count: () => number;
-  isGame: (index: number) => boolean;
   gameChoices: (index: number) => Array<Choice>;
   plan: (index: number, difficulty: number) => Plan | null;
   start: (plan: Plan) => Promise<Leg | null>;
@@ -197,13 +196,6 @@ async function createCustom(
       ...creations.games
         .filter((game: GameCard) => gameDifficulties(game).length > 0)
         .map((game: GameCard): Entry => ({ kind: "game", id: game.id })),
-      ...creations.runs
-        .filter((run: RunCard) => runStages(creations, run).length > 0)
-        .map((run: RunCard): Entry => ({ kind: "run", id: run.id })),
-      ...creations.stages.map((stage: Stage): Entry => ({
-        kind: "stage",
-        id: stage.id,
-      })),
     ];
     entries.sort(
       (first: Entry, second: Entry) =>
@@ -212,7 +204,7 @@ async function createCustom(
     );
 
     if (entries.length === 0) {
-      return [{ name: "No stages yet", title: "Build one in the create menu" }];
+      return [{ name: "No games yet", title: "Build one in the create menu" }];
     }
 
     return entries.map((entry: Entry): Choice => {
@@ -252,53 +244,21 @@ async function createCustom(
   }
 
   function describe(entry: Entry): Choice {
-    if (entry.kind === "game") {
-      const game: GameCard = byId(creations.games, entry.id)!;
-
-      return {
-        name: game.name,
-        title:
-          "Game  " +
-          gameDifficulties(game).length +
-          (gameDifficulties(game).length === 1
-            ? " difficulty"
-            : " difficulties"),
-      };
-    }
-
-    if (entry.kind === "run") {
-      const run: RunCard = byId(creations.runs, entry.id)!;
-      const stages: Array<Stage> = runStages(creations, run);
-
-      return {
-        name: run.name,
-        title:
-          "Run  " +
-          rarityOf(difficulties, run.difficulty).label +
-          "  " +
-          plural(stages.length, "stage") +
-          "  " +
-          formatLength(packLength(stages)) +
-          bestText(run.id),
-      };
-    }
-
-    const stage: Stage = byId(creations.stages, entry.id)!;
+    const game: GameCard = byId(creations.games, entry.id)!;
 
     return {
-      name: stage.name,
+      name: game.name,
       title:
-        rarityOf(difficulties, stage.difficulty).label +
-        "  " +
-        formatLength(stage.length) +
-        bestText(stage.id),
+        "Game  " +
+        gameDifficulties(game).length +
+        (gameDifficulties(game).length === 1 ? " difficulty" : " difficulties"),
     };
   }
 
   function gameOf(index: number): GameCard | null {
     const entry: Entry | undefined = entries[index];
 
-    return entry?.kind === "game" ? byId(creations.games, entry.id) : null;
+    return entry === undefined ? null : byId(creations.games, entry.id);
   }
 
   function gameChoices(index: number): Array<Choice> {
@@ -324,56 +284,24 @@ async function createCustom(
   }
 
   function planOf(index: number, difficulty: number): Plan | null {
-    const entry: Entry | undefined = entries[index];
-
-    if (entry === undefined) {
-      return null;
-    }
-
-    if (entry.kind === "game") {
-      const game: GameCard = byId(creations.games, entry.id)!;
-      const chosen: Rarity<Difficulty> | undefined =
-        gameDifficulties(game)[difficulty];
-      const run: RunCard | null =
-        chosen === undefined
-          ? null
-          : byId(creations.runs, game.runs[chosen.value]);
-
-      return chosen === undefined || run === null
+    const game: GameCard | null = gameOf(index);
+    const chosen: Rarity<Difficulty> | undefined =
+      game === null ? undefined : gameDifficulties(game)[difficulty];
+    const run: RunCard | null =
+      game === null || chosen === undefined
         ? null
-        : {
-            id: game.id + ":" + chosen.value,
-            name: game.name,
-            stages: runStages(creations, run),
-            difficulty: chosen.value,
-            first: 0,
-            practice: false,
-          };
-    }
+        : byId(creations.runs, game.runs[chosen.value]);
 
-    if (entry.kind === "run") {
-      const run: RunCard = byId(creations.runs, entry.id)!;
-
-      return {
-        id: run.id,
-        name: run.name,
-        stages: runStages(creations, run),
-        difficulty: run.difficulty,
-        first: 0,
-        practice: false,
-      };
-    }
-
-    const stage: Stage = byId(creations.stages, entry.id)!;
-
-    return {
-      id: stage.id,
-      name: stage.name,
-      stages: [stage],
-      difficulty: stage.difficulty,
-      first: 0,
-      practice: false,
-    };
+    return game === null || chosen === undefined || run === null
+      ? null
+      : {
+          id: game.id + ":" + chosen.value,
+          name: game.name,
+          stages: runStages(creations, run),
+          difficulty: chosen.value,
+          first: 0,
+          practice: false,
+        };
   }
 
   function loop(sound: Sound, offset: number = 0): void {
@@ -652,7 +580,6 @@ async function createCustom(
     view: preview.view,
     choices: choices,
     count: () => entries.length,
-    isGame: (index: number) => gameOf(index) !== null,
     gameChoices: gameChoices,
     plan: planOf,
     start: start,

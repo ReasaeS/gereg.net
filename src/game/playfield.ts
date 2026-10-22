@@ -86,7 +86,7 @@ const modesMenu: Menu = {
   remember: true,
   choices: [
     { name: "Story", title: "Fight through the stages" },
-    { name: "Custom", title: "Play your stages, runs and games" },
+    { name: "Custom", title: "Play your games" },
     { name: "Multiplayer", title: "Play alongside others" },
     { name: "Zen", title: "Roam under your own skies" },
     { name: "Watch", title: "Sit back while your stages play" },
@@ -312,6 +312,22 @@ async function createPlayfield(
       }
     });
     event.preventDefault();
+  });
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (
+      view.visible &&
+      zenning &&
+      active &&
+      event.code === "KeyN" &&
+      !event.repeat &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      zen.next();
+      event.preventDefault();
+    }
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -738,6 +754,7 @@ async function createPlayfield(
           : "STAGE CLEAR",
       rows,
       record,
+      plan.name,
     );
     tween(app.ticker, resultsDelay, () => undefined).then(() => {
       resultsReady = true;
@@ -895,17 +912,13 @@ async function createPlayfield(
     } else if (menu === stagesMenu) {
       startPlaying(false);
     } else if (menu === customMenu && custom.count() > 0) {
-      if (custom.isGame(index)) {
-        if (customPick !== index) {
-          difficultyMenu.selected = 0;
-        }
-
-        customPick = index;
-        difficultyMenu.choices = custom.gameChoices(index);
-        openMenu(difficultyMenu);
-      } else {
-        choosePlan(custom.plan(index, 0));
+      if (customPick !== index) {
+        difficultyMenu.selected = 0;
       }
+
+      customPick = index;
+      difficultyMenu.choices = custom.gameChoices(index);
+      openMenu(difficultyMenu);
     } else if (menu === difficultyMenu) {
       choosePlan(custom.plan(customPick, index));
     } else if (menu === startMenu && startPlan !== null) {

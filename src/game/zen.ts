@@ -22,6 +22,7 @@ type Zen = {
   start: () => void;
   stop: () => void;
   update: (delta: number) => void;
+  next: () => void;
 };
 
 type Look = {
@@ -246,6 +247,16 @@ function createZen(onLook: LookListener): Zen {
       return;
     }
 
+    advance();
+  }
+
+  function next(): void {
+    if (running && fading < 0 && looks.length >= 2) {
+      advance();
+    }
+  }
+
+  function advance(): void {
     sceneElapsed = 0;
     sceneIndex = (sceneIndex + 1) % looks.length;
     paintScene(scenes[1]!, looks[sceneIndex]!.background);
@@ -259,7 +270,13 @@ function createZen(onLook: LookListener): Zen {
   view.addChild(back.view, front.view);
   view.visible = false;
 
-  return { view: view, start: start, stop: stop, update: update };
+  return {
+    view: view,
+    start: start,
+    stop: stop,
+    update: update,
+    next: next,
+  };
 }
 
 export { createZen };

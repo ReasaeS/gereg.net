@@ -18,7 +18,6 @@ type Actor = {
   sigil: Graphics;
   body: Graphics;
   sprite: Sprite;
-  health: Graphics;
   x: number; // units
   y: number; // units
   path: Path;
@@ -75,11 +74,6 @@ type Actors = {
 const forward: number = Math.PI / 2; // rad
 const actorMargin: number = 60; // units
 const actorGrace: number = 2; // s
-const healthWidth: number = 36; // units
-const healthHeight: number = 3; // units
-const healthScale: number = 200;
-const pipSize: number = 3; // units
-const pipGap: number = 2; // units
 const stillSpeed: number = 1; // units/s
 const damagePoints: number = 10;
 const defeatPoints: Map<Rank, number> = new Map([
@@ -128,42 +122,6 @@ function createActors(
       actor.sigil.clear();
     } else {
       drawSigil(actor.sigil, found, actor.time);
-    }
-
-    actor.health.clear();
-
-    if (enemy.rank !== "regular") {
-      return;
-    }
-
-    actor.health
-      .rect(-healthWidth / 2, -enemy.size / 2 - 8, healthWidth, healthHeight)
-      .fill({ color: "#000000", alpha: 0.6 })
-      .rect(
-        -healthWidth / 2,
-        -enemy.size / 2 - 8,
-        healthWidth *
-          Math.min((enemy.bars[actor.bar]?.health ?? 0) / healthScale, 1) *
-          Math.min(
-            Math.max(
-              actor.hp / Math.max(enemy.bars[actor.bar]?.health ?? 1, 1),
-              0,
-            ),
-            1,
-          ),
-        healthHeight,
-      )
-      .fill("#ff3b3b");
-
-    for (let index = actor.bar + 1; index < barCount(enemy); index++) {
-      actor.health
-        .rect(
-          -healthWidth / 2 + (index - actor.bar - 1) * (pipSize + pipGap),
-          -enemy.size / 2 - 8 + healthHeight + pipGap,
-          pipSize,
-          pipSize,
-        )
-        .fill("#ff3b3b");
     }
   }
 
@@ -316,7 +274,6 @@ function createActors(
       sigil: new Graphics(),
       body: new Graphics(),
       sprite: new Sprite(),
-      health: new Graphics(),
       x: x,
       y: y,
       path: path,
@@ -334,7 +291,7 @@ function createActors(
     };
 
     actor.sprite.anchor.set(0.5);
-    actor.view.addChild(actor.sigil, actor.body, actor.sprite, actor.health);
+    actor.view.addChild(actor.sigil, actor.body, actor.sprite);
     layer.addChild(actor.view);
     actors.push(actor);
     arm(actor, bar ?? 0);

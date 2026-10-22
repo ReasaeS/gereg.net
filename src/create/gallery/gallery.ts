@@ -96,6 +96,10 @@ const slideSmoothing: number = 0.12; // s
 const fadeSmoothing: number = 0.08; // s
 const fadeLimit: number = 0.01;
 const emptySize: number = 14; // px
+const framePadding: number = 20; // px
+const frameInset: number = 6; // px
+const frameRadius: number = 14; // px
+const frameAlpha: number = 0.55;
 
 function createGallery(
   app: Application,
@@ -110,6 +114,10 @@ function createGallery(
   const grid: Container = new Container();
   const list: Container = new Container();
   const mask: Graphics = new Graphics();
+  const frame: Graphics = new Graphics();
+  const frameFade: Glide = createGlide(0, (value: number) => {
+    frame.alpha = value;
+  });
   const tiles: Array<Tile> = new Array();
   const places: Map<Tile, Place> = new Map();
   const leaving: Array<Tile> = new Array();
@@ -510,6 +518,7 @@ function createGallery(
     revealed = null;
     appearTime = Math.min(appearTime, appearEnd());
     appearDirection = -1;
+    frameFade.set(0);
 
     return new Promise<void>((resolve) => {
       vanished = resolve;
@@ -520,6 +529,7 @@ function createGallery(
     onTabs = true;
     revealed = null;
     appearDirection = 1;
+    frameFade.set(1);
     vanished?.();
     vanished = null;
     appearTime = 0;
@@ -644,7 +654,7 @@ function createGallery(
     searchBar.view.position.set(Math.round(app.screen.width / 2), searchY);
     searchBar.layout(Math.max(width, area));
 
-    visibleHeight = app.screen.height * galleryBottom - top;
+    visibleHeight = app.screen.height * galleryBottom - top - framePadding;
     grid.position.set(left, top);
     tabs.layout();
     mask
@@ -656,6 +666,24 @@ function createGallery(
         visibleHeight + liftMargin,
       )
       .fill(0xffffff);
+    frame
+      .clear()
+      .roundRect(
+        -framePadding,
+        -framePadding,
+        width + framePadding * 2,
+        visibleHeight + framePadding * 2,
+        frameRadius,
+      )
+      .stroke({ color: trim, width: 1.5, alpha: frameAlpha })
+      .roundRect(
+        -framePadding + frameInset,
+        -framePadding + frameInset,
+        width + (framePadding - frameInset) * 2,
+        visibleHeight + (framePadding - frameInset) * 2,
+        frameRadius - frameInset / 2,
+      )
+      .stroke({ color: trim, width: 0.75, alpha: frameAlpha / 2 });
     grid.hitArea = new Rectangle(0, 0, width, visibleHeight);
     arrange();
     reveal();
@@ -665,7 +693,7 @@ function createGallery(
   empty.anchor.set(0.5);
   empty.alpha = 0;
   list.addChild(empty);
-  grid.addChild(list, mask);
+  grid.addChild(frame, list, mask);
   list.mask = mask;
   view.addChild(tabs.view, searchBar.view, grid, dealer.view);
   view.eventMode = "none";

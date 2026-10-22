@@ -80,9 +80,11 @@ import { createNightSea } from "./worlds/nightsea";
 import { getTheme, onTheme, type Theme } from "./theme/theme";
 import { startMotion } from "./ui/motion";
 import {
+  getFullscreen,
   getResolution,
   getVolume,
   onResolution,
+  setFullscreen,
   setVolume,
 } from "./settings/settings";
 import { startGamepad } from "./game/gamepad";
@@ -512,6 +514,26 @@ function takeScreenshot(): void {
     toast.show("Screenshot saved");
   }, "image/png");
 }
+
+window.addEventListener(
+  "keydown",
+  (event: KeyboardEvent) => {
+    if (
+      !event.altKey ||
+      (event.code !== "Enter" && event.code !== "NumpadEnter")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (!event.repeat) {
+      setFullscreen(!getFullscreen());
+    }
+  },
+  true,
+);
 
 function toggleMute(): void {
   const master: number = getVolume("master");

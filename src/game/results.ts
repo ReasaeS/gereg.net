@@ -6,7 +6,12 @@ import { createShadowText, createText, screenResolution } from "../ui/text";
 
 type Results = {
   view: Container;
-  show: (title: string, rows: Array<[string, string]>, best: boolean) => void;
+  show: (
+    title: string,
+    rows: Array<[string, string]>,
+    best: boolean,
+    name: string,
+  ) => void;
   hide: () => void;
   shown: () => boolean;
   setScale: (scale: number) => void;
@@ -29,6 +34,7 @@ const panelAlpha: number = 0.86;
 const shadeAlpha: number = 0.35;
 const shadowColor: string = "#020b30";
 const growFrom: number = 1.12;
+const copiedTime: number = 1500; // ms
 const resultsSmoothing: number = 0.16; // s
 const rowStagger: number = 0.07; // s
 const rowRise: number = 10; // units
@@ -50,6 +56,8 @@ function createResults(width: number, height: number): Results {
   const hint: Text = createText(hintSize, "#9fd8ff");
   const rowGlides: Array<Glide> = new Array();
   let open: boolean = false;
+  let summary: string = "";
+  let copyToken: number = 0;
   let scale: number = 1;
   const shown: Glide = createGlide(
     0,
@@ -129,13 +137,45 @@ function createResults(width: number, height: number): Results {
     setScale(scale);
   }
 
+  function continueHint(): string {
+    return (
+      promptName("shot") +
+      " CONTINUE" +
+      (usingPad() ? "" : "  ·  R RETRY  ·  CTRL + C COPY")
+    );
+  }
+
+  function copy(): void {
+    const owner: number = ++copyToken;
+
+    navigator.clipboard
+      .writeText(summary)
+      .then(() => "COPIED TO CLIPBOARD")
+      .catch(() => "COULD NOT COPY")
+      .then((message: string) => {
+        hint.text = message;
+        window.setTimeout(() => {
+          if (owner === copyToken && open) {
+            hint.text = continueHint();
+          }
+        }, copiedTime);
+      });
+  }
+
   function show(
     heading: string,
     rows: Array<[string, string]>,
     record: boolean,
+    name: string,
   ): void {
-    hint.text =
-      promptName("shot") + " CONTINUE" + (usingPad() ? "" : "  ·  R RETRY");
+    copyToken++;
+    hint.text = continueHint();
+    summary = [
+      "GEREG.NET",
+      name,
+      heading + (record ? " (NEW BEST)" : ""),
+      ...rows.map(([label, value]: [string, string]) => label + " " + value),
+    ].join("  ·  ");
     open = true;
     title.text = heading;
     best.text = record ? "NEW BEST" : "";
@@ -162,6 +202,18 @@ function createResults(width: number, height: number): Results {
       text.resolution = screenResolution(scale * growFrom);
     }
   }
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (
+      open &&
+      (event.ctrlKey || event.metaKey) &&
+      event.code === "KeyC" &&
+      !event.repeat
+    ) {
+      copy();
+      event.preventDefault();
+    }
+  });
 
   shade.rect(0, 0, width, height).fill({ color: "#000000", alpha: shadeAlpha });
   title.anchor.set(0.5);
