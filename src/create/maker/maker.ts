@@ -64,6 +64,7 @@ import { createScenes, type Scenes } from "./scenes";
 import { createUploads, type Uploads } from "./uploads";
 import { createMarkers, type Markers } from "./markers";
 import { createPainter, type Painter } from "./painter";
+import { createComposer, type Composer } from "./composer";
 import { createTransport, type Transport } from "./transport";
 import { createTimeline, transportWidth, type Timeline } from "./timeline";
 import { createDrop, type Drop } from "./drop";
@@ -173,6 +174,11 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => changed(),
     () => refresh(),
   );
+  const composer: Composer = createComposer(
+    app,
+    () => changed(),
+    () => refresh(),
+  );
   const toast: Toast = createToast(app);
   let frameScale: number = 1;
   let tab: Tab;
@@ -229,6 +235,10 @@ async function createMaker(app: Application): Promise<PageContent> {
         },
         drawDefault: drawBulletDefault,
       });
+    },
+    composeSong: () => {
+      transport.stopTyping();
+      composer.open(pick.sound());
     },
     editTranscript: (
       initial: string,
@@ -538,7 +548,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function dropLabel(): string | null {
-    if (painter.shown()) {
+    if (painter.shown() || composer.shown()) {
       return null;
     }
 
@@ -739,6 +749,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     browser.view,
     script.view,
     painter.view,
+    composer.view,
     drop.view,
     toast.view,
   );
@@ -759,6 +770,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     drop.layout();
     browser.layout();
     painter.layout(frameScale);
+    composer.layout(frameScale);
   }
 
   app.ticker.add((ticker: Ticker) => {
@@ -806,7 +818,12 @@ async function createMaker(app: Application): Promise<PageContent> {
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (browser.shown() || script.shown() || painter.shown()) {
+    if (
+      browser.shown() ||
+      script.shown() ||
+      painter.shown() ||
+      composer.shown()
+    ) {
       return;
     }
 
@@ -918,6 +935,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       browser.close();
       script.close();
       painter.close();
+      composer.close();
     }
 
     view.eventMode = value ? "passive" : "none";
@@ -938,6 +956,11 @@ async function createMaker(app: Application): Promise<PageContent> {
 
     if (painter.shown()) {
       painter.close();
+      return true;
+    }
+
+    if (composer.shown()) {
+      composer.close();
       return true;
     }
 

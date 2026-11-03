@@ -34,6 +34,8 @@ import {
   repairBullet,
 } from "./defaults";
 import { wallAngle } from "./geometry";
+import { repairScore } from "./jungle";
+import { useSounds } from "./sound";
 import { defaultCreations } from "./starter";
 
 const storageKey: string = "geregnet.creations";
@@ -151,6 +153,14 @@ function upgradeCutscene(cutscene: OldCutscene, cast: Array<Character>): void {
 }
 
 function loadCreations(): Creations {
+  const creations: Creations = readCreations();
+
+  useSounds(creations.sounds);
+
+  return creations;
+}
+
+function readCreations(): Creations {
   try {
     const saved: string | null = localStorage.getItem(storageKey);
 
@@ -207,6 +217,7 @@ function loadCreations(): Creations {
       sound.source = sound.source ?? "synth";
       sound.file = sound.file ?? null;
       sound.fileName = sound.fileName ?? "";
+      sound.score = repairScore(sound.score);
     }
 
     for (const cutscene of creations.cutscenes) {

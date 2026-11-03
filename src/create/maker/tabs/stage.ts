@@ -17,6 +17,7 @@ import { saveCreations } from "../../storage";
 import { curveOptions } from "../swatches";
 import { waveAmplitude } from "../kit";
 import type { Studio } from "../studio";
+import { isMusic } from "../../sound";
 
 const positionMin: number = -0.2;
 const positionMax: number = 1.2;
@@ -211,12 +212,10 @@ function addStageTab(studio: Studio): StageTab {
           "Music",
           () => [
             { value: null, label: "None" },
-            ...creations.sounds
-              .filter((value: Sound) => value.source === "file")
-              .map((value: Sound) => ({
-                value: value.id as string | null,
-                label: value.name,
-              })),
+            ...creations.sounds.filter(isMusic).map((value: Sound) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
           ],
           () => stage().music,
           (value: string | null) => {

@@ -1,13 +1,30 @@
 import type { Graphics } from "pixi.js";
-import type { Sound } from "./types";
-import { effectiveVolume } from "../settings/settings";
+import type { Score, Sound } from "./types";
+import { effectiveVolume, type Channel } from "../settings/settings";
 import { readBlob, storeBlob } from "./images";
+import { renderScore, scoreLength } from "./jungle";
 
 const drawRate: number = 11025; // Hz
 const drawDetail: number = 256;
 const noiseSeed: number = 12345;
 const buffers: Map<string, AudioBuffer> = new Map();
 const loading: Map<string, Promise<AudioBuffer | null>> = new Map();
+const scores: Map<string, Float32Array<ArrayBuffer>> = new Map();
+const scoreCache: number = 16;
+const songMinimum: number = 90; // s
+const resampled: WeakMap<
+  AudioBuffer,
+  Map<number, Float32Array>
+> = new WeakMap();
+let songPreview: (() => void) | null = null;
+const ritsuVoices: Array<string> = [
+  "voices/ritsu/a.wav",
+  "voices/ritsu/u.wav",
+  "voices/ritsu/i.wav",
+  "voices/ritsu/o.wav",
+  "voices/ritsu/n.wav",
+];
+let library: Array<Sound> = new Array();
 let context: AudioContext | null = null;
 
 type Track = {
@@ -15,10 +32,28 @@ type Track = {
   position: () => number;
 };
 
+function isMusic(sound: Sound): boolean {
+  return sound.source === "file" || sound.source === "song";
+}
+
+function canPlay(sound: Sound): boolean {
+  return (
+    sound.source === "song" || (sound.source === "file" && sound.file !== null)
+  );
+}
+
+function songLength(score: Score): number {
+  const loop: number = scoreLength(score);
+
+  return loop * Math.max(Math.ceil(songMinimum / loop), 1);
+}
+
 function soundLength(sound: Sound): number {
-  return sound.source === "file"
-    ? (bufferOf(sound)?.duration ?? 0)
-    : sound.attack + sound.sustain + sound.decay;
+  return sound.source === "song"
+    ? songLength(sound.score)
+    : sound.source === "file"
+      ? (bufferOf(sound)?.duration ?? 0)
+      : sound.attack + sound.sustain + sound.decay;
 }
 
 function synthLength(sound: Sound): number {
@@ -141,20 +176,145 @@ async function importAudio(file: Blob): Promise<string> {
   return id;
 }
 
+function useSounds(list: Array<Sound>): void {
+  library = list;
+}
+
+function voiceFiles(score: Score): Array<string | null> {
+  if (score.singer === "ritsu") {
+    return ritsuVoices;
+  }
+
+  if (score.singer !== "bank") {
+    return new Array();
+  }
+
+  return score.voicebank.map(
+    (id: string | null) =>
+      library.find((sound: Sound) => sound.id === id && sound.source === "file")
+        ?.file ?? null,
+  );
+}
+
+function loadVoices(score: Score): Promise<unknown> {
+  return Promise.all(voiceFiles(score).map(loadAudio));
+}
+
+function resample(
+  samples: Float32Array,
+  from: number,
+  to: number,
+): Float32Array {
+  const result: Float32Array = new Float32Array(
+    Math.max(Math.floor((samples.length * to) / from), 1),
+  );
+
+  for (let index = 0; index < result.length; index++) {
+    const position: number = (index * from) / to;
+    const before: number = Math.floor(position);
+    const first: number = samples[before] ?? 0;
+    const second: number = samples[before + 1] ?? first;
+
+    result[index] = first + (second - first) * (position - before);
+  }
+
+  return result;
+}
+
+function voiceSamples(file: string | null, rate: number): Float32Array | null {
+  const buffer: AudioBuffer | null =
+    file === null ? null : (buffers.get(file) ?? null);
+
+  if (buffer === null) {
+    return null;
+  }
+
+  if (buffer.sampleRate === rate) {
+    return buffer.getChannelData(0);
+  }
+
+  const rates: Map<number, Float32Array> = resampled.get(buffer) ?? new Map();
+  const found: Float32Array =
+    rates.get(rate) ??
+    resample(buffer.getChannelData(0), buffer.sampleRate, rate);
+
+  rates.set(rate, found);
+  resampled.set(buffer, rates);
+
+  return found;
+}
+
+function scoreSamples(score: Score, rate: number): Float32Array<ArrayBuffer> {
+  const files: Array<string | null> = voiceFiles(score);
+  const voices: Array<Float32Array | null> = files.map((file: string | null) =>
+    voiceSamples(file, rate),
+  );
+  const key: string =
+    rate +
+    ":" +
+    JSON.stringify(score) +
+    ":" +
+    files
+      .map((file: string | null, index: number) =>
+        voices[index] === null ? "" : file,
+      )
+      .join(",");
+  const cached: Float32Array<ArrayBuffer> | undefined = scores.get(key);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const samples: Float32Array<ArrayBuffer> = renderScore(score, rate, voices);
+
+  scores.set(key, samples);
+
+  if (scores.size > scoreCache) {
+    scores.delete(scores.keys().next().value!);
+  }
+
+  return samples;
+}
+
+function scoreBuffer(score: Score): AudioBuffer {
+  const samples: Float32Array<ArrayBuffer> = scoreSamples(
+    score,
+    audio().sampleRate,
+  );
+  const buffer: AudioBuffer = audio().createBuffer(
+    1,
+    samples.length,
+    audio().sampleRate,
+  );
+
+  buffer.copyToChannel(samples, 0);
+
+  return buffer;
+}
+
 function bufferOf(sound: Sound): AudioBuffer | null {
   return sound.file === null ? null : (buffers.get(sound.file) ?? null);
 }
 
-function start(buffer: AudioBuffer, volume: number): AudioBufferSourceNode {
+function start(
+  buffer: AudioBuffer,
+  volume: number,
+  channel: Channel = "sfx",
+): AudioBufferSourceNode {
   const source: AudioBufferSourceNode = audio().createBufferSource();
   const gain: GainNode = audio().createGain();
 
-  gain.gain.value = volume * effectiveVolume("sfx");
+  gain.gain.value = volume * effectiveVolume(channel);
   source.buffer = buffer;
   source.connect(gain).connect(audio().destination);
   source.start();
 
   return source;
+}
+
+function stopPreview(): void {
+  songPreview?.();
+  songPreview = null;
 }
 
 function playSound(sound: Sound): () => void {
@@ -175,6 +335,17 @@ function playSound(sound: Sound): () => void {
       void loadAudio(sound.file).then((buffer: AudioBuffer | null) => {
         if (buffer !== null && !stopped) {
           source = start(buffer, sound.volume);
+        }
+      });
+      return stop;
+    }
+
+    if (sound.source === "song") {
+      stopPreview();
+      songPreview = stop;
+      void loadVoices(sound.score).then(() => {
+        if (!stopped) {
+          source = start(scoreBuffer(sound.score), sound.volume, "soundtrack");
         }
       });
       return stop;
@@ -212,7 +383,12 @@ function playTrack(
     void audio().resume();
   }
 
-  void loadAudio(sound.file).then((buffer: AudioBuffer | null) => {
+  const ready: Promise<AudioBuffer | null> =
+    sound.source === "song"
+      ? loadVoices(sound.score).then(() => scoreBuffer(sound.score))
+      : loadAudio(sound.file);
+
+  void ready.then((buffer: AudioBuffer | null) => {
     if (stopped) {
       return;
     }
@@ -233,6 +409,19 @@ function playTrack(
         ended(true);
       }
     };
+
+    if (sound.source === "song") {
+      const length: number = songLength(sound.score);
+      const begin: number = offset % length;
+
+      node.loop = true;
+      startedAt = audio().currentTime - begin;
+      node.start(0, begin % buffer.duration);
+      node.stop(audio().currentTime + length - begin);
+      source = node;
+      return;
+    }
+
     startedAt = audio().currentTime - (offset % buffer.duration);
     node.start(0, offset % buffer.duration);
     source = node;
@@ -257,10 +446,12 @@ function drawSound(
 ): void {
   const buffer: AudioBuffer | null = bufferOf(sound);
   const samples: Float32Array =
-    sound.source === "file"
-      ? (buffer?.getChannelData(0) ?? new Float32Array(1))
-      : synthesize(sound, drawRate);
-  const scale: number = sound.source === "file" ? sound.volume : 1;
+    sound.source === "synth"
+      ? synthesize(sound, drawRate)
+      : sound.source === "song"
+        ? scoreSamples(sound.score, drawRate)
+        : (buffer?.getChannelData(0) ?? new Float32Array(1));
+  const scale: number = sound.source === "synth" ? 1 : sound.volume;
   const columns: number = Math.max(Math.floor(width / 2), 1);
   const stride: number = Math.max(
     Math.floor(samples.length / columns / drawDetail),
@@ -301,5 +492,16 @@ function drawSound(
   graphics.stroke({ color: color, width: 1 });
 }
 
-export { soundLength, loadAudio, importAudio, playSound, playTrack, drawSound };
+export {
+  isMusic,
+  canPlay,
+  soundLength,
+  loadAudio,
+  importAudio,
+  playSound,
+  stopPreview,
+  useSounds,
+  playTrack,
+  drawSound,
+};
 export type { Track };

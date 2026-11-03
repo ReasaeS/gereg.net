@@ -1,5 +1,6 @@
 import type { Background, OstTrack, Sound, Wallpaper } from "../../types";
 import type { Studio } from "../studio";
+import { isMusic } from "../../sound";
 
 function addOstTab(studio: Studio): void {
   const { creations, preview, cursor, addTab, changed, refresh } = studio;
@@ -7,7 +8,7 @@ function addOstTab(studio: Studio): void {
   const { ost, backgroundById, soundById } = studio.pick;
 
   function songs(): Array<Sound> {
-    return creations.sounds.filter((value: Sound) => value.source === "file");
+    return creations.sounds.filter(isMusic);
   }
 
   function track(): OstTrack {

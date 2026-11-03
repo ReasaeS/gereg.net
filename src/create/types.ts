@@ -120,7 +120,31 @@ type Spell = {
 
 type Waveform = "square" | "sine" | "sawtooth" | "triangle" | "noise";
 
-type SoundSource = "synth" | "file";
+type SoundSource = "synth" | "file" | "song";
+
+type Bassline = "sub" | "reese";
+
+type Singer = "lead" | "choir" | "bank" | "ritsu";
+
+type Score = {
+  tempo: number; // bpm
+  key: number; // semitones
+  bars: number;
+  swing: number;
+  grit: number;
+  space: number;
+  bass: Bassline;
+  drums: Array<Array<number>>;
+  bassline: Array<number>;
+  pads: Array<number>;
+  kits: Array<number>;
+  mutes: Array<number>;
+  vocals: Array<number>;
+  vowels: Array<number>;
+  voice: number;
+  singer: Singer;
+  voicebank: Array<string | null>;
+};
 
 type Sound = {
   id: string;
@@ -137,6 +161,7 @@ type Sound = {
   vibratoDepth: number; // semitones
   vibratoRate: number; // Hz
   volume: number;
+  score: Score;
 };
 
 type Side = "left" | "right";
@@ -310,6 +335,9 @@ export type {
   Spell,
   Waveform,
   SoundSource,
+  Bassline,
+  Singer,
+  Score,
   Sound,
   Emotion,
   Character,

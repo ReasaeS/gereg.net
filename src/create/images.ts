@@ -5,7 +5,12 @@ const databaseName: string = "geregnet";
 const storeName: string = "images";
 const maxImageSize: number = 1024; // px
 const pixelArtSize: number = 64; // px
-const builtinFolders: Array<string> = ["portraits/", "music/", "art/"];
+const builtinFolders: Array<string> = [
+  "portraits/",
+  "music/",
+  "art/",
+  "voices/",
+];
 const textures: Map<string, Texture> = new Map();
 const loading: Map<string, Promise<Texture | null>> = new Map();
 let database: Promise<IDBDatabase> | null = null;

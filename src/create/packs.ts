@@ -9,6 +9,7 @@ import type {
   Stage,
 } from "./types";
 import { difficulties, gameRarity, rarityOf, type Rarity } from "./rarity";
+import { canPlay } from "./sound";
 
 const runLimit: number = 8;
 const layerLimit: number = 3;
@@ -45,8 +46,7 @@ function ostTracks(creations: Creations, ost: Ost): Array<Sound> {
   return ost.tracks
     .map((track: OstTrack) => byId(creations.sounds, track.sound))
     .filter(
-      (sound: Sound | null): sound is Sound =>
-        sound !== null && sound.source === "file" && sound.file !== null,
+      (sound: Sound | null): sound is Sound => sound !== null && canPlay(sound),
     );
 }
 

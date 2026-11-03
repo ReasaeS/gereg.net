@@ -19,6 +19,7 @@ import {
 } from "./defaults";
 import { difficulties } from "./rarity";
 import type { Creation, Deal } from "./gallery/kinds";
+import { isMusic } from "./sound";
 
 const sampleStages: number = 3;
 
@@ -69,7 +70,7 @@ function blankEntry(
     return defaultOst(
       sample
         ? creations.sounds
-            .filter((sound: Sound) => sound.source === "file")
+            .filter(isMusic)
             .slice(0, sampleStages)
             .map((sound: Sound) => sound.id)
         : new Array(),

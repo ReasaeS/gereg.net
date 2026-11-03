@@ -7,6 +7,7 @@ import type {
   Ost,
   Pattern,
   Run,
+  Sound,
   Spell,
   Stage,
 } from "./types";
@@ -18,6 +19,7 @@ import {
   repairBullet,
   repairWallpaper,
 } from "./defaults";
+import { repairScore } from "./jungle";
 import { isBuiltin, readBlob, storeBlob } from "./images";
 import { usedFiles } from "./storage";
 import type { Creation, Kind } from "./gallery/kinds";
@@ -175,6 +177,10 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       add("sigil", spell.sigil);
       add("background", spell.background);
       add("pattern", spell.pattern);
+    } else if (target === "sound") {
+      for (const voice of (value as Sound).score.voicebank) {
+        add("sound", voice);
+      }
     } else if (target === "pattern") {
       add("bullet", (value as Pattern).bullet);
     } else if (target === "cutscene") {
@@ -352,6 +358,10 @@ async function importCard(
 
   for (const bullet of incoming.bullets) {
     repairBullet(bullet);
+  }
+
+  for (const sound of incoming.sounds) {
+    sound.score = repairScore(sound.score);
   }
 
   for (const kind of kindList) {

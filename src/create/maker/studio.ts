@@ -117,6 +117,7 @@ type Studio = {
   placeMarkers: () => void;
   paintVessel: () => void;
   paintBullet: () => void;
+  composeSong: () => void;
   editTranscript: (
     initial: string,
     apply: (text: string) => string | null,

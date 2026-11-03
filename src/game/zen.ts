@@ -7,7 +7,7 @@ import {
 } from "pixi.js";
 import { loadCreations } from "../create/storage";
 import { loadTexture } from "../create/images";
-import { playTrack, type Track } from "../create/sound";
+import { canPlay, playTrack, type Track } from "../create/sound";
 import type {
   Background,
   Creations,
@@ -187,11 +187,10 @@ function paletteFor(
 
 function ostSongs(creations: Creations, ost: Ost | null): Array<Song> {
   if (ost === null) {
-    return shuffled(
-      creations.sounds.filter(
-        (sound: Sound) => sound.source === "file" && sound.file !== null,
-      ),
-    ).map((sound: Sound) => ({ sound: sound, look: null }));
+    return shuffled(creations.sounds.filter(canPlay)).map((sound: Sound) => ({
+      sound: sound,
+      look: null,
+    }));
   }
 
   const found: Array<Song> = new Array();
@@ -209,7 +208,7 @@ function ostSongs(creations: Creations, ost: Ost | null): Array<Song> {
         (candidate: Wallpaper) => candidate.id === track.wallpaper,
       ) ?? null;
 
-    if (sound === undefined || sound.source !== "file" || sound.file === null) {
+    if (sound === undefined || !canPlay(sound)) {
       continue;
     }
 

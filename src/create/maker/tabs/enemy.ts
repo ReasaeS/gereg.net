@@ -3,6 +3,7 @@ import { defaultBar, limitBars } from "../../defaults";
 import { ranks } from "../../rarity";
 import { brightColors } from "../swatches";
 import type { Studio } from "../studio";
+import { isMusic } from "../../sound";
 
 function addEnemyTab(studio: Studio): void {
   const {
@@ -96,12 +97,10 @@ function addEnemyTab(studio: Studio): void {
             "Theme",
             () => [
               { value: null, label: "Stage music" },
-              ...creations.sounds
-                .filter((value: Sound) => value.source === "file")
-                .map((value: Sound) => ({
-                  value: value.id as string | null,
-                  label: value.name,
-                })),
+              ...creations.sounds.filter(isMusic).map((value: Sound) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
             ],
             () => enemy().theme,
             (value: string | null) => {

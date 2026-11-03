@@ -1,6 +1,21 @@
 import { Container, Graphics, Text } from "pixi.js";
-import type { Sound, SoundSource, Waveform } from "../../types";
+import type {
+  Bassline,
+  Singer,
+  Sound,
+  SoundSource,
+  Waveform,
+} from "../../types";
 import { drawSound, importAudio, loadAudio, playSound } from "../../sound";
+import {
+  barOptions,
+  keyNames,
+  resizeScore,
+  swingMax,
+  tempoMax,
+  tempoMin,
+  vowels,
+} from "../../jungle";
 import { getTheme } from "../../../theme/theme";
 import { createText } from "../../../ui/text";
 import { fieldHeight, fieldWidth } from "../../../game/field";
@@ -17,7 +32,25 @@ const waveOptions: Array<Option<Waveform>> = [
 const sourceOptions: Array<Option<SoundSource>> = [
   { value: "synth", label: "Synth" },
   { value: "file", label: "File" },
+  { value: "song", label: "Song" },
 ];
+const bassOptions: Array<Option<Bassline>> = [
+  { value: "sub", label: "Sub" },
+  { value: "reese", label: "Reese" },
+];
+const singerOptions: Array<Option<Singer>> = [
+  { value: "lead", label: "Lead" },
+  { value: "choir", label: "Choir" },
+  { value: "ritsu", label: "Namine Ritsu" },
+  { value: "bank", label: "Voicebank" },
+];
+const keyOptions: Array<Option<number>> = keyNames.map(
+  (name: string, index: number) => ({ value: index, label: name + " minor" }),
+);
+const barChoices: Array<Option<number>> = barOptions.map((bars: number) => ({
+  value: bars,
+  label: bars + (bars === 1 ? " bar" : " bars"),
+}));
 const soundDelay: number = 250; // ms
 const soundNameGap: number = 12; // units
 const soundNameSize: number = 8; // units
@@ -34,11 +67,13 @@ type SoundTab = {
 function addSoundTab(studio: Studio): SoundTab {
   const { creations, preview, tab, addTab, changed, refresh, cleanup } = studio;
   const { slider, choice, section, actionRow } = studio.kit;
+  const { composeSong } = studio;
   const { sound } = studio.pick;
   const plot: Container = new Container();
   const soundGraph: Graphics = new Graphics();
   const soundName: Text = createText(soundNameSize, "#ffffff");
   let soundTimer: number | null = null;
+  let stopLast: () => void = () => undefined;
 
   function hearSound(): void {
     if (soundTimer !== null) {
@@ -49,7 +84,8 @@ function addSoundTab(studio: Studio): SoundTab {
       soundTimer = null;
 
       if (tab().name === "sound") {
-        playSound(sound());
+        stopLast();
+        stopLast = playSound(sound());
       }
     }, soundDelay);
   }
@@ -123,6 +159,15 @@ function addSoundTab(studio: Studio): SoundTab {
           ),
           shown: () => sound().source === "file",
         },
+        {
+          ...actionRow(
+            "Play",
+            () => playSound(sound()),
+            "Compose",
+            composeSong,
+          ),
+          shown: () => sound().source === "song",
+        },
         soundSlider("Volume", 0.05, 1, 0.05, "volume"),
       ]),
       ...section(
@@ -165,6 +210,127 @@ function addSoundTab(studio: Studio): SoundTab {
         () => sound().source === "synth",
       ),
       ...section(
+        "Song",
+        [
+          slider(
+            "Tempo",
+            tempoMin,
+            tempoMax,
+            1,
+            () => sound().score.tempo,
+            (value: number) => {
+              sound().score.tempo = value;
+              hearSound();
+            },
+          ),
+          choice(
+            "Key",
+            () => keyOptions,
+            () => sound().score.key,
+            (value: number) => {
+              sound().score.key = value;
+              hearSound();
+            },
+          ),
+          choice(
+            "Length",
+            () => barChoices,
+            () => sound().score.bars,
+            (value: number) => {
+              resizeScore(sound().score, value);
+              hearSound();
+            },
+          ),
+          choice(
+            "Bass",
+            () => bassOptions,
+            () => sound().score.bass,
+            (value: Bassline) => {
+              sound().score.bass = value;
+              hearSound();
+            },
+          ),
+          slider(
+            "Swing",
+            0,
+            swingMax,
+            0.05,
+            () => sound().score.swing,
+            (value: number) => {
+              sound().score.swing = value;
+              hearSound();
+            },
+          ),
+          slider(
+            "Grit",
+            0,
+            1,
+            0.05,
+            () => sound().score.grit,
+            (value: number) => {
+              sound().score.grit = value;
+              hearSound();
+            },
+          ),
+          choice(
+            "Singer",
+            () => singerOptions,
+            () => sound().score.singer,
+            (value: Singer) => {
+              sound().score.singer = value;
+              hearSound();
+            },
+          ),
+          ...vowels.map((vowel: { name: string }, index: number) => ({
+            ...choice(
+              vowel.name + " voice",
+              () => [
+                { value: null, label: "None" },
+                ...creations.sounds
+                  .filter(
+                    (value: Sound) =>
+                      value.source === "file" && value !== sound(),
+                  )
+                  .map((value: Sound) => ({
+                    value: value.id as string | null,
+                    label: value.name,
+                  })),
+              ],
+              () => sound().score.voicebank[index] ?? null,
+              (value: string | null) => {
+                sound().score.voicebank[index] = value;
+                hearSound();
+              },
+              "sound",
+            ),
+            shown: () => sound().score.singer === "bank",
+          })),
+          slider(
+            "Vocals",
+            0,
+            1,
+            0.05,
+            () => sound().score.voice,
+            (value: number) => {
+              sound().score.voice = value;
+              hearSound();
+            },
+          ),
+          slider(
+            "Space",
+            0,
+            1,
+            0.05,
+            () => sound().score.space,
+            (value: number) => {
+              sound().score.space = value;
+              hearSound();
+            },
+          ),
+        ],
+        () => sound().source === "song",
+      ),
+      ...section(
         "Envelope",
         [
           soundSlider("Attack", 0, 0.5, 0.01, "attack"),
@@ -200,7 +366,12 @@ function addSoundTab(studio: Studio): SoundTab {
     soundName.text =
       value.source === "file"
         ? (value.fileName || "NO FILE").toUpperCase()
-        : "";
+        : value.source === "song"
+          ? value.score.tempo +
+            " BPM  ·  " +
+            keyNames[value.score.key] +
+            " MINOR"
+          : "";
   }
 
   const audioPicker: HTMLInputElement = document.createElement("input");

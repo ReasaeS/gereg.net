@@ -6,14 +6,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { createHud, type Hud, type PlayerAction } from "./hud";
-import type {
-  Creations,
-  Game,
-  Ost,
-  Sound,
-  Stage,
-  Vector,
-} from "../create/types";
+import type { Creations, Game, Ost, Stage, Vector } from "../create/types";
 import { loadCreations } from "../create/storage";
 import { ostTracks } from "../create/packs";
 import {
@@ -40,6 +33,7 @@ import {
 } from "./selector";
 import { levels, type Level } from "./levels";
 import { createZen, type Zen } from "./zen";
+import { canPlay } from "../create/sound";
 import { minPower } from "./drones";
 import { startBombs } from "./bomb";
 import { createPilot, type Pilot } from "./pilot";
@@ -386,9 +380,7 @@ async function createPlayfield(
 
   function openZenMenu(): Promise<void> {
     const creations: Creations = loadCreations();
-    const songs: number = creations.sounds.filter(
-      (sound: Sound) => sound.source === "file" && sound.file !== null,
-    ).length;
+    const songs: number = creations.sounds.filter(canPlay).length;
 
     zenOsts = creations.osts;
     zenMenu.choices = [

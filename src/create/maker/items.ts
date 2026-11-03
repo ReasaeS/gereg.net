@@ -132,6 +132,12 @@ function forgetStageLook(creations: Creations, id: string): void {
 }
 
 function forgetCosmetic(creations: Creations, id: string): void {
+  for (const soundItem of creations.sounds) {
+    soundItem.score.voicebank = soundItem.score.voicebank.map(
+      (voice: string | null) => (voice === id ? null : voice),
+    );
+  }
+
   for (const cutsceneItem of creations.cutscenes) {
     if (cutsceneItem.voice === id) {
       cutsceneItem.voice = null;
