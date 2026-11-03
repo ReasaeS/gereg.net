@@ -175,6 +175,7 @@ function addStageTab(studio: Studio): StageTab {
           (value: string | null) => {
             stage().background = value;
           },
+          "background",
         ),
         choice(
           "Wallpaper",
@@ -189,6 +190,7 @@ function addStageTab(studio: Studio): StageTab {
           (value: string | null) => {
             stage().wallpaper = value;
           },
+          "wallpaper",
         ),
         choice(
           "Palette",
@@ -203,6 +205,7 @@ function addStageTab(studio: Studio): StageTab {
           (value: string | null) => {
             stage().palette = value;
           },
+          "palette",
         ),
         choice(
           "Music",
@@ -219,6 +222,7 @@ function addStageTab(studio: Studio): StageTab {
           (value: string | null) => {
             stage().music = value;
           },
+          "sound",
         ),
         slider(
           "Length",
@@ -328,6 +332,7 @@ function addStageTab(studio: Studio): StageTab {
             spawn().enemy = value;
             buildMarkers();
           },
+          "enemy",
         ),
         slider(
           "Count",

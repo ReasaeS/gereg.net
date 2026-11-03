@@ -1,4 +1,4 @@
-import type { Creations, Cutscene, Sound } from "../types";
+import type { Creations, Cutscene, Line, Sound } from "../types";
 import { createScene, type Scene } from "../cutscene";
 import { defaultCutscene } from "../defaults";
 import { playSound } from "../sound";
@@ -16,8 +16,14 @@ function createScenes(
   pick: () => Selection,
   tab: () => Tab,
 ): Scenes {
-  const scene: Scene = createScene(speak, () => creations.characters, false);
+  const scene: Scene = createScene(
+    speak,
+    say,
+    () => creations.characters,
+    false,
+  );
   let placeholderShown: boolean = false;
+  let stopLine: () => void = () => undefined;
 
   function speak(value: Cutscene): void {
     const voice: Sound | null = pick().soundById(value.voice);
@@ -25,6 +31,13 @@ function createScenes(
     if (voice !== null) {
       playSound(voice);
     }
+  }
+
+  function say(line: Line): void {
+    const sound: Sound | null = pick().soundById(line.sound ?? null);
+
+    stopLine();
+    stopLine = sound === null ? () => undefined : playSound(sound);
   }
 
   function shown(): boolean {
@@ -40,6 +53,7 @@ function createScenes(
       id: "",
       name: "",
       voice: null,
+      background: null,
       speed: defaultCutscene(new Array()).speed,
       lines: [
         {

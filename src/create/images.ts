@@ -5,7 +5,7 @@ const databaseName: string = "geregnet";
 const storeName: string = "images";
 const maxImageSize: number = 1024; // px
 const pixelArtSize: number = 64; // px
-const builtinPrefix: string = "portraits/";
+const builtinFolders: Array<string> = ["portraits/", "music/", "art/"];
 const textures: Map<string, Texture> = new Map();
 const loading: Map<string, Promise<Texture | null>> = new Map();
 let database: Promise<IDBDatabase> | null = null;
@@ -73,8 +73,12 @@ async function storeBlob(blob: Blob): Promise<string> {
   return id;
 }
 
+function isBuiltin(id: string): boolean {
+  return builtinFolders.some((folder: string) => id.startsWith(folder));
+}
+
 function readBlob(id: string): Promise<Blob | undefined> {
-  if (id.startsWith(builtinPrefix)) {
+  if (isBuiltin(id)) {
     return fetch("./" + id)
       .then((response: Response) => (response.ok ? response.blob() : undefined))
       .catch(() => undefined);
@@ -180,7 +184,7 @@ async function eraseFiles(): Promise<void> {
 }
 
 export {
-  builtinPrefix,
+  isBuiltin,
   eraseFiles,
   storeBlob,
   readBlob,

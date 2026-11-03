@@ -145,7 +145,7 @@ function bufferOf(sound: Sound): AudioBuffer | null {
   return sound.file === null ? null : (buffers.get(sound.file) ?? null);
 }
 
-function start(buffer: AudioBuffer, volume: number): void {
+function start(buffer: AudioBuffer, volume: number): AudioBufferSourceNode {
   const source: AudioBufferSourceNode = audio().createBufferSource();
   const gain: GainNode = audio().createGain();
 
@@ -153,9 +153,19 @@ function start(buffer: AudioBuffer, volume: number): void {
   source.buffer = buffer;
   source.connect(gain).connect(audio().destination);
   source.start();
+
+  return source;
 }
 
-function playSound(sound: Sound): void {
+function playSound(sound: Sound): () => void {
+  let source: AudioBufferSourceNode | null = null;
+  let stopped: boolean = false;
+
+  function stop(): void {
+    stopped = true;
+    source?.stop();
+  }
+
   try {
     if (audio().state === "suspended") {
       void audio().resume();
@@ -163,11 +173,11 @@ function playSound(sound: Sound): void {
 
     if (sound.source === "file") {
       void loadAudio(sound.file).then((buffer: AudioBuffer | null) => {
-        if (buffer !== null) {
-          start(buffer, sound.volume);
+        if (buffer !== null && !stopped) {
+          source = start(buffer, sound.volume);
         }
       });
-      return;
+      return stop;
     }
 
     const samples: Float32Array<ArrayBuffer> = synthesize(
@@ -181,10 +191,12 @@ function playSound(sound: Sound): void {
     );
 
     buffer.copyToChannel(samples, 0);
-    start(buffer, 1);
+    source = start(buffer, 1);
   } catch {
     console.warn("Could not play the sound");
   }
+
+  return stop;
 }
 
 function playTrack(

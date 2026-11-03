@@ -1,11 +1,26 @@
+import type { Motif } from "../../types";
+import type { Option } from "../../../ui/widgets";
 import { wallColors } from "../swatches";
 import type { Studio } from "../studio";
 
-const stripeMax: number = 12; // units
+const sizeMax: number = 24; // units
+const spacingMin: number = 4; // units
+const spacingMax: number = 48; // units
+const angleLimit: number = 90; // deg
+const angleStep: number = 5; // deg
+const motifOptions: Array<Option<Motif>> = [
+  { value: "stripes", label: "Stripes" },
+  { value: "checks", label: "Checks" },
+  { value: "dots", label: "Dots" },
+  { value: "grid", label: "Grid" },
+  { value: "diamonds", label: "Diamonds" },
+  { value: "zigzag", label: "Zigzag" },
+  { value: "waves", label: "Waves" },
+];
 
 function addWallpaperTab(studio: Studio): void {
-  const { creations, preview, addTab, spriteRow } = studio;
-  const { slider, colors, section } = studio.kit;
+  const { creations, preview, addTab } = studio;
+  const { slider, colors, choice, section } = studio.kit;
   const { wallpaper } = studio.pick;
 
   addTab(
@@ -13,7 +28,6 @@ function addWallpaperTab(studio: Studio): void {
     () => creations.wallpapers,
     [
       ...section("Look", [
-        spriteRow(),
         colors(
           "Base",
           wallColors,
@@ -23,21 +37,51 @@ function addWallpaperTab(studio: Studio): void {
           },
         ),
         colors(
-          "Stripe",
+          "Ink",
           wallColors,
-          () => wallpaper().stripe,
+          () => wallpaper().ink,
           (value: string) => {
-            wallpaper().stripe = value;
+            wallpaper().ink = value;
+          },
+        ),
+      ]),
+      ...section("Pattern", [
+        choice(
+          "Motif",
+          () => motifOptions,
+          () => wallpaper().motif,
+          (value: Motif) => {
+            wallpaper().motif = value;
           },
         ),
         slider(
-          "Stripe width",
+          "Size",
           0,
-          stripeMax,
+          sizeMax,
           1,
-          () => wallpaper().stripes,
+          () => wallpaper().size,
           (value: number) => {
-            wallpaper().stripes = value;
+            wallpaper().size = value;
+          },
+        ),
+        slider(
+          "Spacing",
+          spacingMin,
+          spacingMax,
+          1,
+          () => wallpaper().spacing,
+          (value: number) => {
+            wallpaper().spacing = value;
+          },
+        ),
+        slider(
+          "Angle",
+          -angleLimit,
+          angleLimit,
+          angleStep,
+          () => wallpaper().angle,
+          (value: number) => {
+            wallpaper().angle = value;
           },
         ),
       ]),

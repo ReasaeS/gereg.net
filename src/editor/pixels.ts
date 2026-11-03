@@ -198,6 +198,23 @@ function floodFill(
   }
 }
 
+function resamplePixels(from: Pixels, to: Pixels): void {
+  for (let y = 0; y < to.size; y++) {
+    for (let x = 0; x < to.size; x++) {
+      setPixel(
+        to,
+        x,
+        y,
+        getPixel(
+          from,
+          Math.floor((x * from.size) / to.size),
+          Math.floor((y * from.size) / to.size),
+        ),
+      );
+    }
+  }
+}
+
 function isEmpty(pixels: Pixels): boolean {
   for (let offset = 3; offset < pixels.data.length; offset += 4) {
     if (pixels.data[offset] !== 0) {
@@ -319,6 +336,7 @@ export {
   shiftPixels,
   floodFill,
   isEmpty,
+  resamplePixels,
   encodePixels,
   decodePixels,
   exportPixels,

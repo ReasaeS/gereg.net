@@ -8,6 +8,8 @@ import {
 import type { Squad } from "../../game/drones";
 import type {
   Background,
+  Bullet,
+  Vessel,
   Enemy,
   Pattern,
   Sigil,
@@ -129,6 +131,8 @@ async function createPreview(
   findSigil: (id: string | null) => Sigil | null,
   findSpell: (id: string | null) => Spell | null,
   findPattern: (id: string | null) => Pattern | null,
+  findBullet: (id: string | null) => Bullet | null,
+  findVessel: (id: string | null) => Vessel | null,
 ): Promise<Preview> {
   const view: Container = new Container();
   const base: Sky = createSky();
@@ -153,10 +157,20 @@ async function createPreview(
   const dim: Graphics = new Graphics();
   const input: Vector = { x: 0, y: 0 };
   const mask: Graphics = new Graphics();
-  const bullets: Bullets = await createBullets(bulletLayer, coreLayer, player);
+  const bullets: Bullets = await createBullets(
+    bulletLayer,
+    coreLayer,
+    player,
+    findBullet,
+  );
   const actors: Actors = createActors(
     actorLayer,
-    { sigil: findSigil, spell: findSpell, pattern: findPattern },
+    {
+      sigil: findSigil,
+      spell: findSpell,
+      pattern: findPattern,
+      vessel: findVessel,
+    },
     bullets,
   );
   const emitter: Emitter = { timer: 0, time: 0 };

@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
 import type { Vector, Wave } from "../types";
 import type { Rarity } from "../rarity";
+import type { Kind } from "../gallery/kinds";
 import {
   chipHeight,
   createChip,
@@ -31,6 +32,7 @@ type Kit = {
     options: () => Array<Option<T>>,
     get: () => T,
     set: (value: T) => void,
+    kind?: Kind,
   ) => Control;
   colors: (
     name: string,
@@ -86,7 +88,19 @@ const phaseLimit: number = 180; // deg
 const waveAmplitude: number = 60; // units
 const phaseShiftLimit: number = 360; // deg/s
 
-function createKit(changed: () => void, refresh: () => void): Kit {
+type Browse = <T>(
+  name: string,
+  kind: Kind,
+  options: Array<Option<T>>,
+  current: T,
+  choose: (value: T) => void,
+) => void;
+
+function createKit(
+  changed: () => void,
+  refresh: () => void,
+  browse: Browse,
+): Kit {
   const sectionOpen: Map<number, boolean> = new Map();
   let sections: number = 0;
 
@@ -118,12 +132,23 @@ function createKit(changed: () => void, refresh: () => void): Kit {
     options: () => Array<Option<T>>,
     get: () => T,
     set: (value: T) => void,
+    kind?: Kind,
   ): Control {
-    return createChoice(name, options, get, (value: T) => {
+    function apply(value: T): void {
       set(value);
       changed();
       refresh();
-    });
+    }
+
+    return createChoice(
+      name,
+      options,
+      get,
+      apply,
+      kind === undefined
+        ? undefined
+        : () => browse(name, kind, options(), get(), apply),
+    );
   }
 
   function colors(

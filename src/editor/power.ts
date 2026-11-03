@@ -29,8 +29,6 @@ import {
   saveDrones,
 } from "../game/drones";
 import {
-  promptName,
-  usingPad,
   bombKeys,
   createKeyboard,
   focusKeys,
@@ -49,7 +47,6 @@ import { fieldHeight, fieldWidth, hudScale } from "../game/field";
 import { createPilot, type Pilot } from "../game/pilot";
 import { frameDelta } from "../effects/tween/tween";
 import { bombLook, resetLooks, saveLooks, type Look } from "../game/bomb";
-import { droneShotDrawing, shotDrawing } from "./drawings";
 
 type Power = {
   view: Container;
@@ -63,8 +60,6 @@ const frameWidth: number = 1.5; // units
 const playerStartY: number = 0.8; // of field height
 const panelGap: number = 30; // px
 const summarySize: number = 10; // units
-const hintSize: number = 11; // units
-const hintGap: number = 8; // units
 const hintColor: string = "#9fd8ff";
 const resetWidth: number = 60; // units
 const tintColors: Array<string> = [
@@ -107,7 +102,6 @@ function createPower(
     fieldHeight,
   );
   const rows: Rows = createRows();
-  const hint: Text = createText(hintSize, hintColor);
   const opened: Set<string> = new Set();
   let power: number = maxPower;
   let active: boolean = false;
@@ -208,30 +202,24 @@ function createPower(
           changed();
         },
       ),
-      {
-        ...createColors(
-          "Main shot",
-          shotColors,
-          () => droneSettings().mainColor,
-          (value: string) => {
-            droneSettings().mainColor = value;
-            changed();
-          },
-        ),
-        shown: () => !shotDrawing().custom,
-      },
-      {
-        ...createColors(
-          "Drone shot",
-          shotColors,
-          () => droneSettings().shotColor,
-          (value: string) => {
-            droneSettings().shotColor = value;
-            changed();
-          },
-        ),
-        shown: () => !droneShotDrawing().custom,
-      },
+      createColors(
+        "Main shot",
+        shotColors,
+        () => droneSettings().mainColor,
+        (value: string) => {
+          droneSettings().mainColor = value;
+          changed();
+        },
+      ),
+      createColors(
+        "Drone shot",
+        shotColors,
+        () => droneSettings().shotColor,
+        (value: string) => {
+          droneSettings().shotColor = value;
+          changed();
+        },
+      ),
     ]),
     ...section("Bomb", [
       createColors(
@@ -329,13 +317,7 @@ function createPower(
       Math.round(y),
     );
     rows.setViewport(height / panelScale);
-    hint.scale.set(fieldScale);
-    hint.position.set(
-      Math.round(left + fieldPixels / 2),
-      Math.round(y + fieldHeight * fieldScale + hintGap * fieldScale),
-    );
     sharpen(rows.view, screenResolution(panelScale));
-    sharpen(hint, screenResolution(fieldScale));
   }
 
   function update(delta: number): void {
@@ -350,15 +332,6 @@ function createPower(
 
   function setActive(value: boolean): void {
     active = value;
-    hint.text =
-      (usingPad() ? "STICK" : "ARROWS") +
-      "  MOVE   ·   " +
-      promptName("focus") +
-      "  FOCUS   ·   " +
-      promptName("shot") +
-      "  SHOOT   ·   " +
-      promptName("bomb") +
-      "  BOMB";
     keyboard.clear();
 
     if (value) {
@@ -375,7 +348,6 @@ function createPower(
   pilot.bomb.setStock(Infinity);
   field.addChild(back, ...pilot.layers(), mask, frame);
   field.mask = mask;
-  hint.anchor.set(0.5, 0);
   reset.view.position.set(
     rowWidth - resetWidth,
     rowHeight / 2 - chipHeight / 2,
@@ -385,7 +357,7 @@ function createPower(
   summary.position.set(rowWidth / 2, rowHeight / 2);
   summaryRow.addChild(summary);
   rows.content.addChild(...controls.map((control: Control) => control.view));
-  view.addChild(field, rows.view, hint);
+  view.addChild(field, rows.view);
   refresh();
 
   app.ticker.add((ticker: Ticker) => {

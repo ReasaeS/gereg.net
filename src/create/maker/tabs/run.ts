@@ -29,6 +29,7 @@ function addRunTab(studio: Studio): void {
         (value: string | null) => {
           run().stages[order] = value;
         },
+        "stage",
       ),
       shown: () => run().stages.length > order,
     });

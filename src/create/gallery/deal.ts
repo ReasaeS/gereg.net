@@ -1,13 +1,14 @@
 import {
   Container,
   Graphics,
+  Rectangle,
   Text,
   type Application,
   type Texture,
   type Ticker,
 } from "pixi.js";
 import { createGlide, type Glide } from "../../ui/motion";
-import { leftKeys, rightKeys } from "../../game/input";
+import { downKeys, leftKeys, rightKeys, upKeys } from "../../game/input";
 import type { Creations, Game, Run } from "../types";
 import { blankEntry } from "../blank";
 import { gameLayers, runLayers } from "../packs";
@@ -16,7 +17,6 @@ import {
   artHeight,
   artInset,
   createSerif,
-  detailColor,
   fit,
   tileHeight,
   tileWidth,
@@ -35,10 +35,10 @@ import {
 type Dealt = {
   deal: Deal;
   holder: Container;
+  hit: Container;
   tile: Tile;
   x: number; // px
   y: number; // px
-  turn: number; // rad
 };
 
 type Dealer = {
@@ -50,14 +50,15 @@ type Dealer = {
 const shadeAlpha: number = 0.72;
 const shadeSmoothing: number = 0.12; // s
 const titleSize: number = 30; // px
-const hintSize: number = 12; // px
 const titleY: number = 0.09; // of screen height
-const deckY: number = 0.25; // of screen height
+const deckMargin: number = 32; // px
 const rowY: number = 0.6; // of screen height
-const hintY: number = 0.93; // of screen height
 const rowWidth: number = 0.9; // of screen width
 const rowHeight: number = 0.5; // of screen height
 const cardGap: number = 30; // px
+const rowLimit: number = 5;
+const rowGap: number = 26; // px
+const tableHeight: number = 0.64; // of screen height
 const deckScale: number = 0.42;
 const deckLayers: number = 3;
 const deckStep: number = 3; // px
@@ -67,8 +68,6 @@ const dealDuration: number = 0.5; // s
 const dealSpin: number = 2.4; // rad
 const dealArc: number = 60; // px
 const flipDelay: number = 0.12; // s
-const fanDrop: number = 7; // px
-const fanTurn: number = 0.035; // rad
 const liftHeight: number = 22; // px
 const leaveDuration: number = 0.4; // s
 const leaveDrop: number = 160; // px
@@ -87,8 +86,8 @@ function createDealer(
   const shade: Graphics = new Graphics();
   const deck: Container = new Container();
   const table: Container = new Container();
+  const hits: Container = new Container();
   const title: Text = createSerif(titleSize, trim);
-  const hint: Text = createSerif(hintSize, detailColor);
   const cards: Array<Dealt> = new Array();
   let active: boolean = false;
   let leaving: number | null = null;
@@ -152,38 +151,55 @@ function createDealer(
   function clear(): void {
     for (const card of cards) {
       card.holder.destroy({ children: true });
+      card.hit.destroy();
     }
 
     cards.length = 0;
   }
 
+  function rowCount(): number {
+    return Math.ceil(Math.max(cards.length, 1) / rowLimit);
+  }
+
+  function across(): number {
+    return Math.ceil(Math.max(cards.length, 1) / rowCount());
+  }
+
   function layout(): void {
     const width: number = app.screen.width;
     const height: number = app.screen.height;
-    const count: number = Math.max(cards.length, 1);
+    const rows: number = rowCount();
+    const count: number = across();
     const total: number = count * tileWidth + (count - 1) * cardGap;
-    const middle: number = (count - 1) / 2;
+    const tall: number = rows * tileHeight + (rows - 1) * rowGap;
 
     scale = Math.min(
       1,
       (width * rowWidth) / total,
-      (height * rowHeight) / tileHeight,
+      (height * (rows === 1 ? rowHeight : tableHeight)) / tall,
     );
     shade.clear().rect(0, 0, width, height).fill("#000000");
     title.position.set(width / 2, height * titleY);
-    hint.position.set(width / 2, height * hintY);
-    deckX = width / 2;
-    deckTop = height * deckY;
+    deckX = width - deckMargin - (tileWidth / 2) * deckScale * scale;
+    deckTop = deckMargin + (tileHeight / 2) * deckScale * scale;
     deck.position.set(deckX, deckTop);
     deck.scale.set(deckScale * scale);
 
     for (let index = 0; index < cards.length; index++) {
       const card: Dealt = cards[index]!;
-      const offset: number = index - middle;
+      const row: number = Math.floor(index / count);
+      const inRow: number = Math.min(count, cards.length - row * count);
+      const offset: number = (index % count) - (inRow - 1) / 2;
 
       card.x = width / 2 + offset * (tileWidth + cardGap) * scale;
-      card.y = height * rowY + offset * offset * fanDrop * scale;
-      card.turn = offset * fanTurn;
+      card.y =
+        height * rowY + (row - (rows - 1) / 2) * (tileHeight + rowGap) * scale;
+      card.hit.hitArea = new Rectangle(
+        card.x - (tileWidth / 2) * scale,
+        card.y - (tileHeight / 2) * scale,
+        tileWidth * scale,
+        tileHeight * scale,
+      );
     }
   }
 
@@ -223,43 +239,48 @@ function createDealer(
     time = 0;
     leaving = null;
     chosen = null;
-    selected = Math.floor((deals.length - 1) / 2);
     title.text = "NEW " + itemNames.get(category)!.toUpperCase();
-    hint.text =
-      "PICK A CARD   ·   ← →  CHOOSE   ·   ENTER  DEAL ME IN   ·   ESC  FOLD";
 
     for (let index = 0; index < deals.length; index++) {
       const holder: Container = new Container();
+      const hit: Container = new Container();
       const card: Dealt = {
         deal: deals[index]!,
         holder: holder,
+        hit: hit,
         tile: createTile(false, logo, {
-          hover: () => {
-            if (ready() && time >= landed(index)) {
-              select(index);
-            }
-          },
-          tap: () => {
-            if (time >= landed(index)) {
-              select(index);
-              choose(card);
-            }
-          },
+          hover: () => undefined,
+          tap: () => undefined,
           act: () => undefined,
         }),
         x: 0,
         y: 0,
-        turn: 0,
       };
 
       describe(card.tile, card.deal);
       paintTile(card.tile, false);
       holder.visible = false;
       holder.addChild(card.tile.view);
+      card.tile.view.eventMode = "none";
+      hit.eventMode = "static";
+      hit.cursor = "pointer";
+      hit.on("pointerover", () => {
+        if (ready() && time >= landed(index)) {
+          select(index);
+        }
+      });
+      hit.on("pointertap", () => {
+        if (time >= landed(index)) {
+          select(index);
+          choose(card);
+        }
+      });
       table.addChild(holder);
+      hits.addChild(hit);
       cards.push(card);
     }
 
+    selected = Math.floor((Math.min(across(), deals.length) - 1) / 2);
     layout();
     view.visible = true;
     shown.set(1);
@@ -280,7 +301,7 @@ function createDealer(
       deckTop +
       (card.y - deckTop) * eased -
       Math.sin(Math.PI * progress) * dealArc * scale;
-    let turn: number = card.turn + (1 - eased) * dealSpin * side;
+    let turn: number = (1 - eased) * dealSpin * side;
     let size: number = (deckScale + (1 - deckScale) * eased) * scale;
     let alpha: number = 1;
 
@@ -369,9 +390,8 @@ function createDealer(
   }
 
   title.anchor.set(0.5);
-  hint.anchor.set(0.5);
   buildDeck();
-  view.addChild(shade, title, deck, table, hint);
+  view.addChild(shade, title, deck, table, hits);
   view.visible = false;
   view.alpha = 0;
   view.eventMode = "static";
@@ -384,7 +404,7 @@ function createDealer(
   window.addEventListener(
     "keydown",
     (event: KeyboardEvent) => {
-      if (!active || event.key === "?" || event.code === "F1") {
+      if (!active || event.key === ";" || event.code === "F1") {
         return;
       }
 
@@ -392,6 +412,10 @@ function createDealer(
         select(selected - 1);
       } else if (rightKeys.includes(event.code)) {
         select(selected + 1);
+      } else if (upKeys.includes(event.code)) {
+        select(selected - across());
+      } else if (downKeys.includes(event.code)) {
+        select(selected + across());
       } else if (event.code === "Enter" || event.code === "Space") {
         if (time >= landed(selected)) {
           choose(cards[selected] ?? null);

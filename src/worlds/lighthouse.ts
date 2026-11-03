@@ -189,6 +189,8 @@ function createLighthouse(
     const lampX: number = width * lighthouseX;
     const lampHeight: number = base + (lighthouseSink + lampY) * scale;
     const flareSize: number = height * lighthouseHeight * flareScale;
+    const originX: number =
+      lampX + Math.sign(Math.cos(aim.value)) * beamOriginX * scale;
 
     time += delta;
 
@@ -199,7 +201,10 @@ function createLighthouse(
     }
 
     if (target !== null) {
-      const goal: number = Math.atan2(target.y - lampHeight, target.x - lampX);
+      const goal: number = Math.atan2(
+        target.y - lampHeight,
+        target.x - originX,
+      );
       const turn: number =
         ((((goal - aim.value) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) -
         Math.PI;
@@ -207,7 +212,7 @@ function createLighthouse(
       springStep(aim, aim.value + turn, beamFrequency, beamDamping, delta);
       springStep(
         reach,
-        Math.hypot(target.x - lampX, target.y - lampHeight) * beamOvershoot,
+        Math.hypot(target.x - originX, target.y - lampHeight) * beamOvershoot,
         beamFrequency,
         beamDamping,
         delta,
@@ -233,10 +238,7 @@ function createLighthouse(
       1,
     );
 
-    beam.position.set(
-      lampX + Math.sign(facing) * beamOriginX * scale,
-      lampHeight,
-    );
+    beam.position.set(originX, lampHeight);
     beam.rotation = aim.value;
     beam.alpha = fade * fade * (3 - 2 * fade);
     beam.scale.set(

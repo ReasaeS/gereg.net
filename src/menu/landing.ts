@@ -12,6 +12,7 @@ import {
 import { navigate } from "./options";
 import { loadLogo, trackLogo } from "../ui/logo";
 import { onTheme, type Theme } from "../theme/theme";
+import { createConstellation, type Constellation } from "./constellation";
 import { createRing, type Ring, type RingStyle } from "../effects/ring/ring";
 import type { Circle } from "../effects/reveal/reveal";
 import {
@@ -41,6 +42,7 @@ const cornerGlyphWidth: number = 160; // px
 const hoverSmoothing: number = 0.12; // s
 const hoverBrightness: number = 1.3;
 const logoBoost: number = 1.6;
+const settleStart: number = 0.6; // of the corner glide
 
 type Placement = {
   x: number;
@@ -63,6 +65,11 @@ const hover: Spring = { value: 0, velocity: 0 };
 let corner: number = 0;
 let frameAmount: number = 1;
 let glideBrightness: number = 1;
+const constellation: Constellation = createConstellation(
+  cornerGlyphWidth / glyphWidth,
+  cornerPlacement().x,
+  cornerPlacement().y,
+);
 
 function introBounds(): Rectangle {
   const width: number = app?.screen.width ?? 0;
@@ -255,6 +262,14 @@ async function createLanding(application: Application): Promise<Container> {
     );
     logo.width = from.width + (to.width - from.width) * corner;
     logo.height = (logo.width * logoViewHeight) / logoViewWidth;
+    const settle: number = Math.min(
+      Math.max((corner - settleStart) / (1 - settleStart), 0),
+      1,
+    );
+    const blend: number = settle * settle * (3 - 2 * settle);
+
+    logo.alpha = 1 - blend;
+    constellation.update(blend, hover.value, ticker.deltaMS / 1000);
     logoBright.brightness(
       corner === 0
         ? landingBrightness()
@@ -306,6 +321,10 @@ function moveLogoToCenter(
   });
 }
 
+function landingConstellation(): Container {
+  return constellation.view;
+}
+
 function showLandingRing(): void {
   if (ring !== null) {
     ring.view.visible = true;
@@ -325,5 +344,6 @@ export {
   moveLogoToCorner,
   moveLogoToCenter,
   showLandingRing,
+  landingConstellation,
   landingRing,
 };

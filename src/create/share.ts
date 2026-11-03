@@ -4,12 +4,21 @@ import type {
   Difficulty,
   Enemy,
   Game,
+  Ost,
+  Pattern,
   Run,
   Spell,
   Stage,
 } from "./types";
-import { createId } from "./defaults";
-import { builtinPrefix, readBlob, storeBlob } from "./images";
+import {
+  createId,
+  repairCharacter,
+  repairEnemy,
+  repairVessel,
+  repairBullet,
+  repairWallpaper,
+} from "./defaults";
+import { isBuiltin, readBlob, storeBlob } from "./images";
 import { usedFiles } from "./storage";
 import type { Creation, Kind } from "./gallery/kinds";
 
@@ -38,10 +47,13 @@ const kindList: Array<Kind> = [
   "enemy",
   "background",
   "wallpaper",
+  "bullet",
+  "vessel",
   "palette",
   "sigil",
   "spell",
   "sound",
+  "ost",
   "character",
   "cutscene",
 ];
@@ -55,10 +67,13 @@ function listOf(creations: Creations, kind: Kind): Array<Creation> {
     enemy: creations.enemies,
     background: creations.backgrounds,
     wallpaper: creations.wallpapers,
+    bullet: creations.bullets,
+    vessel: creations.vessels,
     palette: creations.palettes,
     sigil: creations.sigils,
     spell: creations.spells,
     sound: creations.sounds,
+    ost: creations.osts,
     character: creations.characters,
     cutscene: creations.cutscenes,
   };
@@ -75,10 +90,13 @@ function emptyCreations(): Creations {
     enemies: new Array(),
     backgrounds: new Array(),
     wallpapers: new Array(),
+    bullets: new Array(),
+    vessels: new Array(),
     palettes: new Array(),
     sigils: new Array(),
     spells: new Array(),
     sounds: new Array(),
+    osts: new Array(),
     characters: new Array(),
     cutscenes: new Array(),
   };
@@ -133,10 +151,19 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       for (const difficulty of Object.keys(game.runs) as Array<Difficulty>) {
         add("run", game.runs[difficulty]);
       }
+
+      add("ost", game.ost);
+    } else if (target === "ost") {
+      for (const track of (value as Ost).tracks) {
+        add("sound", track.sound);
+        add("background", track.background);
+        add("wallpaper", track.wallpaper);
+      }
     } else if (target === "enemy") {
       const enemy: Enemy = value as Enemy;
 
       add("pattern", enemy.pattern);
+      add("vessel", enemy.vessel);
       add("sound", enemy.theme);
 
       for (const bar of enemy.bars) {
@@ -148,13 +175,17 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       add("sigil", spell.sigil);
       add("background", spell.background);
       add("pattern", spell.pattern);
+    } else if (target === "pattern") {
+      add("bullet", (value as Pattern).bullet);
     } else if (target === "cutscene") {
       const cutscene: Cutscene = value as Cutscene;
 
       add("sound", cutscene.voice);
+      add("background", cutscene.background);
 
       for (const line of cutscene.lines) {
         add("character", line.character);
+        add("sound", line.sound ?? null);
       }
     }
   }
@@ -198,7 +229,7 @@ async function exportCard(
   const files: Record<string, string> = {};
 
   for (const id of usedFiles(creations)) {
-    if (id.startsWith(builtinPrefix)) {
+    if (isBuiltin(id)) {
       continue;
     }
 
@@ -249,13 +280,8 @@ function remapFiles(creations: Creations, files: Map<string, string>): void {
     return id === null ? null : (files.get(id) ?? id);
   }
 
-  for (const item of [
-    ...creations.patterns,
-    ...creations.enemies,
-    ...creations.backgrounds,
-    ...creations.wallpapers,
-  ]) {
-    item.sprite = swap(item.sprite);
+  for (const background of creations.backgrounds) {
+    background.sprite = swap(background.sprite);
   }
 
   for (const character of creations.characters) {
@@ -307,6 +333,26 @@ async function importCard(
   }
 
   remapFiles(incoming, files);
+
+  for (const character of incoming.characters) {
+    repairCharacter(character);
+  }
+
+  for (const wallpaper of incoming.wallpapers) {
+    repairWallpaper(wallpaper);
+  }
+
+  for (const enemy of incoming.enemies) {
+    repairEnemy(enemy);
+  }
+
+  for (const vessel of incoming.vessels) {
+    repairVessel(vessel);
+  }
+
+  for (const bullet of incoming.bullets) {
+    repairBullet(bullet);
+  }
 
   for (const kind of kindList) {
     const list: Array<Creation> = listOf(target, kind);

@@ -1,4 +1,13 @@
-import type { Creations, Difficulty, Game, Run, Stage } from "./types";
+import type {
+  Creations,
+  Difficulty,
+  Game,
+  Ost,
+  OstTrack,
+  Run,
+  Sound,
+  Stage,
+} from "./types";
 import { difficulties, gameRarity, rarityOf, type Rarity } from "./rarity";
 
 const runLimit: number = 8;
@@ -32,6 +41,19 @@ function gameStages(creations: Creations, game: Game): Array<Stage> {
   );
 }
 
+function ostTracks(creations: Creations, ost: Ost): Array<Sound> {
+  return ost.tracks
+    .map((track: OstTrack) => byId(creations.sounds, track.sound))
+    .filter(
+      (sound: Sound | null): sound is Sound =>
+        sound !== null && sound.source === "file" && sound.file !== null,
+    );
+}
+
+function gameOst(creations: Creations, game: Game): Ost | null {
+  return byId(creations.osts, game.ost);
+}
+
 function packLength(stages: Array<Stage>): number {
   return stages.reduce(
     (total: number, stage: Stage) => total + stage.length,
@@ -63,6 +85,8 @@ function gameLayers(creations: Creations, game: Game): Array<string> {
 
 export {
   runLimit,
+  ostTracks,
+  gameOst,
   runStages,
   gameRuns,
   gameStages,

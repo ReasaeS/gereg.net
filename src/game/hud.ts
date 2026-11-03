@@ -31,6 +31,17 @@ type Hud = {
   setElapsed: (seconds: number) => void;
   setLook: (wallpaper: Wallpaper | null, palette: Palette | null) => void;
   setReadout: (shown: boolean, instant: boolean) => void;
+  setTrack: (name: string | null, playing: boolean) => void;
+  onPlayer: (listener: (action: PlayerAction) => void) => void;
+};
+
+type PlayerAction = "previous" | "toggle" | "next";
+
+type PlayerButton = {
+  view: Container;
+  back: Graphics;
+  icon: Graphics;
+  hover: Glide;
 };
 
 type Shade = "accent" | "highlight" | "text" | "label";
@@ -69,6 +80,16 @@ const rowLayout: Array<[string, number]> = [
 ];
 const elapsedLabelY: number = 72; // units
 const elapsedValueY: number = 96; // units
+const trackLabelY: number = 136; // units
+const trackNameY: number = 160; // units
+const playerY: number = 204; // units
+const playerGap: number = 52; // units
+const buttonRadius: number = 17; // units
+const mainRadius: number = 22; // units
+const iconSize: number = 7; // units
+const hoverGrow: number = 0.12;
+const hoverSmoothing: number = 0.12; // s
+const nameWidth: number = 184; // units
 
 function drawStars(
   graphics: Graphics,
@@ -109,6 +130,44 @@ function drawBadge(badge: Graphics): void {
     .fill(0xffffff);
 }
 
+function drawPlayerIcon(
+  icon: Graphics,
+  action: PlayerAction,
+  playing: boolean,
+): void {
+  const size: number = iconSize;
+
+  icon.clear();
+
+  if (action === "toggle" && playing) {
+    icon
+      .rect(-size * 0.8, -size, size * 0.6, size * 2)
+      .rect(size * 0.2, -size, size * 0.6, size * 2)
+      .fill(0xffffff);
+  } else if (action === "toggle") {
+    icon.poly([-size * 0.6, -size, size, 0, -size * 0.6, size]).fill(0xffffff);
+  } else {
+    const facing: number = action === "next" ? 1 : -1;
+
+    icon
+      .poly([
+        -size * facing,
+        -size * 0.8,
+        size * 0.4 * facing,
+        0,
+        -size * facing,
+        size * 0.8,
+      ])
+      .rect(
+        facing > 0 ? size * 0.5 : -size * 0.75,
+        -size * 0.8,
+        size * 0.25,
+        size * 1.6,
+      )
+      .fill(0xffffff);
+  }
+}
+
 async function createHud(): Promise<Hud> {
   const view: Container = new Container();
   const wall: WallpaperView = createWallpaperView(
@@ -131,6 +190,11 @@ async function createHud(): Promise<Hud> {
   );
   const elapsedLabel: Text = createText(rowSize);
   const elapsedValue: Text = createText(rowSize);
+  const trackLabel: Text = createText(rowSize);
+  const trackName: Text = createText(rowSize);
+  const playerListeners: Array<(action: PlayerAction) => void> = new Array();
+  const buttons: Map<PlayerAction, PlayerButton> = new Map();
+  let trackPlaying: boolean = false;
   const rows: Array<Row> = new Array();
   const texts: Array<Text> = new Array();
   const logoTexture: Texture = await loadLogo();
@@ -199,6 +263,51 @@ async function createHud(): Promise<Hud> {
   elapsedValue.anchor.set(1, 0.5);
   elapsedValue.position.set(panelRight, elapsedValueY);
   zen.addChild(elapsedLabel, elapsedValue);
+  trackLabel.text = "Now Playing";
+  trackLabel.anchor.set(0, 0.5);
+  trackLabel.position.set(panelX, trackLabelY);
+  trackName.anchor.set(0.5);
+  trackName.position.set((panelX + panelRight) / 2, trackNameY);
+  zen.addChild(trackLabel, trackName);
+
+  for (const [index, action] of (
+    ["previous", "toggle", "next"] as Array<PlayerAction>
+  ).entries()) {
+    const button: Container = new Container();
+    const back: Graphics = new Graphics()
+      .circle(0, 0, action === "toggle" ? mainRadius : buttonRadius)
+      .fill(0xffffff);
+    const icon: Graphics = new Graphics();
+    const hover: Glide = createGlide(
+      0,
+      (value: number) => {
+        button.scale.set(1 + value * hoverGrow);
+      },
+      hoverSmoothing,
+    );
+
+    drawPlayerIcon(icon, action, false);
+    button.position.set(
+      (panelX + panelRight) / 2 + (index - 1) * playerGap,
+      playerY,
+    );
+    button.addChild(back, icon);
+    button.eventMode = "static";
+    button.cursor = "pointer";
+    button.on("pointerover", () => hover.set(1));
+    button.on("pointerout", () => hover.set(0));
+    button.on("pointertap", () => {
+      hover.snap(-1);
+      hover.set(1);
+
+      for (const listener of playerListeners) {
+        listener(action);
+      }
+    });
+    zen.addChild(button);
+    buttons.set(action, { view: button, back: back, icon: icon, hover: hover });
+  }
+
   zen.visible = false;
   readout.addChild(stage, zen);
 
@@ -263,6 +372,13 @@ async function createHud(): Promise<Hud> {
     badge.tint = shown.text;
     elapsedLabel.tint = shown.label;
     elapsedValue.tint = shown.text;
+    trackLabel.tint = shown.label;
+    trackName.tint = shown.text;
+
+    for (const button of buttons.values()) {
+      button.back.tint = shown.accent;
+      button.icon.tint = shown.text;
+    }
 
     for (const row of rows) {
       row.label.tint = shown.label;
@@ -304,7 +420,20 @@ async function createHud(): Promise<Hud> {
     }
   }
 
-  texts.push(badge, elapsedLabel, elapsedValue);
+  function setTrack(name: string | null, playing: boolean): void {
+    trackName.text = name ?? "No songs";
+
+    while (trackName.width > nameWidth && trackName.text.length > 1) {
+      trackName.text = trackName.text.slice(0, -2) + "…";
+    }
+
+    if (playing !== trackPlaying) {
+      trackPlaying = playing;
+      drawPlayerIcon(buttons.get("toggle")!.icon, "toggle", playing);
+    }
+  }
+
+  texts.push(badge, elapsedLabel, elapsedValue, trackLabel, trackName);
 
   for (let index = 0; index < rows.length; index++) {
     const row: Row = rows[index]!;
@@ -329,6 +458,10 @@ async function createHud(): Promise<Hud> {
     },
     setElapsed: setElapsed,
     setLook: setLook,
+    setTrack: setTrack,
+    onPlayer: (listener: (action: PlayerAction) => void) => {
+      playerListeners.push(listener);
+    },
     setReadout: (shown: boolean, instant: boolean) => {
       if (instant) {
         reveal.snap(shown ? 1 : 0);
@@ -340,4 +473,4 @@ async function createHud(): Promise<Hud> {
 }
 
 export { createHud };
-export type { Hud, Stats };
+export type { Hud, PlayerAction, Stats };

@@ -22,6 +22,7 @@ function addSpellTab(studio: Studio): void {
           (value: string) => {
             spell().sigil = value;
           },
+          "sigil",
         ),
         choice(
           "Background",
@@ -36,6 +37,7 @@ function addSpellTab(studio: Studio): void {
           (value: string | null) => {
             spell().background = value;
           },
+          "background",
         ),
         choice(
           "Pattern",
@@ -50,6 +52,7 @@ function addSpellTab(studio: Studio): void {
           (value: string | null) => {
             spell().pattern = value;
           },
+          "pattern",
         ),
       ]),
     ],

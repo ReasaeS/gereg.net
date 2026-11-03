@@ -1,4 +1,4 @@
-import type { Difficulty, Run, Stage } from "../../types";
+import type { Difficulty, Ost, Run, Stage } from "../../types";
 import { difficulties, type Rarity } from "../../rarity";
 import { gameStages } from "../../packs";
 import type { Studio } from "../studio";
@@ -30,9 +30,27 @@ function addGameTab(studio: Studio): void {
             (value: string | null) => {
               game().runs[entry.value] = value;
             },
+            "run",
           ),
         ),
       ),
+      ...section("Soundtrack", [
+        choice(
+          "OST",
+          () => [
+            { value: null, label: "None" },
+            ...creations.osts.map((value: Ost) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => game().ost,
+          (value: string | null) => {
+            game().ost = value;
+          },
+          "ost",
+        ),
+      ]),
     ],
     () => {
       const first: Stage | null = gameStages(creations, game())[0] ?? null;

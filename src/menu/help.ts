@@ -46,6 +46,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Enter / Space", "Choose"],
       ["Esc", "Back to the title"],
       ["Alt + R", "Reset everything"],
+      ["Alt + P", "Go to any menu"],
       ["F7", "Mute or unmute"],
       ["Alt + Enter", "Fullscreen"],
       ["F8", "Save a screenshot"],
@@ -63,6 +64,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Ctrl + C", "Copy your result"],
       ["F", "Favourite a custom entry"],
       ["N", "Next sky in Zen"],
+      [",  P  .", "Previous, pause and next song in Zen"],
       ["/  or  Ctrl + F", "Search a stage list"],
       ["F7", "Mute or unmute"],
       ["Alt + Enter", "Fullscreen"],
@@ -80,7 +82,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["M", "Mirror drawing"],
       ["G", "Toggle grid"],
       ["C  /  click ink", "Colour mixer"],
-      ["1 - 6", "Switch drawing"],
+      ["1 - 4", "Switch drawing"],
       ["Ctrl + Z", "Undo"],
       ["Ctrl + Y", "Redo"],
       ["Esc", "Back"],
@@ -273,7 +275,7 @@ function createHelp(app: Application): Help {
 
   title.anchor.set(0.5);
   hint.anchor.set(0.5);
-  hint.text = "PRESS ? OR ESC TO CLOSE";
+  hint.text = "PRESS SEMICOLON OR ESC TO CLOSE";
   panel.addChild(back, title, lines, hint);
   view.addChild(shade, panel);
   view.visible = false;

@@ -394,6 +394,44 @@ function onHitbox(listener: CrtListener): void {
   hitboxListeners.push(listener);
 }
 
+const autosaveStorageKey: string = "geregnet.autosave";
+const autosaveListeners: Array<CrtListener> = new Array();
+let autosave: boolean = loadAutosave();
+
+function loadAutosave(): boolean {
+  try {
+    return localStorage.getItem(autosaveStorageKey) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function getAutosave(): boolean {
+  return autosave;
+}
+
+function setAutosave(value: boolean): void {
+  if (value === autosave) {
+    return;
+  }
+
+  autosave = value;
+
+  try {
+    localStorage.setItem(autosaveStorageKey, value ? "on" : "off");
+  } catch {
+    console.warn("Could not save the autosave setting");
+  }
+
+  for (const listener of autosaveListeners) {
+    listener(autosave);
+  }
+}
+
+function onAutosave(listener: CrtListener): void {
+  autosaveListeners.push(listener);
+}
+
 const dimStorageKey: string = "geregnet.dim";
 const dimListeners: Array<RateListener> = new Array();
 let dim: number = loadDim();
@@ -492,6 +530,9 @@ export {
   getHitbox,
   setHitbox,
   onHitbox,
+  getAutosave,
+  setAutosave,
+  onAutosave,
   getFullscreen,
   setFullscreen,
   onFullscreen,

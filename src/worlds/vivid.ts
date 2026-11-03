@@ -68,6 +68,7 @@ type Vivid = {
   setScenery: (name: string) => void;
   aboveSea: Graphics;
   rainLayer: Container;
+  skyLayer: Container;
   surface: (x: number) => number;
   absorb: (x: number, y: number, color: string) => void;
 };
@@ -236,6 +237,7 @@ function createGlowTexture(
 
 function createVivid(app: Application): Vivid {
   const rainLayer: Container = new Container();
+  const skyLayer: Container = new Container();
   const view: Container = new Container();
   const sky: Graphics = new Graphics();
   const scene: Container = new Container();
@@ -383,7 +385,16 @@ function createVivid(app: Application): Vivid {
 
   details.addChild(lighthouse.view, lighthouse.beam);
   witchLayer.addChild(witch.view);
-  scene.addChild(sky, nightSky, starLayer, rainLayer, details, witchLayer, sea);
+  scene.addChild(
+    sky,
+    nightSky,
+    starLayer,
+    skyLayer,
+    rainLayer,
+    details,
+    witchLayer,
+    sea,
+  );
   moteLayer.blendMode = "add";
   moteLayer.alpha = 0;
 
@@ -734,6 +745,7 @@ function createVivid(app: Application): Vivid {
     },
     aboveSea: aboveSea,
     rainLayer: rainLayer,
+    skyLayer: skyLayer,
     surface: seaSurface,
     absorb: absorb,
   };

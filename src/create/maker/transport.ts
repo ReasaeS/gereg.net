@@ -432,7 +432,7 @@ function createTransport(
     }
 
     patternBar.visible = tab().name === "pattern";
-    playtestBar.visible = tab().name !== "palette";
+    playtestBar.visible = tab().name !== "palette" && tab().name !== "ost";
     fieldFocus.set(typing !== null ? 1 : 0);
     drawField(clockBox, clockWidth, chipHeight, fieldFocus.value());
 

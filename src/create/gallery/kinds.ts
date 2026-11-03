@@ -1,17 +1,20 @@
 import type {
   Background,
+  Bullet,
   Character,
   Creations,
   Cutscene,
   Enemy,
   Frame,
   Game,
+  Ost,
   Palette,
   Pattern,
   Rank,
   Sigil,
   Sound,
   Run,
+  Vessel,
   Spell,
   Stage,
   Wallpaper,
@@ -36,10 +39,13 @@ type Kind =
   | "enemy"
   | "background"
   | "wallpaper"
+  | "bullet"
+  | "vessel"
   | "palette"
   | "sigil"
   | "spell"
   | "sound"
+  | "ost"
   | "character"
   | "cutscene";
 
@@ -55,10 +61,13 @@ type Creation =
   | Enemy
   | Background
   | Wallpaper
+  | Bullet
+  | Vessel
   | Palette
   | Sigil
   | Spell
   | Sound
+  | Ost
   | Character
   | Cutscene;
 
@@ -114,9 +123,12 @@ const dealTexts: Map<string, string> = new Map([
   ["boss", "Several spell bars"],
   ["background", "A scrolling sky"],
   ["wallpaper", "The frame around play"],
+  ["bullet", "An energy shot"],
+  ["vessel", "A craft for enemies"],
   ["palette", "Menu colours"],
   ["sigil", "Rings behind a spell"],
   ["sound", "An effect or song"],
+  ["ost", "Songs for a game"],
   ["cutscene", "A conversation"],
   ["character", "A speaker"],
 ]);
@@ -289,9 +301,12 @@ function listEntries(source: Creations, category: Category): Array<Entry> {
   } else {
     add("background", source.backgrounds);
     add("wallpaper", source.wallpapers);
+    add("bullet", source.bullets);
+    add("vessel", source.vessels);
     add("palette", source.palettes);
     add("sigil", source.sigils);
     add("sound", source.sounds);
+    add("ost", source.osts);
     add("cutscene", source.cutscenes);
     add("character", source.characters);
   }

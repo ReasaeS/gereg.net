@@ -9,6 +9,7 @@ import {
 import type {
   Background,
   Bar,
+  Bullet,
   Character,
   Creations,
   Cutscene,
@@ -17,9 +18,12 @@ import type {
   Game,
   Keyframe,
   Line,
+  Ost,
+  OstTrack,
   Palette,
   Pattern,
   Run,
+  Vessel,
   Sigil,
   Sound,
   Spell,
@@ -29,19 +33,27 @@ import type {
 import { placeAlong, solidSpans, wallAngle } from "../geometry";
 import { getTexture } from "../images";
 import { getTheme } from "../../theme/theme";
-import { drawShape } from "../shape";
+import { drawVessel, drawBody } from "../vessel";
 import { drawSigil, sigilRadius } from "../sigil";
 import { drawSound, soundLength } from "../sound";
 import { paintWallpaper } from "../wallpaper";
+import { energyOf, type Energy } from "../energy";
 import { drawPalette } from "../palette";
 import { castOf, feelingOf, speakerOf } from "../cutscene";
 import type { Entry } from "./kinds";
-import { difficulties, rarityOf, type Rarity } from "../rarity";
-import { gameRuns, gameStages, packLength, runStages } from "../packs";
+import { cosmetics, difficulties, rarityOf, type Rarity } from "../rarity";
+import {
+  gameRuns,
+  gameStages,
+  ostTracks,
+  packLength,
+  runStages,
+} from "../packs";
 import { blend, createSerif } from "./style";
 
 const wallpaperScale: number = 0.6;
 const dotLimit: number = 24;
+const bulletShowcase: number = 6;
 const miniWidth: number = 28; // px
 const miniHeight: number = 40; // px
 const miniGap: number = 6; // px
@@ -67,6 +79,52 @@ function contain(sprite: Sprite, texture: Texture, size: number): void {
   sprite.texture = texture;
   sprite.anchor.set(0.5);
   sprite.scale.set(size / Math.max(texture.width, texture.height));
+}
+
+function addEnergy(
+  art: Container,
+  bullet: Bullet,
+  x: number,
+  y: number,
+  size: number,
+  rotation: number,
+): void {
+  const energy: Energy = energyOf(bullet);
+
+  for (const texture of [energy.glow, energy.core]) {
+    const sprite: Sprite = new Sprite();
+
+    contain(sprite, texture, size);
+    sprite.position.set(x, y);
+    sprite.rotation = rotation;
+    sprite.blendMode = texture === energy.core ? "add" : "normal";
+    art.addChild(sprite);
+  }
+}
+
+function drawBulletArt(
+  art: Container,
+  bullet: Bullet,
+  width: number,
+  height: number,
+): void {
+  const size: number = height * 0.22;
+  const radius: number = height * 0.28;
+
+  for (let index = 0; index < bulletShowcase; index++) {
+    const angle: number = (index * Math.PI * 2) / bulletShowcase;
+
+    addEnergy(
+      art,
+      bullet,
+      width / 2 + Math.cos(angle) * radius,
+      height / 2 + Math.sin(angle) * radius,
+      size,
+      angle - Math.PI / 2,
+    );
+  }
+
+  addEnergy(art, bullet, width / 2, height / 2, size * 1.6, 0);
 }
 
 function drawBackground(
@@ -113,10 +171,10 @@ function drawBackground(
 function drawPattern(
   art: Container,
   pattern: Pattern,
+  bullet: Bullet | null,
   width: number,
   height: number,
 ): void {
-  const texture: Texture | null = getTexture(pattern.sprite);
   const dots: Graphics = new Graphics();
   const count: number = Math.min(
     Math.max(Math.round(pattern.count), 1),
@@ -177,13 +235,8 @@ function drawPattern(
     const x: number = width / 2 + Math.cos(angle) * radius;
     const y: number = height / 2 + Math.sin(angle) * radius;
 
-    if (texture !== null) {
-      const bullet: Sprite = new Sprite();
-
-      contain(bullet, texture, size * 2);
-      bullet.position.set(x, y);
-      bullet.rotation = angle - Math.PI / 2;
-      art.addChild(bullet);
+    if (bullet !== null) {
+      addEnergy(art, bullet, x, y, size * 2, angle - Math.PI / 2);
     } else {
       dots.circle(x, y, size / 2).fill(pattern.color);
     }
@@ -196,24 +249,13 @@ function drawPattern(
 function drawEnemy(
   art: Container,
   enemy: Enemy,
+  vessel: Vessel | null,
   width: number,
   height: number,
 ): void {
-  const texture: Texture | null = getTexture(enemy.sprite);
-  const size: number = height * 0.8;
-
-  if (texture !== null) {
-    const sprite: Sprite = new Sprite();
-
-    contain(sprite, texture, size);
-    sprite.position.set(width / 2, height / 2);
-    art.addChild(sprite);
-    return;
-  }
-
   const body: Graphics = new Graphics();
 
-  drawShape(body, enemy.color, size);
+  drawBody(body, { ...enemy, size: height * 0.8 }, vessel);
   body.position.set(width / 2, height / 2);
   art.addChild(body);
 }
@@ -288,6 +330,7 @@ function drawCutsceneArt(
   art: Container,
   cutscene: Cutscene,
   cast: Array<Character>,
+  background: Background | null,
   width: number,
   height: number,
 ): void {
@@ -295,7 +338,7 @@ function drawCutsceneArt(
   const speakers: Array<Character> = castOf(cutscene, cast);
   const lines: number = Math.min(cutscene.lines.length, 2);
 
-  drawBackground(art, null, width, height);
+  drawBackground(art, background, width, height);
 
   for (const character of speakers.slice(0, 1)) {
     const said: Line | undefined = cutscene.lines.find(
@@ -491,12 +534,18 @@ function drawEntry(
   } else if (entry.kind === "pattern") {
     const pattern: Pattern = item as Pattern;
 
-    drawPattern(art, pattern, width, height);
+    drawPattern(
+      art,
+      pattern,
+      byId(creations.bullets, pattern.bullet),
+      width,
+      height,
+    );
     detail = pattern.count + " bullets  ·  " + pattern.rate + "/s";
   } else if (entry.kind === "enemy") {
     const enemy: Enemy = item as Enemy;
 
-    drawEnemy(art, enemy, width, height);
+    drawEnemy(art, enemy, byId(creations.vessels, enemy.vessel), width, height);
     const spells: number = enemy.bars.filter(
       (bar: Bar) => bar.spell !== null,
     ).length;
@@ -519,6 +568,34 @@ function drawEntry(
       "  ·  " +
       soundLength(sound).toFixed(2) +
       "s";
+  } else if (entry.kind === "ost") {
+    const ost: Ost = item as Ost;
+    const tracks: Array<Sound> = ostTracks(creations, ost);
+    const color: string = rarityOf(cosmetics, "ost").color;
+
+    drawMinis(
+      art,
+      ost.tracks.map((track: OstTrack, index: number) => ({
+        color: color,
+        fill:
+          byId(creations.sounds, track.sound) === null
+            ? null
+            : (byId(creations.backgrounds, track.background)?.top ?? "#01040f"),
+        label: String(index + 1),
+      })),
+      width,
+      height,
+    );
+    detail =
+      tracks.length +
+      (tracks.length === 1 ? " track" : " tracks") +
+      "  ·  " +
+      clockText(
+        tracks.reduce(
+          (total: number, sound: Sound) => total + soundLength(sound),
+          0,
+        ),
+      );
   } else if (entry.kind === "character") {
     const character: Character = item as Character;
 
@@ -531,7 +608,14 @@ function drawEntry(
 
     const speakers: number = castOf(cutscene, creations.characters).length;
 
-    drawCutsceneArt(art, cutscene, creations.characters, width, height);
+    drawCutsceneArt(
+      art,
+      cutscene,
+      creations.characters,
+      byId(creations.backgrounds, cutscene.background),
+      width,
+      height,
+    );
     detail =
       speakers +
       (speakers === 1 ? " character" : " characters") +
@@ -572,11 +656,27 @@ function drawEntry(
     paintWallpaper(layer, wallpaper, width, height, wallpaperScale);
     art.addChild(layer);
     detail =
-      wallpaper.sprite !== null
-        ? "Image"
-        : wallpaper.stripes > 0
-          ? "Stripes " + wallpaper.stripes
-          : "Solid";
+      wallpaper.size > 0
+        ? wallpaper.motif[0]!.toUpperCase() +
+          wallpaper.motif.slice(1) +
+          " " +
+          wallpaper.size
+        : "Solid";
+  } else if (entry.kind === "bullet") {
+    const bullet: Bullet = item as Bullet;
+
+    drawBackground(art, null, width, height);
+    drawBulletArt(art, bullet, width, height);
+    detail = bullet.shape[0]!.toUpperCase() + bullet.shape.slice(1);
+  } else if (entry.kind === "vessel") {
+    const vessel: Vessel = item as Vessel;
+    const body: Graphics = new Graphics();
+
+    drawBackground(art, null, width, height);
+    drawVessel(body, vessel, height * 0.7);
+    body.position.set(width / 2, height / 2);
+    art.addChild(body);
+    detail = "Sprite";
   } else if (entry.kind === "palette") {
     drawBackground(art, null, width, height);
     drawPalette(art, item as Palette, width, height);
@@ -601,7 +701,7 @@ function drawEntry(
 
       const holder: Container = new Container();
 
-      drawEnemy(holder, enemy, 36, 36);
+      drawEnemy(holder, enemy, byId(creations.vessels, enemy.vessel), 36, 36);
       holder.position.set(width / 2 - 72 + used.size * 40, height / 2 - 18);
       art.addChild(holder);
       used.add(enemy.id);

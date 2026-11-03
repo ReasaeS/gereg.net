@@ -14,10 +14,13 @@ const kindWords: Map<Kind, string> = new Map([
   ["enemy", "Enemy"],
   ["background", "Background"],
   ["wallpaper", "Wallpaper"],
+  ["bullet", "Bullet"],
+  ["vessel", "Vessel"],
   ["palette", "Palette"],
   ["sigil", "Sigil"],
   ["spell", "Spell"],
   ["sound", "Sound"],
+  ["ost", "OST"],
   ["character", "Character"],
   ["cutscene", "Cutscene"],
 ]);
@@ -31,10 +34,13 @@ function listOf(creations: Creations, kind: Kind): Array<Item> {
     enemy: creations.enemies,
     background: creations.backgrounds,
     wallpaper: creations.wallpapers,
+    bullet: creations.bullets,
+    vessel: creations.vessels,
     palette: creations.palettes,
     sigil: creations.sigils,
     spell: creations.spells,
     sound: creations.sounds,
+    ost: creations.osts,
     character: creations.characters,
     cutscene: creations.cutscenes,
   };
@@ -101,12 +107,44 @@ function forgetStageLook(creations: Creations, id: string): void {
       enemyItem.theme = null;
     }
   }
+
+  for (const ostItem of creations.osts) {
+    for (const trackItem of ostItem.tracks) {
+      if (trackItem.sound === id) {
+        trackItem.sound = null;
+      }
+
+      if (trackItem.background === id) {
+        trackItem.background = null;
+      }
+
+      if (trackItem.wallpaper === id) {
+        trackItem.wallpaper = null;
+      }
+    }
+  }
+
+  for (const gameItem of creations.games) {
+    if (gameItem.ost === id) {
+      gameItem.ost = null;
+    }
+  }
 }
 
 function forgetCosmetic(creations: Creations, id: string): void {
   for (const cutsceneItem of creations.cutscenes) {
     if (cutsceneItem.voice === id) {
       cutsceneItem.voice = null;
+    }
+
+    if (cutsceneItem.background === id) {
+      cutsceneItem.background = null;
+    }
+
+    for (const line of cutsceneItem.lines) {
+      if (line.sound === id) {
+        delete line.sound;
+      }
     }
   }
 
@@ -137,6 +175,22 @@ function forgetAttack(creations: Creations, id: string): void {
   }
 }
 
+function forgetBullet(creations: Creations, id: string): void {
+  for (const patternItem of creations.patterns) {
+    if (patternItem.bullet === id) {
+      patternItem.bullet = null;
+    }
+  }
+}
+
+function forgetVessel(creations: Creations, id: string): void {
+  for (const enemyItem of creations.enemies) {
+    if (enemyItem.vessel === id) {
+      enemyItem.vessel = null;
+    }
+  }
+}
+
 function forgetSpawns(creations: Creations, id: string): void {
   for (const stageItem of creations.stages) {
     for (const keyframeItem of stageItem.keyframes) {
@@ -161,6 +215,8 @@ function deleteEntry(creations: Creations, kind: Kind, index: number): void {
   forgetAttack(creations, item.id);
   forgetStageLook(creations, item.id);
   forgetSpawns(creations, item.id);
+  forgetBullet(creations, item.id);
+  forgetVessel(creations, item.id);
 }
 
 function createEntry(creations: Creations, deal: Deal): Kind {

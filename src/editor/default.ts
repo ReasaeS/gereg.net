@@ -93,6 +93,78 @@ const menuColors: Map<string, string | null> = new Map([
   ["O", "#ffb347"],
 ]);
 
+const vesselRows: Array<string> = [
+  "................................",
+  "................................",
+  "........R..............R........",
+  "........R..............R........",
+  ".......RWR............RWR.......",
+  ".......RWR............RWR.......",
+  "......KCCCK..........KCCCK......",
+  "......KBBBK....KK....KBBBK......",
+  "......KBLBK...KBBK...KBLBK......",
+  "......KBLBK..KBBBBK..KBLBK......",
+  "......KBLBK..KBLLBK..KBLBK......",
+  "......KBLBK.KBBLLBBK.KBLBK......",
+  "...KKKKBBBKKKBBLLBBKKKBBBKKKK...",
+  "..KCCBBBBBBBBBBLLBBBBBBBBBBCCK..",
+  ".KCBBBBBBBBBBBBLLBBBBBBBBBBBBCK.",
+  "KCBBBBBBBBBBBBBLLBBBBBBBBBBBBBCK",
+  "KRBBBBBBBBBBBBBLLBBBBBBBBBBBBBRK",
+  "KCBBBBBBBBBBBBBLLBBBBBBBBBBBBBCK",
+  ".KKKKKKBBBBBBBBLLBBBBBBBBKKKKKK.",
+  "......KKKBBBBBBLLBBBBBBKKK......",
+  ".........KBBBBRRRRBBBBK.........",
+  ".........KBBBRRWWRRBBBK.........",
+  "..........KBBRRRRRRBBK..........",
+  "..........KBBRRRRRRBBK..........",
+  "...........KBBRRRRBBK...........",
+  "...........KBBBBBBBBK...........",
+  "............KBBBBBBK............",
+  "............KBBLLBBK............",
+  ".............KBLLBK.............",
+  "..............KBBK..............",
+  "...............KK...............",
+  "................................",
+];
+
+const vesselColors: Map<string, string | null> = new Map([
+  [".", null],
+  ["K", "#1d1d2b"],
+  ["B", "#3b3b52"],
+  ["L", "#6b6b85"],
+  ["C", "#7ad8ff"],
+  ["R", "#ff3b3b"],
+  ["W", "#ffffff"],
+]);
+
+const bulletRows: Array<string> = [
+  "......KKKK......",
+  "....KKRRRRKK....",
+  "...KRRRRRRRRK...",
+  "..KRRRPPPPRRRK..",
+  ".KRRPPWWWWPPRRK.",
+  ".KRRPWWWWWWPRRK.",
+  "KRRPWWWWWWWWPRRK",
+  "KRRPWWWWWWWWPRRK",
+  "KRRPWWWWWWWWPRRK",
+  "KRRPWWWWWWWWPRRK",
+  ".KRRPWWWWWWPRRK.",
+  ".KRRPPWWWWPPRRK.",
+  "..KRRRPPPPRRRK..",
+  "...KRRRRRRRRK...",
+  "....KKRRRRKK....",
+  "......KKKK......",
+];
+
+const bulletColors: Map<string, string | null> = new Map([
+  [".", null],
+  ["K", "#1d1d2b"],
+  ["R", "#ff3b3b"],
+  ["P", "#ff8a80"],
+  ["W", "#ffffff"],
+]);
+
 const droneRadius: number = 13; // px
 const droneLight: string = "#ffffff";
 const droneDark: string = "#ff3b3b";
@@ -132,6 +204,14 @@ function drawGameDefault(pixels: Pixels): void {
 
 function drawMenuDefault(pixels: Pixels): void {
   drawArt(pixels, menuRows, menuColors);
+}
+
+function drawBulletDefault(pixels: Pixels): void {
+  drawArt(pixels, bulletRows, bulletColors);
+}
+
+function drawVesselDefault(pixels: Pixels): void {
+  drawArt(pixels, vesselRows, vesselColors);
 }
 
 function drawDroneDefault(pixels: Pixels): void {
@@ -191,6 +271,8 @@ function drawDroneShotDefault(pixels: Pixels): void {
 export {
   drawGameDefault,
   drawMenuDefault,
+  drawVesselDefault,
+  drawBulletDefault,
   drawDroneDefault,
   drawShotDefault,
   drawDroneShotDefault,

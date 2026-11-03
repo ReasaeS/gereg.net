@@ -1,13 +1,16 @@
-import type { Creations, Game, Run, Stage } from "./types";
+import type { Creations, Game, Run, Sound, Stage } from "./types";
 import {
   defaultBackground,
+  defaultBullet,
   defaultCharacter,
   defaultCutscene,
   defaultEnemy,
   defaultGame,
+  defaultOst,
   defaultPalette,
   defaultPattern,
   defaultRun,
+  defaultVessel,
   defaultSigil,
   defaultSound,
   defaultSpell,
@@ -55,9 +58,22 @@ function blankEntry(
           creations.runs.find((run: Run) => run.difficulty === entry.value)
             ?.id ?? null;
       }
+
+      game.ost = creations.osts[0]?.id ?? null;
     }
 
     return game;
+  }
+
+  if (kind === "ost") {
+    return defaultOst(
+      sample
+        ? creations.sounds
+            .filter((sound: Sound) => sound.source === "file")
+            .slice(0, sampleStages)
+            .map((sound: Sound) => sound.id)
+        : new Array(),
+    );
   }
 
   if (kind === "pattern") {
@@ -77,6 +93,14 @@ function blankEntry(
 
   if (kind === "wallpaper") {
     return defaultWallpaper();
+  }
+
+  if (kind === "bullet") {
+    return defaultBullet();
+  }
+
+  if (kind === "vessel") {
+    return defaultVessel();
   }
 
   if (kind === "palette") {

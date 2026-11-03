@@ -1,4 +1,4 @@
-import type { Curve, Frame, Vector, Wall } from "../../types";
+import type { Bullet, Curve, Frame, Vector, Wall } from "../../types";
 import { derivativeNames } from "../../defaults";
 import { attacks, type Attack, type Rarity } from "../../rarity";
 import { wallAngle } from "../../geometry";
@@ -29,7 +29,7 @@ const frames: Array<Rarity<Frame>> = attacks.filter(
 );
 
 function addPatternTab(studio: Studio): void {
-  const { creations, preview, addTab, spriteRow, renameDefault } = studio;
+  const { creations, preview, addTab, renameDefault } = studio;
   const {
     rarityOptions,
     slider,
@@ -47,7 +47,21 @@ function addPatternTab(studio: Studio): void {
     () => creations.patterns,
     [
       ...section("Look", [
-        spriteRow(),
+        choice(
+          "Bullet",
+          () => [
+            { value: null, label: "Default" },
+            ...creations.bullets.map((value: Bullet) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => pattern().bullet,
+          (value: string | null) => {
+            pattern().bullet = value;
+          },
+          "bullet",
+        ),
         slider(
           "Size",
           4,
@@ -58,14 +72,17 @@ function addPatternTab(studio: Studio): void {
             pattern().size = value;
           },
         ),
-        colors(
-          "Colour",
-          brightColors,
-          () => pattern().color,
-          (value: string) => {
-            pattern().color = value;
-          },
-        ),
+        {
+          ...colors(
+            "Colour",
+            brightColors,
+            () => pattern().color,
+            (value: string) => {
+              pattern().color = value;
+            },
+          ),
+          shown: () => pattern().bullet === null,
+        },
       ]),
       ...section("Spread", [
         slider(

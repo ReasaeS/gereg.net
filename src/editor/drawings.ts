@@ -30,19 +30,18 @@ const spriteSize: number = 32; // px
 const gameStorageKey: string = "geregnet.playerSprite";
 const menuStorageKey: string = "geregnet.menuSprite";
 const droneStorageKey: string = "geregnet.droneSprite";
-const shotStorageKey: string = "geregnet.shotSprite";
-const droneShotStorageKey: string = "geregnet.droneShotSprite";
 
 function createDrawing(
   name: string,
   storageKey: string,
   drawDefault: (pixels: Pixels) => void,
+  size: number = spriteSize,
 ): Drawing {
-  const pixels: Pixels = createPixels(spriteSize);
+  const pixels: Pixels = createPixels(size);
   const source: BufferImageSource = new BufferImageSource({
     resource: pixels.data,
-    width: spriteSize,
-    height: spriteSize,
+    width: size,
+    height: size,
     scaleMode: "nearest",
   });
 
@@ -63,9 +62,25 @@ const drawings: Array<Drawing> = [
   createDrawing("in game", gameStorageKey, drawGameDefault),
   createDrawing("menu", menuStorageKey, drawMenuDefault),
   createDrawing("drone", droneStorageKey, drawDroneDefault),
-  createDrawing("shot", shotStorageKey, drawShotDefault),
-  createDrawing("drone shot", droneShotStorageKey, drawDroneShotDefault),
 ];
+
+function resizeDrawing(target: Drawing, size: number): void {
+  if (target.pixels.size === size) {
+    return;
+  }
+
+  const old: Texture = target.texture;
+
+  target.pixels = createPixels(size);
+  target.source = new BufferImageSource({
+    resource: target.pixels.data,
+    width: size,
+    height: size,
+    scaleMode: "nearest",
+  });
+  target.texture = new Texture({ source: target.source });
+  old.destroy(true);
+}
 
 function isDefault(target: Drawing): boolean {
   const pixels: Pixels = createPixels(spriteSize);
@@ -112,10 +127,10 @@ function saveDrawing(target: Drawing): void {
   }
 }
 
-function defaultPlayerTexture(): Texture {
+function defaultTexture(drawDefault: (pixels: Pixels) => void): Texture {
   const pixels: Pixels = createPixels(spriteSize);
 
-  drawGameDefault(pixels);
+  drawDefault(pixels);
 
   return new Texture({
     source: new BufferImageSource({
@@ -125,6 +140,13 @@ function defaultPlayerTexture(): Texture {
       scaleMode: "nearest",
     }),
   });
+}
+
+const shotTexture: Texture = defaultTexture(drawShotDefault);
+const droneShotTexture: Texture = defaultTexture(drawDroneShotDefault);
+
+function defaultPlayerTexture(): Texture {
+  return defaultTexture(drawGameDefault);
 }
 
 function playerTexture(): Texture {
@@ -143,20 +165,14 @@ function droneTexture(): Texture {
   return drawings[2]!.texture;
 }
 
-function shotDrawing(): Drawing {
-  return drawings[3]!;
-}
-
-function droneShotDrawing(): Drawing {
-  return drawings[4]!;
-}
-
 for (let index = 0; index < drawings.length; index++) {
   loadDrawing(drawings[index]!);
 }
 
 export {
   spriteSize,
+  createDrawing,
+  resizeDrawing,
   drawings,
   saveDrawing,
   playerTexture,
@@ -164,7 +180,7 @@ export {
   menuTexture,
   menuPixels,
   droneTexture,
-  shotDrawing,
-  droneShotDrawing,
+  shotTexture,
+  droneShotTexture,
 };
 export type { Drawing };

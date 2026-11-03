@@ -11,18 +11,25 @@ import { playTrack, type Track } from "../create/sound";
 import type {
   Background,
   Creations,
+  Game,
+  Ost,
   Palette,
   Sound,
+  Stage,
   Wallpaper,
 } from "../create/types";
+import { gameStages } from "../create/packs";
 import { fieldHeight, fieldWidth } from "./field";
 
 type Zen = {
   view: Container;
-  start: () => void;
+  start: (ost: Ost | null) => void;
   stop: () => void;
   update: (delta: number) => void;
   next: () => void;
+  previousTrack: () => void;
+  toggleTrack: () => void;
+  nextTrack: () => void;
 };
 
 type Look = {
@@ -36,6 +43,13 @@ type LookListener = (
   palette: Palette | null,
 ) => void;
 
+type Song = {
+  sound: Sound;
+  look: Look | null;
+};
+
+type TrackListener = (name: string | null, playing: boolean) => void;
+
 type Scene = {
   view: Container;
   fill: Graphics;
@@ -45,6 +59,7 @@ type Scene = {
 };
 
 const sceneTime: number = 30; // s
+const restartTime: number = 3; // s
 const fadeTime: number = 3; // s
 const emptyColor: string = "#01040f";
 
@@ -103,10 +118,10 @@ function paintScene(scene: Scene, background: Background | null): void {
   });
 }
 
-function stageLooks(creations: Creations): Array<Look> {
+function stageLooks(creations: Creations, stages: Array<Stage>): Array<Look> {
   const found: Array<Look> = new Array();
 
-  for (const stage of creations.stages) {
+  for (const stage of stages) {
     const look: Look = {
       background:
         creations.backgrounds.find(
@@ -154,7 +169,82 @@ function shuffled<T>(list: Array<T>): Array<T> {
   return copy;
 }
 
-function createZen(onLook: LookListener): Zen {
+function paletteFor(
+  creations: Creations,
+  wallpaper: Wallpaper | null,
+): Palette | null {
+  const stage: Stage | undefined = creations.stages.find(
+    (candidate: Stage) =>
+      wallpaper !== null && candidate.wallpaper === wallpaper.id,
+  );
+
+  return (
+    creations.palettes.find(
+      (candidate: Palette) => candidate.id === stage?.palette,
+    ) ?? null
+  );
+}
+
+function ostSongs(creations: Creations, ost: Ost | null): Array<Song> {
+  if (ost === null) {
+    return shuffled(
+      creations.sounds.filter(
+        (sound: Sound) => sound.source === "file" && sound.file !== null,
+      ),
+    ).map((sound: Sound) => ({ sound: sound, look: null }));
+  }
+
+  const found: Array<Song> = new Array();
+
+  for (const track of ost.tracks) {
+    const sound: Sound | undefined = creations.sounds.find(
+      (candidate: Sound) => candidate.id === track.sound,
+    );
+    const background: Background | null =
+      creations.backgrounds.find(
+        (candidate: Background) => candidate.id === track.background,
+      ) ?? null;
+    const wallpaper: Wallpaper | null =
+      creations.wallpapers.find(
+        (candidate: Wallpaper) => candidate.id === track.wallpaper,
+      ) ?? null;
+
+    if (sound === undefined || sound.source !== "file" || sound.file === null) {
+      continue;
+    }
+
+    found.push({
+      sound: sound,
+      look:
+        background === null && wallpaper === null
+          ? null
+          : {
+              background: background,
+              wallpaper: wallpaper,
+              palette: paletteFor(creations, wallpaper),
+            },
+    });
+  }
+
+  return found;
+}
+
+function ostLooks(creations: Creations, ost: Ost | null): Array<Look> {
+  const game: Game | undefined =
+    ost === null
+      ? undefined
+      : creations.games.find((candidate: Game) => candidate.ost === ost.id);
+  const looks: Array<Look> =
+    game === undefined
+      ? new Array()
+      : stageLooks(creations, gameStages(creations, game));
+
+  return looks.length > 0
+    ? looks
+    : shuffled(stageLooks(creations, creations.stages));
+}
+
+function createZen(onLook: LookListener, onTrack: TrackListener): Zen {
   const view: Container = new Container();
   const front: Scene = createScene();
   const back: Scene = createScene();
@@ -163,50 +253,121 @@ function createZen(onLook: LookListener): Zen {
   let sceneIndex: number = 0;
   let sceneElapsed: number = 0;
   let fading: number = -1;
-  let tracks: Array<Sound> = new Array();
+  let tracks: Array<Song> = new Array();
+  let current: Look | null = null;
+  let tied: boolean = false;
   let trackIndex: number = 0;
   let track: Track | null = null;
+  let paused: boolean = false;
+  let resumeAt: number = 0;
   let running: boolean = false;
 
-  function nextTrack(): void {
+  function announce(): void {
+    onTrack(
+      tracks[trackIndex]?.sound.name ?? null,
+      !paused && tracks.length > 0,
+    );
+  }
+
+  function play(index: number, offset: number = 0): void {
+    track?.stop();
+    track = null;
+    paused = false;
+
     if (!running || tracks.length === 0) {
-      track = null;
+      announce();
       return;
     }
 
-    const sound: Sound = tracks[trackIndex % tracks.length]!;
+    trackIndex = ((index % tracks.length) + tracks.length) % tracks.length;
 
-    trackIndex = (trackIndex + 1) % tracks.length;
-    track = playTrack(sound, (played: boolean) => {
-      if (!played) {
-        tracks = tracks.filter((candidate: Sound) => candidate !== sound);
-        trackIndex = 0;
-      }
+    const song: Song = tracks[trackIndex]!;
 
-      nextTrack();
-    });
+    if (song.look !== null) {
+      showLook({
+        background: song.look.background ?? current?.background ?? null,
+        wallpaper: song.look.wallpaper ?? current?.wallpaper ?? null,
+        palette:
+          song.look.wallpaper === null
+            ? (current?.palette ?? null)
+            : song.look.palette,
+      });
+    }
+
+    track = playTrack(
+      song.sound,
+      (played: boolean) => {
+        if (played) {
+          play(trackIndex + 1);
+          return;
+        }
+
+        tracks = tracks.filter((candidate: Song) => candidate !== song);
+        play(trackIndex);
+      },
+      offset,
+    );
+    announce();
   }
 
-  function start(): void {
+  function previousTrack(): void {
+    if (!running) {
+      return;
+    }
+
+    if (track !== null && track.position() > restartTime) {
+      play(trackIndex);
+    } else {
+      play(trackIndex - 1);
+    }
+  }
+
+  function toggleTrack(): void {
+    if (!running || tracks.length === 0) {
+      return;
+    }
+
+    if (paused) {
+      play(trackIndex, resumeAt);
+      return;
+    }
+
+    resumeAt = track?.position() ?? 0;
+    track?.stop();
+    track = null;
+    paused = true;
+    announce();
+  }
+
+  function start(ost: Ost | null): void {
     const creations: Creations = loadCreations();
 
     running = true;
-    looks = shuffled(stageLooks(creations));
+    looks = ostLooks(creations, ost);
+    tracks = ostSongs(creations, ost);
+    tied = tracks.some((song: Song) => song.look !== null);
     sceneIndex = 0;
     sceneElapsed = 0;
     fading = -1;
-    paintScene(scenes[0]!, looks[0]?.background ?? null);
-    onLook(looks[0]?.wallpaper ?? null, looks[0]?.palette ?? null);
+    current = looks[0] ?? null;
+
+    const first: Look | null = tracks[0]?.look ?? null;
+
+    if (first !== null) {
+      current = {
+        background: first.background ?? current?.background ?? null,
+        wallpaper: first.wallpaper ?? current?.wallpaper ?? null,
+        palette:
+          first.wallpaper === null ? (current?.palette ?? null) : first.palette,
+      };
+    }
+
+    paintScene(scenes[0]!, current?.background ?? null);
+    onLook(current?.wallpaper ?? null, current?.palette ?? null);
     scenes[0]!.view.alpha = 1;
     scenes[1]!.view.visible = false;
     view.visible = true;
-    tracks = shuffled(
-      creations.sounds.filter(
-        (sound: Sound) => sound.source === "file" && sound.file !== null,
-      ),
-    );
-    trackIndex = 0;
-    nextTrack();
+    play(0);
   }
 
   function stop(): void {
@@ -214,6 +375,7 @@ function createZen(onLook: LookListener): Zen {
     onLook(null, null);
     track?.stop();
     track = null;
+    paused = false;
     view.visible = false;
   }
 
@@ -243,7 +405,7 @@ function createZen(onLook: LookListener): Zen {
       return;
     }
 
-    if (sceneElapsed < sceneTime || looks.length < 2) {
+    if (tied || sceneElapsed < sceneTime || looks.length < 2) {
       return;
     }
 
@@ -257,10 +419,30 @@ function createZen(onLook: LookListener): Zen {
   }
 
   function advance(): void {
-    sceneElapsed = 0;
     sceneIndex = (sceneIndex + 1) % looks.length;
-    paintScene(scenes[1]!, looks[sceneIndex]!.background);
-    onLook(looks[sceneIndex]!.wallpaper, looks[sceneIndex]!.palette);
+    showLook(looks[sceneIndex]!);
+  }
+
+  function showLook(look: Look): void {
+    if (
+      current !== null &&
+      current.background === look.background &&
+      current.wallpaper === look.wallpaper
+    ) {
+      return;
+    }
+
+    if (fading >= 0) {
+      fading = -1;
+      scenes = [scenes[1]!, scenes[0]!];
+      scenes[0]!.view.alpha = 1;
+      scenes[1]!.view.visible = false;
+    }
+
+    current = look;
+    sceneElapsed = 0;
+    paintScene(scenes[1]!, look.background);
+    onLook(look.wallpaper, look.palette);
     scenes[1]!.view.alpha = 0;
     scenes[1]!.view.visible = true;
     view.addChild(scenes[0]!.view, scenes[1]!.view);
@@ -276,6 +458,13 @@ function createZen(onLook: LookListener): Zen {
     stop: stop,
     update: update,
     next: next,
+    previousTrack: previousTrack,
+    toggleTrack: toggleTrack,
+    nextTrack: () => {
+      if (running) {
+        play(trackIndex + 1);
+      }
+    },
   };
 }
 

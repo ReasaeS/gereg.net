@@ -48,6 +48,7 @@ import {
 import { createTabs, headerY, type Tabs } from "./tabs";
 import { createSearchBar, type SearchBar } from "./search";
 import { createDealer, type Dealer } from "./deal";
+import { onTyping } from "../../ui/typing";
 
 type Live = {
   show: (kind: Kind, index: number) => Container | null;
@@ -122,6 +123,8 @@ function createGallery(
   const places: Map<Tile, Place> = new Map();
   const leaving: Array<Tile> = new Array();
   const searchBar: SearchBar = createSearchBar(app, () => rebuild(false));
+
+  onTyping(searchBar.focused);
   const empty: Text = createSerif(emptySize, trim);
   const emptyFade: Glide = createGlide(0, (value: number) => {
     empty.alpha = value;

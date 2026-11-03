@@ -1,7 +1,15 @@
 import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
-import type { Character, Cutscene, Emotion, Line, Palette } from "./types";
+import type {
+  Character,
+  Cutscene,
+  Emotion,
+  Line,
+  Pace,
+  Palette,
+} from "./types";
 import { getTexture } from "./images";
 import { createText } from "../ui/text";
+import { createGlide, type Glide } from "../ui/motion";
 import { fieldHeight, fieldWidth } from "../game/field";
 
 type Scene = {
@@ -30,6 +38,11 @@ const voiceEvery: number = 2;
 const arrowSize: number = 5; // units
 const arrowBob: number = 2; // units
 const arrowRate: number = 4; // rad/s
+const focusAlpha: number = 0.85;
+const focusWidth: number = 0.7; // of field width
+const focusTextSize: number = 15; // units
+const focusGap: number = 10; // units
+const focusSmoothing: number = 0.2; // s
 
 function speakerOf(cast: Array<Character>, line: Line): Character | null {
   return cast.find((value: Character) => value.id === line.character) ?? null;
@@ -59,6 +72,7 @@ function castOf(cutscene: Cutscene, cast: Array<Character>): Array<Character> {
 
 function createScene(
   speak: (cutscene: Cutscene) => void,
+  say: (line: Line) => void,
   cast: () => Array<Character>,
   autoAdvance: boolean,
 ): Scene {
@@ -66,6 +80,8 @@ function createScene(
   const portrait: Sprite = new Sprite();
   const box: Graphics = new Graphics();
   const arrow: Graphics = new Graphics();
+  const pointer: Container = new Container();
+  const shade: Graphics = new Graphics();
   const name: Text = createText(nameSize, "#ffffff");
   const body: Text = createText(textSize, "#ffffff");
   const boxTop: number = fieldHeight - boxMargin - boxHeight;
@@ -77,6 +93,16 @@ function createScene(
   let hold: number = 0;
   let colors: Palette | null = null;
   let bob: number = 0;
+  const focus: Glide = createGlide(
+    0,
+    (value: number) => {
+      shade.alpha = value * focusAlpha;
+      shade.visible = value > 0;
+      box.alpha = 1 - value;
+      portrait.alpha = 1 - value;
+    },
+    focusSmoothing,
+  );
 
   function line(): Line | null {
     return scene?.lines[index] ?? null;
@@ -110,6 +136,42 @@ function createScene(
     );
   }
 
+  function placeText(): void {
+    const current: Line | null = line();
+
+    if (current?.focus !== true) {
+      focus.set(0);
+      name.anchor.set(0, 0);
+      body.anchor.set(0, 0);
+      body.style.align = "left";
+      body.style.fontSize = textSize;
+      body.style.wordWrapWidth = boxWidth - boxPadding * 2;
+      name.position.set(boxMargin + boxPadding, boxTop + boxPadding);
+      body.position.set(boxMargin + boxPadding, boxTop + boxPadding + textGap);
+      pointer.position.set(
+        boxMargin + boxWidth - boxPadding - arrowSize,
+        boxTop + boxHeight - boxPadding,
+      );
+      return;
+    }
+
+    focus.set(1);
+    name.anchor.set(0.5, 1);
+    body.anchor.set(0.5, 0);
+    body.style.align = "center";
+    body.style.fontSize = focusTextSize;
+    body.style.wordWrapWidth = fieldWidth * focusWidth;
+    body.text = current.text;
+
+    const height: number = body.height;
+    const top: number = fieldHeight / 2 - height / 2;
+
+    body.text = "";
+    name.position.set(fieldWidth / 2, top - focusGap);
+    body.position.set(fieldWidth / 2, top);
+    pointer.position.set(fieldWidth / 2, top + height + focusGap + arrowSize);
+  }
+
   function drawLine(): void {
     const talking: Character | null = speaker();
 
@@ -117,6 +179,7 @@ function createScene(
     name.style.fill = colors?.label ?? talking?.color ?? "#ffffff";
     shown = -1;
     drawPortrait();
+    placeText();
   }
 
   function play(cutscene: Cutscene, start: number): void {
@@ -125,6 +188,7 @@ function createScene(
     typed = 0;
     hold = 0;
     drawLine();
+    say(cutscene.lines[index]!);
   }
 
   function next(): void {
@@ -136,6 +200,7 @@ function createScene(
     typed = 0;
     hold = 0;
     drawLine();
+    say(scene.lines[index]!);
   }
 
   function advance(): void {
@@ -158,13 +223,32 @@ function createScene(
     }
 
     const before: number = Math.floor(typed);
+    let left: number = delta;
 
-    typed = Math.min(typed + scene.speed * delta, current.text.length);
+    while (left > 0 && typed < current.text.length) {
+      const at: number = Math.floor(typed);
+      const rate: number =
+        current.paces?.find((pace: Pace) => at >= pace.from && at < pace.to)
+          ?.speed ?? scene.speed;
+      const need: number = (at + 1 - typed) / rate;
+
+      if (need > left) {
+        typed += rate * left;
+        break;
+      }
+
+      typed = at + 1;
+      left -= need;
+    }
 
     const after: number = Math.floor(typed);
 
     for (let at = before; at < after; at++) {
-      if (current.text[at]!.trim() !== "" && at % voiceEvery === 0) {
+      if (
+        current.sound === undefined &&
+        current.text[at]!.trim() !== "" &&
+        at % voiceEvery === 0
+      ) {
         speak(scene);
         break;
       }
@@ -175,6 +259,7 @@ function createScene(
       body.text = current.text.slice(0, after);
     }
 
+    drawPortrait();
     bob += delta * arrowRate;
     arrow.visible = typed >= current.text.length;
     arrow.y = Math.sin(bob) * arrowBob;
@@ -200,15 +285,9 @@ function createScene(
       });
     arrow
       .clear()
-      .poly([
-        boxMargin + boxWidth - boxPadding - arrowSize * 2,
-        boxTop + boxHeight - boxPadding - arrowSize,
-        boxMargin + boxWidth - boxPadding,
-        boxTop + boxHeight - boxPadding - arrowSize,
-        boxMargin + boxWidth - boxPadding - arrowSize,
-        boxTop + boxHeight - boxPadding,
-      ])
+      .poly([-arrowSize, -arrowSize, arrowSize, -arrowSize, 0, 0])
       .fill(colors?.highlight ?? "#ffffff");
+    shade.clear().rect(0, 0, fieldWidth, fieldHeight).fill(boxColor);
     body.tint = colors?.text ?? "#ffffff";
   }
 
@@ -220,14 +299,14 @@ function createScene(
 
   drawBox();
   arrow.visible = false;
-  name.position.set(boxMargin + boxPadding, boxTop + boxPadding);
-  body.position.set(boxMargin + boxPadding, boxTop + boxPadding + textGap);
   body.style.wordWrap = true;
-  body.style.wordWrapWidth = boxWidth - boxPadding * 2;
+  placeText();
+  focus.snap(0);
+  pointer.addChild(arrow);
 
   portrait.anchor.set(0.5, 1);
   portrait.position.set(fieldWidth * portraitX, boxTop + portraitOverlap);
-  view.addChild(portrait, box, name, body, arrow);
+  view.addChild(portrait, box, shade, name, body, pointer);
 
   return {
     view: view,

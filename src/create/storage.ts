@@ -1,6 +1,7 @@
 import type {
   Wave,
   Pattern,
+  Vessel,
   Enemy,
   Bar,
   Sigil,
@@ -12,6 +13,7 @@ import type {
   Stage,
   Creations,
   Side,
+  OstTrack,
 } from "./types";
 import {
   createId,
@@ -23,9 +25,13 @@ import {
   defaultCutscene,
   defaultSpawn,
   defaultKeyframe,
-  defaultStage,
   defaultSpawnY,
   repairPacks,
+  repairCharacter,
+  repairWallpaper,
+  repairEnemy,
+  repairVessel,
+  repairBullet,
 } from "./defaults";
 import { wallAngle } from "./geometry";
 import { defaultCreations } from "./starter";
@@ -42,7 +48,7 @@ type OldLine = {
   portrait: string | null;
 };
 
-type OldCutscene = Cutscene & {
+type OldCutscene = Omit<Cutscene, "background"> & {
   background?: unknown;
   characters?: Array<Character>;
 };
@@ -105,7 +111,8 @@ function upgradeCutscene(cutscene: OldCutscene, cast: Array<Character>): void {
       : (cutscene.characters ?? new Array());
   const renamed: Map<string, string> = new Map();
 
-  delete cutscene.background;
+  cutscene.background =
+    typeof cutscene.background === "string" ? cutscene.background : null;
   delete cutscene.characters;
 
   for (const character of embedded) {
@@ -164,6 +171,11 @@ function loadCreations(): Creations {
       enemies: parsed.enemies ?? fallback.enemies,
       backgrounds: parsed.backgrounds ?? fallback.backgrounds,
       wallpapers: parsed.wallpapers ?? fallback.wallpapers,
+      bullets: parsed.bullets ?? new Array(),
+      vessels:
+        parsed.vessels ??
+        (parsed as Creations & { ships?: Array<Vessel> }).ships ??
+        new Array(),
       palettes: parsed.palettes ?? fallback.palettes,
       sigils: parsed.sigils ?? new Array(),
       spells:
@@ -171,11 +183,25 @@ function loadCreations(): Creations {
           ? new Array()
           : (parsed.spells ?? new Array()),
       sounds: parsed.sounds ?? fallback.sounds,
+      osts: parsed.osts ?? new Array(),
       characters:
         parsed.characters ??
         (parsed.cutscenes === undefined ? fallback.characters : new Array()),
       cutscenes: parsed.cutscenes ?? fallback.cutscenes,
     };
+
+    for (const game of creations.games) {
+      game.ost = game.ost ?? null;
+    }
+
+    for (const ost of creations.osts) {
+      ost.tracks = (ost.tracks as Array<OstTrack | string | null>).map(
+        (track: OstTrack | string | null) =>
+          track === null || typeof track === "string"
+            ? { sound: track, background: null, wallpaper: null }
+            : track,
+      );
+    }
 
     for (const sound of creations.sounds) {
       sound.source = sound.source ?? "synth";
@@ -191,6 +217,7 @@ function loadCreations(): Creations {
       Character & { side?: unknown }
     >) {
       delete character.side;
+      repairCharacter(character);
     }
 
     for (const enemy of creations.enemies as Array<
@@ -216,13 +243,24 @@ function loadCreations(): Creations {
 
     repairSpells(creations);
 
-    for (const item of [
-      ...creations.patterns,
-      ...creations.enemies,
-      ...creations.backgrounds,
-      ...creations.wallpapers,
-    ]) {
-      item.sprite = item.sprite ?? null;
+    for (const enemy of creations.enemies) {
+      repairEnemy(enemy);
+    }
+
+    for (const vessel of creations.vessels) {
+      repairVessel(vessel);
+    }
+
+    for (const background of creations.backgrounds) {
+      background.sprite = background.sprite ?? null;
+    }
+
+    for (const wallpaper of creations.wallpapers) {
+      repairWallpaper(wallpaper);
+    }
+
+    for (const bullet of creations.bullets) {
+      repairBullet(bullet);
     }
 
     for (const pattern of creations.patterns as Array<
@@ -233,8 +271,11 @@ function loadCreations(): Creations {
         gapOffset?: number;
         speedWaves?: unknown;
         driftWaves?: unknown;
+        sprite?: unknown;
       }
     >) {
+      pattern.bullet = pattern.bullet ?? null;
+      delete pattern.sprite;
       pattern.size = pattern.size ?? 18;
       pattern.frame = pattern.frame ?? "objective";
       pattern.wall = pattern.wall ?? "top";
@@ -280,17 +321,6 @@ function loadCreations(): Creations {
       upgradeStage(stage);
     }
 
-    if (parsed.stages === undefined) {
-      creations.stages.push(
-        defaultStage(
-          creations.enemies[0]?.id ?? null,
-          creations.backgrounds[0]?.id ?? null,
-          creations.wallpapers[0]?.id ?? null,
-          creations.palettes[0]?.id ?? null,
-        ),
-      );
-    }
-
     repairPacks(creations);
 
     return creations;
@@ -330,7 +360,10 @@ function upgradeSigils(creations: Creations, old: Array<OldSigil>): void {
 
 type OldSpawn = Spawn & { time?: number };
 
-function upgradeStage(stage: Stage & { spawns?: Array<OldSpawn> }): void {
+function upgradeStage(
+  stage: Stage & { spawns?: Array<OldSpawn>; setting?: unknown },
+): void {
+  delete stage.setting;
   stage.difficulty = stage.difficulty ?? "normal";
   stage.wallpaper = stage.wallpaper ?? null;
   stage.palette = stage.palette ?? null;
@@ -394,14 +427,9 @@ function shiftWaves(waves: Array<Wave<unknown>>): void {
 function usedSprites(creations: Creations): Set<string> {
   const used: Set<string> = new Set();
 
-  for (const item of [
-    ...creations.patterns,
-    ...creations.enemies,
-    ...creations.backgrounds,
-    ...creations.wallpapers,
-  ]) {
-    if (item.sprite !== null) {
-      used.add(item.sprite);
+  for (const background of creations.backgrounds) {
+    if (background.sprite !== null) {
+      used.add(background.sprite);
     }
   }
 

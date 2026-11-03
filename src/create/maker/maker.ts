@@ -26,7 +26,12 @@ import {
   tween,
   type Easing,
 } from "../../effects/tween/tween";
-import type { Creations, Sound, Stage } from "../types";
+import type { Bullet, Creations, Sound, Stage, Vessel } from "../types";
+import { drawVesselFallback, readVessel, vesselTexture } from "../vessel";
+import { readBullet } from "../energy";
+import { bulletSide, vesselSide } from "../defaults";
+import { drawBulletDefault } from "../../editor/default";
+import type { Pixels } from "../../editor/pixels";
 import {
   loadCreations,
   onSave,
@@ -41,6 +46,7 @@ import {
   rowHeight,
   rowWidth,
   type Control,
+  type Option,
 } from "../../ui/widgets";
 import { createRows, type Rows } from "../../ui/rows";
 import { createText, screenResolution, sharpen } from "../../ui/text";
@@ -48,13 +54,16 @@ import { createGlide, type Glide } from "../../ui/motion";
 import { loadTexture, removeUnused } from "../images";
 import { createWallpaperView, type WallpaperView } from "../wallpaper";
 import { createGallery, type Gallery, type Live } from "../gallery/gallery";
-import type { Action, Deal, Kind } from "../gallery/kinds";
+import type { Action, Creation, Deal, Kind } from "../gallery/kinds";
+import { createBrowser, type Browser, type Card } from "./browser";
+import { createScript, type Script } from "./script";
 import type { Cursor, Item, Selection, Studio, Tab } from "./studio";
 import { createKit, type Kit } from "./kit";
 import { createSelection } from "./selection";
 import { createScenes, type Scenes } from "./scenes";
 import { createUploads, type Uploads } from "./uploads";
 import { createMarkers, type Markers } from "./markers";
+import { createPainter, type Painter } from "./painter";
 import { createTransport, type Transport } from "./transport";
 import { createTimeline, transportWidth, type Timeline } from "./timeline";
 import { createDrop, type Drop } from "./drop";
@@ -73,6 +82,8 @@ import { addPatternTab } from "./tabs/pattern";
 import { addEnemyTab } from "./tabs/enemy";
 import { addBackgroundTab } from "./tabs/background";
 import { addWallpaperTab } from "./tabs/wallpaper";
+import { addBulletTab } from "./tabs/bullet";
+import { addVesselTab } from "./tabs/vessel";
 import { addPaletteTab } from "./tabs/palette";
 import { addSpellTab } from "./tabs/spell";
 import { addSigilTab } from "./tabs/sigil";
@@ -82,7 +93,9 @@ import { addCharacterTab } from "./tabs/character";
 import { addStageTab, type StageTab } from "./tabs/stage";
 import { addRunTab } from "./tabs/run";
 import { addGameTab } from "./tabs/game";
+import { addOstTab } from "./tabs/ost";
 import { gameStages, runStages } from "../packs";
+import { onTyping } from "../../ui/typing";
 
 const sectionGap: number = 6; // units
 const panelLeft: number = 430; // units
@@ -116,6 +129,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     ring: 0,
     bar: 0,
     emotion: 0,
+    track: 0,
   };
   const pick: Selection = createSelection(creations, tabs, () => tab, cursor);
   const scenes: Scenes = createScenes(
@@ -147,9 +161,18 @@ async function createMaker(app: Application): Promise<PageContent> {
     pick.sigilById,
     pick.spellById,
     pick.patternById,
+    pick.bulletById,
+    pick.vesselById,
   );
   const ticks: Clock = createClock();
-  const kit: Kit = createKit(changed, refresh);
+  const kit: Kit = createKit(changed, refresh, browseCards);
+  const browser: Browser = createBrowser(app, () => creations);
+  const script: Script = createScript(app);
+  const painter: Painter = createPainter(
+    app,
+    () => changed(),
+    () => refresh(),
+  );
   const toast: Toast = createToast(app);
   let frameScale: number = 1;
   let tab: Tab;
@@ -180,6 +203,41 @@ async function createMaker(app: Application): Promise<PageContent> {
     pause: () => transport.pause(),
     buildMarkers: () => markers.build(),
     placeMarkers: () => markers.place(),
+    paintVessel: () => {
+      const vessel: Vessel = pick.vessel();
+
+      painter.open({
+        name: vessel.name,
+        side: vesselSide(vessel),
+        read: (pixels: Pixels) => readVessel(vessel, pixels),
+        write: (code: string) => {
+          vessel.pixels = code;
+          vesselTexture(vessel);
+        },
+        drawDefault: drawVesselFallback,
+      });
+    },
+    paintBullet: () => {
+      const bullet: Bullet = pick.bullet();
+
+      painter.open({
+        name: bullet.name,
+        side: bulletSide,
+        read: (pixels: Pixels) => readBullet(bullet, pixels),
+        write: (code: string) => {
+          bullet.pixels = code;
+        },
+        drawDefault: drawBulletDefault,
+      });
+    },
+    editTranscript: (
+      initial: string,
+      apply: (text: string) => string | null,
+      sounds: Array<string>,
+    ) => {
+      transport.stopTyping();
+      script.open(initial, apply, sounds);
+    },
   };
   const history: History = createHistory(creations, () => ({
     tab: tab.name,
@@ -194,6 +252,39 @@ async function createMaker(app: Application): Promise<PageContent> {
     () => active && editing,
     scenes.shown,
   );
+
+  onTyping(() => browser.shown() || script.shown() || transport.typing());
+
+  function browseCards<T>(
+    name: string,
+    kind: Kind,
+    options: Array<Option<T>>,
+    current: T,
+    choose: (value: T) => void,
+  ): void {
+    const list: Array<Item> = listOf(creations, kind);
+    const cards: Array<Card> = options.map((option: Option<T>) => {
+      const index: number = list.findIndex(
+        (item: Item) => (item.id as unknown) === option.value,
+      );
+
+      return {
+        label: index < 0 ? option.label : list[index]!.name,
+        entry:
+          index < 0
+            ? null
+            : { kind: kind, index: index, item: list[index] as Creation },
+      };
+    });
+
+    transport.stopTyping();
+    browser.open(
+      name,
+      cards,
+      options.findIndex((option: Option<T>) => option.value === current),
+      (index: number) => choose(options[index]!.value),
+    );
+  }
 
   function boardWanted(): number {
     return tab.name === "wallpaper" ? 0 : 1;
@@ -220,7 +311,11 @@ async function createMaker(app: Application): Promise<PageContent> {
     hudFrame.show(
       tab.name === "wallpaper"
         ? pick.wallpaper()
-        : pick.wallpaperById(lookStage()?.wallpaper ?? null),
+        : pick.wallpaperById(
+            tab.name === "ost"
+              ? (pick.ost().tracks[cursor.track]?.wallpaper ?? null)
+              : (lookStage()?.wallpaper ?? null),
+          ),
     );
   }
 
@@ -319,12 +414,16 @@ async function createMaker(app: Application): Promise<PageContent> {
   addEnemyTab(studio);
   addBackgroundTab(studio);
   addWallpaperTab(studio);
+  addBulletTab(studio);
+  addVesselTab(studio);
+
   addPaletteTab(studio);
   addSpellTab(studio);
   addSigilTab(studio);
 
   const soundTab: SoundTab = addSoundTab(studio);
 
+  addOstTab(studio);
   addCutsceneTab(studio);
   addCharacterTab(studio);
   addRunTab(studio);
@@ -439,6 +538,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function dropLabel(): string | null {
+    if (painter.shown()) {
+      return null;
+    }
+
     if (active && !editing) {
       return "DROP A CARD FILE TO IMPORT";
     }
@@ -530,6 +633,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     cursor.ring = 0;
     cursor.bar = 0;
     cursor.emotion = 0;
+    cursor.track = 0;
     kit.closeSections();
     laidOut = null;
     preview.clear();
@@ -629,7 +733,15 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   gameFrame.mask = frameMask;
   editor.addChild(gameFrame);
-  view.addChild(editor, gallery.view, drop.view, toast.view);
+  view.addChild(
+    editor,
+    gallery.view,
+    browser.view,
+    script.view,
+    painter.view,
+    drop.view,
+    toast.view,
+  );
 
   function layout(): void {
     const width: number = app.screen.width;
@@ -645,6 +757,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     rows.setViewport(bottom - panelTop - rows.view.y);
     sharpen(gameFrame, screenResolution(frameScale));
     drop.layout();
+    browser.layout();
+    painter.layout(frameScale);
   }
 
   app.ticker.add((ticker: Ticker) => {
@@ -659,12 +773,15 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     drop.update(delta);
+    browser.update(delta);
+    script.update(delta);
 
     if (!editing) {
       return;
     }
 
-    preview.overlay.visible = tab.name === "stage" && !transport.playing();
+    markers.view.visible = tab.name === "stage" && !transport.playing();
+    preview.overlay.visible = markers.view.visible;
     soundTab.plot.visible = tab.name === "sound";
     scenes.scene.view.visible = scenes.shown();
 
@@ -689,6 +806,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (browser.shown() || script.shown() || painter.shown()) {
+      return;
+    }
+
     if (
       active &&
       editing &&
@@ -792,12 +913,34 @@ async function createMaker(app: Application): Promise<PageContent> {
 
     active = value;
     transport.stopTyping();
+
+    if (!value) {
+      browser.close();
+      script.close();
+      painter.close();
+    }
+
     view.eventMode = value ? "passive" : "none";
     drop.hide();
     gallery.setActive(value && !editing);
   }
 
   function back(): boolean {
+    if (browser.shown()) {
+      browser.close();
+      return true;
+    }
+
+    if (script.shown()) {
+      script.close();
+      return true;
+    }
+
+    if (painter.shown()) {
+      painter.close();
+      return true;
+    }
+
     if (!editing) {
       return false;
     }
@@ -839,7 +982,6 @@ async function createMaker(app: Application): Promise<PageContent> {
       gallery.reset();
       showSelector(false);
     },
-    fullscreen: () => true,
     leave: () => (editing ? Promise.resolve() : gallery.disappear()),
     leaveTime: () => (editing ? 0 : gallery.disappearTime()),
     back: back,

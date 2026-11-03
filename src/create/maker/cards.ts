@@ -18,6 +18,8 @@ import { droneTexture, playerTexture } from "../../editor/drawings";
 import type { Live } from "../gallery/gallery";
 import type { Kind } from "../gallery/kinds";
 import { listOf } from "./items";
+import { bulletDemo } from "./tabs/bullet";
+import { vesselDemo } from "./tabs/vessel";
 import { gameStages, runStages } from "../packs";
 import type { Item, Selection } from "./studio";
 
@@ -26,6 +28,7 @@ async function createCards(
   pick: Selection,
 ): Promise<Live> {
   const cardScene: Scene = createScene(
+    () => undefined,
     () => undefined,
     () => creations.characters,
     true,
@@ -37,6 +40,8 @@ async function createCards(
     pick.sigilById,
     pick.spellById,
     pick.patternById,
+    pick.bulletById,
+    pick.vesselById,
   );
   const cardTicks: Clock = createClock();
 
@@ -69,6 +74,10 @@ async function createCards(
       const value: Spell = item as Spell;
 
       cardPreview.setSpell(value, pick.patternById(value.pattern));
+    } else if (kind === "bullet") {
+      cardPreview.setPattern(bulletDemo(item.id));
+    } else if (kind === "vessel") {
+      cardPreview.setEnemy(vesselDemo(item.id), null);
     } else if (kind === "background") {
       cardPreview.setBackground(item as Background);
       cardPreview.setPattern(null);

@@ -36,6 +36,7 @@ import { createStats } from "./menu/stats";
 import { createMaker } from "./create/maker/maker";
 import { createGuides } from "./dev/guides";
 import { resetApp } from "./dev/reset";
+import { createPalette, type Palette } from "./dev/palette";
 import {
   createLanding,
   setLandingEnabled,
@@ -47,6 +48,7 @@ import {
   landingBrightness,
   moveLogoToCorner,
   moveLogoToCenter,
+  landingConstellation,
   showLandingRing,
   landingRing,
 } from "./menu/landing";
@@ -92,6 +94,8 @@ import { createCredits, type Credits } from "./menu/credits";
 import { createHelp, type Help, type Topic } from "./menu/help";
 import { createToast, type Toast } from "./ui/toast";
 import { onUnlock, type Achievement } from "./game/achievements";
+import type { Option } from "./ui/widgets";
+import { typing } from "./ui/typing";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -123,10 +127,24 @@ const tips: Array<string> = [
   "PRESS G IN THE CUSTOMISE MENU TO TOGGLE THE GRID.",
   "PRESS P IN THE CREATE MENU TO PLAYTEST.",
   "PRESS ESC DURING A RUN TO PAUSE.",
-  "PRESS ? ON ANY SCREEN TO SEE ITS CONTROLS.",
+  "PRESS SEMICOLON ON ANY SCREEN TO SEE ITS CONTROLS.",
   "EXPORT A CARD TO SHARE IT. DROP A CARD FILE ON THE CREATE MENU TO IMPORT IT.",
   "PRESS / IN THE CREATE MENU TO SEARCH YOUR CARDS.",
 ];
+const destinations: Array<Option<string>> = [
+  { value: "terminal", label: "Terminal" },
+  { value: "landing", label: "Landing" },
+  { value: "main", label: "Main menu" },
+  { value: "play", label: "Play" },
+  { value: "customise", label: "Customise" },
+  { value: "create", label: "Create" },
+  { value: "stats", label: "Stats" },
+  { value: "config", label: "Config" },
+  { value: "credits", label: "Credits" },
+];
+const routeSpeed: number = 10;
+const routeLimit: number = 8000; // ms
+const backLimit: number = 12;
 const zoomDuration: number = 1100; // ms
 const zoomEasing: Easing = cubicBezier(0.45, 0, 0.35, 1);
 
@@ -209,6 +227,10 @@ onResolution(applyResolution);
 startMotion(app.ticker);
 bindLanding(app);
 
+const palette: Palette = createPalette(app, destinations, (value: string) =>
+  routeTo(value),
+);
+
 const world: Container = new Container();
 const introFrame: Graphics = new Graphics();
 const introBackdrop: Graphics = new Graphics();
@@ -268,7 +290,7 @@ screenLayer.addChild(
   introFrame,
   terminal.view,
 );
-app.stage.addChild(screenLayer, createGuides(app));
+app.stage.addChild(screenLayer, createGuides(app), palette.view);
 surroundIntro(1);
 app.renderer.on("resize", () => surroundIntro(introSurround));
 
@@ -306,6 +328,7 @@ const ocean: Vivid = await load(() => {
 ocean.setBeamTarget(selectedPoint);
 ocean.setHoverBlocker(menuHovered);
 vivid.addChild(ocean.view);
+ocean.skyLayer.addChild(landingConstellation());
 
 const credits: Credits = createCredits(app, ocean.setDistance);
 
@@ -350,7 +373,7 @@ const pageContents: Map<string, PageContent> = new Map([
 
 for (let index = 0; index < pageNames.length; index++) {
   const name: string = pageNames[index]!;
-  const page: Page = createPage(app, name, pageContents.get(name) ?? null);
+  const page: Page = createPage(pageContents.get(name) ?? null);
   pages.set(name, page);
   vivid.addChild(page.view);
 }
@@ -387,6 +410,10 @@ type Screen =
 
 let menuOpen: boolean = false;
 let currentPage: Page | null = null;
+let pageName: string = "";
+let route: string | null = null;
+let routeStart: number = 0;
+let routeBacks: number = 0;
 let screen: Screen = "landing";
 let booting: boolean = true;
 
@@ -466,6 +493,7 @@ function rise(leave: () => Promise<void>, leaveDuration: number): void {
 
 function openPage(page: Page, name: string): void {
   currentPage = page;
+  pageName = name;
   dive(name, () => showPage(app.ticker, page), "page");
 }
 
@@ -600,7 +628,8 @@ window.addEventListener(
   "keydown",
   (event: KeyboardEvent) => {
     const asked: boolean =
-      (event.key === "?" || event.code === "F1") &&
+      (event.key === ";" || event.code === "F1") &&
+      !typing() &&
       !event.ctrlKey &&
       !event.metaKey &&
       !event.altKey;
@@ -651,19 +680,7 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
   }
 
   if (event.key === "Escape" && screen === "credits") {
-    screen = "rising";
-    credits
-      .close()
-      .then(() => {
-        buttons.visible = true;
-        setSurfacesActive(true);
-        ocean.setWitchShown(true);
-        return enterButtons(app.ticker);
-      })
-      .then(() => {
-        navigate("menu");
-        screen = "main";
-      });
+    closeCredits();
     return;
   }
 
@@ -690,6 +707,22 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
     enterTerminal();
   }
 });
+
+function closeCredits(): void {
+  screen = "rising";
+  credits
+    .close()
+    .then(() => {
+      buttons.visible = true;
+      setSurfacesActive(true);
+      ocean.setWitchShown(true);
+      return enterButtons(app.ticker);
+    })
+    .then(() => {
+      navigate("menu");
+      screen = "main";
+    });
+}
 
 function returnToLanding(): void {
   screen = "outro";
@@ -891,3 +924,105 @@ document.addEventListener("navigate", (event: Event) => {
     container.dispatchEvent(new CustomEvent<string>("open", { detail: name }));
   });
 });
+
+function currentPlace(): string | null {
+  if (screen === "landing") {
+    return booting ? "terminal" : "landing";
+  }
+
+  if (screen === "main") {
+    return menuOpen ? "main" : null;
+  }
+
+  if (screen === "page") {
+    return pageName;
+  }
+
+  if (screen === "playing") {
+    return "play";
+  }
+
+  if (screen === "credits") {
+    return "credits";
+  }
+
+  return null;
+}
+
+function endRoute(): void {
+  route = null;
+  app.ticker.speed = 1;
+}
+
+function routeTo(target: string): void {
+  route = target;
+  routeStart = performance.now();
+  routeBacks = 0;
+  app.ticker.speed = routeSpeed;
+}
+
+function stepRoute(): void {
+  if (route === null) {
+    return;
+  }
+
+  const place: string | null = currentPlace();
+
+  if (performance.now() - routeStart > routeLimit || place === route) {
+    endRoute();
+    return;
+  }
+
+  if (place === null) {
+    return;
+  }
+
+  if (place === "terminal") {
+    if (terminal.finished()) {
+      leaveTerminal();
+    }
+
+    return;
+  }
+
+  if (place === "landing") {
+    if (route === "terminal") {
+      enterTerminal();
+    } else {
+      navigate("start");
+    }
+
+    return;
+  }
+
+  if (place === "main") {
+    if (route === "landing" || route === "terminal") {
+      returnToLanding();
+    } else {
+      navigate(route);
+    }
+
+    return;
+  }
+
+  if (place === "play") {
+    rise(playfield.hide, playfield.hideDuration());
+    return;
+  }
+
+  if (place === "credits") {
+    closeCredits();
+    return;
+  }
+
+  const page: Page = currentPage!;
+
+  if (routeBacks < backLimit && page.content?.back?.() === true) {
+    routeBacks++;
+    return;
+  }
+
+  rise(() => hidePage(app.ticker, page), hideTime(page));
+}
+
+app.ticker.add(stepRoute);

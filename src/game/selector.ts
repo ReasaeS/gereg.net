@@ -13,10 +13,11 @@ import {
   type Easing,
   type Spring,
 } from "../effects/tween/tween";
-import { getTheme, type Theme } from "../theme/theme";
+import { getTheme } from "../theme/theme";
 import { downKeys, shotKeys, upKeys } from "./input";
 import { createText, screenResolution } from "../ui/text";
 import { createGlide, mix, type Glide } from "../ui/motion";
+import { onTyping } from "../ui/typing";
 
 type Choice = {
   name: string;
@@ -60,33 +61,21 @@ const doorWidth: number = 208; // units
 const doorHeight: number = 464; // units
 const railWidth: number = 5; // units
 const railColor: string = "#01040f";
-const frameColor: string = "#1f4aa0";
-const skyBands: number = 24;
-const seaBands: number = 6;
-const seaTop: number = 404; // units
-const shadeAlpha: number = 0.5;
-const cardColor: string = "#0c2669";
-const cardAlpha: number = 0.88;
-const cardWidth: number = 178; // units
-const cardHeight: number = 40; // units
-const cardSlant: number = 10; // units
-const cardPadding: number = 8; // units
-const stripeWidth: number = 4; // units
-const wheelY: number = 262; // units
-const wheelTop: number = 80; // units
-const wheelBottom: number = 448; // units
-const wheelSpacing: number = 50; // units
-const wheelCurve: number = 5; // units
-const wheelShrink: number = 0.12;
-const wheelFade: number = 0.26;
-const wheelReach: number = 4.5;
-const slideDistance: number = 90; // units
-const cardStagger: number = 0.08;
-const fadeSpeed: number = 2;
+const slatHeight: number = 16; // units
+const slatColor: string = "#0c2669";
+const slatLight: string = "#1f4aa0";
+const slatShadow: string = "#020a26";
+const slatGroove: number = 2; // units
+const bottomHeight: number = 14; // units
+const bottomColor: string = "#020a26";
+const handleWidth: number = 44; // units
+const handleHeight: number = 5; // units
 const titleY: number = 30; // units
 const titleHeight: number = 26; // units
 const titleSlant: number = 8; // units
 const titleSize: number = 20; // px
+const listY: number = 82; // units
+const entryHeight: number = 44; // units
 const entryInset: number = 14; // units
 const entrySlant: number = 10; // units
 const nameSize: number = 20; // px
@@ -102,6 +91,7 @@ const downDuration: number = 700; // ms
 const upDuration: number = 450; // ms
 const rollEasing: Easing = cubicBezier(0.45, 0, 0.2, 1);
 const chooseKeys: Array<string> = ["Enter", "Space"];
+const visibleRows: number = 8;
 const arrowSize: number = 5; // units
 const arrowGap: number = 6; // units
 const searchY: number = 58; // units
@@ -111,64 +101,50 @@ const searchPadding: number = 8; // units
 const searchIcon: number = 4; // units
 const queryLength: number = 16;
 const caretBlink: number = 1; // s
-const searchPlaceholder: string = "PRESS / TO SEARCH";
+const searchPlaceholder: string = "SEARCH";
 
-function drawSky(sky: Graphics): void {
-  const theme: Theme = getTheme();
+function drawDoor(door: Graphics): void {
+  door.clear();
 
-  sky.clear();
-
-  for (let band = 0; band < skyBands; band++) {
-    sky
-      .rect(
-        0,
-        (band * seaTop) / skyBands,
-        doorWidth,
-        Math.ceil(seaTop / skyBands) + 1,
-      )
-      .fill(
-        band < skyBands / 2
-          ? mix(theme.skyTop, theme.skyMiddle, band / (skyBands / 2))
-          : mix(
-              theme.skyMiddle,
-              theme.horizon,
-              (band - skyBands / 2) / (skyBands / 2),
-            ),
-      );
+  for (let y = 0; y < doorHeight - bottomHeight; y += slatHeight) {
+    door
+      .rect(0, y, doorWidth, slatHeight)
+      .fill(slatColor)
+      .rect(0, y, doorWidth, slatGroove)
+      .fill(slatLight)
+      .rect(0, y + slatHeight - slatGroove, doorWidth, slatGroove)
+      .fill(slatShadow);
   }
 
-  for (let band = 0; band < seaBands; band++) {
-    sky
-      .rect(
-        0,
-        seaTop + (band * (doorHeight - seaTop)) / seaBands,
-        doorWidth,
-        Math.ceil((doorHeight - seaTop) / seaBands) + 1,
-      )
-      .fill(mix(theme.seaSurface, theme.seaDeep, band / (seaBands - 1)));
-  }
-
-  sky
-    .rect(0, 0, doorWidth, doorHeight)
-    .fill({ color: 0x000000, alpha: shadeAlpha })
-    .rect(0, seaTop, doorWidth, 1)
-    .fill(theme.light);
+  door
+    .rect(0, doorHeight - bottomHeight, doorWidth, bottomHeight)
+    .fill(bottomColor)
+    .rect(
+      doorWidth / 2 - handleWidth / 2,
+      doorHeight - bottomHeight / 2 - handleHeight / 2,
+      handleWidth,
+      handleHeight,
+    )
+    .fill(getTheme().accent);
 }
 
 function createSelector(ticker: Ticker): Selector {
   const view: Container = new Container();
   const door: Container = new Container();
-  const sky: Graphics = new Graphics();
+  const slats: Graphics = new Graphics();
   const rails: Graphics = new Graphics();
   const mask: Graphics = new Graphics();
   const badge: Graphics = new Graphics();
   const heading: Text = createText(titleSize, "#ffffff");
+  const highlight: Graphics = new Graphics();
   const list: Container = new Container();
   const listMask: Graphics = new Graphics();
   const arrows: Graphics = new Graphics();
   const scroll: Spring = { value: 0, velocity: 0 };
+  let scrollTarget: number = 0;
   const entries: Array<Entry> = new Array();
   let texts: Array<Text> = [heading];
+  const highlightY: Spring = { value: listY, velocity: 0 };
   const listeners: Array<(index: number) => void> = new Array();
   const selectListeners: Array<(index: number) => void> = new Array();
   let selected: number = 0;
@@ -176,6 +152,8 @@ function createSelector(ticker: Ticker): Selector {
   let shown: Array<number> = new Array();
   let query: string = "";
   let typing: boolean = false;
+
+  onTyping(() => typing);
   let caret: number = 0;
   const search: Container = new Container();
   const searchBox: Graphics = new Graphics();
@@ -187,40 +165,36 @@ function createSelector(ticker: Ticker): Selector {
   let textScale: number = 1;
 
   function place(): void {
-    view.alpha = Math.min(roll * fadeSpeed, 1);
+    door.y = -doorHeight * (1 - roll);
     view.visible = roll > 0;
+  }
 
-    for (let index = 0; index < entries.length; index++) {
-      const entry: Container = entries[index]!.view;
-      const offset: number = index - scroll.value;
-      const distance: number = Math.abs(offset);
-      const amount: number = Math.min(
-        Math.max(
-          roll * (1 + wheelReach * cardStagger) - distance * cardStagger,
-          0,
-        ),
-        1,
-      );
-
-      entry.visible = distance < wheelReach;
-      entry.zIndex = -distance;
-      entry.scale.set(1 - wheelShrink * Math.min(distance, wheelReach));
-      entry.alpha = Math.max(1 - wheelFade * distance, 0) * amount;
-      entry.position.set(
-        doorWidth / 2 +
-          wheelCurve * offset * offset +
-          slideDistance * (1 - amount) * (1 - amount),
-        wheelY +
-          Math.sign(offset) *
-            wheelSpacing *
-            (distance - (wheelShrink * distance * distance) / 2),
-      );
-    }
+  function entryY(index: number): number {
+    return listY + index * entryHeight;
   }
 
   function paint(): void {
     for (let index = 0; index < entries.length; index++) {
       entries[index]!.lit.set(index === selected ? 1 : 0);
+    }
+  }
+
+  function inView(index: number): boolean {
+    const top: number = entryY(index) - scroll.value;
+
+    return (
+      top >= listY - entryHeight / 2 &&
+      top <= listY + (visibleRows - 0.5) * entryHeight
+    );
+  }
+
+  function reveal(): void {
+    const row: number = selected - Math.round(scrollTarget / entryHeight);
+
+    if (row < 0) {
+      scrollTarget = selected * entryHeight;
+    } else if (row >= visibleRows) {
+      scrollTarget = (selected - visibleRows + 1) * entryHeight;
     }
   }
 
@@ -232,6 +206,7 @@ function createSelector(ticker: Ticker): Selector {
     const before: number = selected;
 
     selected = (index + entries.length) % entries.length;
+    reveal();
     paint();
 
     if (selected !== before) {
@@ -241,12 +216,14 @@ function createSelector(ticker: Ticker): Selector {
 
   function drawArrows(): void {
     const center: number = doorWidth / 2;
-    const top: number = wheelTop + arrowGap;
-    const bottom: number = wheelBottom - arrowGap;
+    const top: number = listY - arrowGap;
+    const bottom: number = listY + visibleRows * entryHeight + arrowGap - 4;
+    const more: number =
+      (entries.length - visibleRows) * entryHeight - scroll.value;
 
     arrows.clear();
 
-    if (selected > 0) {
+    if (scroll.value > 1) {
       arrows
         .poly([
           center - arrowSize,
@@ -256,10 +233,13 @@ function createSelector(ticker: Ticker): Selector {
           center,
           top - arrowSize,
         ])
-        .fill({ color: 0xffffff, alpha: 0.7 });
+        .fill({
+          color: 0xffffff,
+          alpha: Math.min(scroll.value / entryHeight, 1),
+        });
     }
 
-    if (selected < entries.length - 1) {
+    if (more > 1) {
       arrows
         .poly([
           center - arrowSize,
@@ -269,7 +249,7 @@ function createSelector(ticker: Ticker): Selector {
           center,
           bottom + arrowSize,
         ])
-        .fill({ color: 0xffffff, alpha: 0.7 });
+        .fill({ color: 0xffffff, alpha: Math.min(more / entryHeight, 1) });
     }
   }
 
@@ -282,6 +262,7 @@ function createSelector(ticker: Ticker): Selector {
   function reload(index: number): void {
     rebuild();
     selected = Math.max(shown.indexOf(index), 0);
+    reveal();
     paint();
     announce();
   }
@@ -308,7 +289,7 @@ function createSelector(ticker: Ticker): Selector {
     }
   }
 
-  drawSky(sky);
+  drawDoor(slats);
   badge
     .poly([
       entryInset + titleSlant,
@@ -323,8 +304,10 @@ function createSelector(ticker: Ticker): Selector {
     .fill(getTheme().accent);
   heading.anchor.set(0.5);
   heading.position.set(doorWidth / 2, titleY);
-  listMask.rect(0, wheelTop, doorWidth, wheelBottom - wheelTop).fill(0xffffff);
-  list.sortableChildren = true;
+  listMask
+    .rect(0, listY - 2, doorWidth, visibleRows * entryHeight)
+    .fill(0xffffff);
+  list.addChild(highlight);
   list.mask = listMask;
   searchText.anchor.set(0, 0.5);
   searchCount.anchor.set(1, 0.5);
@@ -343,7 +326,7 @@ function createSelector(ticker: Ticker): Selector {
       setTyping(true);
     }
   });
-  door.addChild(sky, badge, heading, search, list, listMask, arrows);
+  door.addChild(slats, badge, heading, search, list, listMask, arrows);
 
   function matches(choice: Choice): boolean {
     const needle: string = query.trim().toLowerCase();
@@ -378,7 +361,6 @@ function createSelector(ticker: Ticker): Selector {
 
     setScale(textScale);
     drawSearch();
-    place();
   }
 
   function setQuery(value: string): void {
@@ -386,7 +368,7 @@ function createSelector(ticker: Ticker): Selector {
     caret = 0;
     rebuild();
     selected = 0;
-    scroll.value = 0;
+    scrollTarget = 0;
     paint();
     announce();
   }
@@ -426,7 +408,7 @@ function createSelector(ticker: Ticker): Selector {
       ])
       .fill({ color: railColor, alpha: 0.55 + focus * 0.3 })
       .stroke({
-        color: mix(frameColor, getTheme().accent, focus),
+        color: mix(slatLight, getTheme().accent, focus),
         width: 1 + focus,
       })
       .circle(iconX, searchY - 1, searchIcon - 1)
@@ -455,7 +437,9 @@ function createSelector(ticker: Ticker): Selector {
       menu.remember === true
         ? Math.max(shown.indexOf(menu.selected ?? 0), 0)
         : 0;
-    scroll.value = selected;
+    scrollTarget = 0;
+    reveal();
+    scroll.value = scrollTarget;
     scroll.velocity = 0;
     paint();
     announce();
@@ -463,11 +447,10 @@ function createSelector(ticker: Ticker): Selector {
 
   function addEntry(choice: Choice, index: number): void {
     const entry: Container = new Container();
-    const card: Graphics = new Graphics();
     const name: Text = createText(nameSize, "#ffffff");
     const title: Text = createText(subtitleSize, "#ffffff");
-    const top: number = -cardHeight / 2;
-    const left: number = -cardWidth / 2 + cardSlant + cardPadding;
+    const top: number = entryY(index);
+    const left: number = entryInset + entrySlant + 6;
     const nameX: number = left + (choice.starred === true ? starSpace : 0);
     const star: Graphics = new Graphics();
 
@@ -481,36 +464,37 @@ function createSelector(ticker: Ticker): Selector {
         points.push(Math.sin(angle) * reach, -Math.cos(angle) * reach);
       }
 
-      star.poly(points).fill(getTheme().highlight);
-      star.position.set(left + starRadius, top + 2 + nameSize / 2 + 1);
+      star.poly(points).fill(getTheme().accent);
+      star.position.set(left + starRadius, top + 4 + nameSize / 2 + 1);
     }
 
     name.text = choice.name.toUpperCase();
-    name.position.set(nameX, top + 2);
+    name.position.set(nameX, top + 4);
     title.text = choice.title;
     title.style.fill = subtitleColor;
-    title.position.set(left, top + 2 + nameSize);
-    entry.addChild(card, star, name, title);
+    title.position.set(entryInset + entrySlant + 6, top + 4 + nameSize + 1);
+    entry.addChild(star, name, title);
     entry.eventMode = "static";
     entry.cursor = "pointer";
     entry.hitArea = new Rectangle(
-      -cardWidth / 2,
-      -cardHeight / 2,
-      cardWidth,
-      cardHeight,
+      entryInset,
+      top,
+      doorWidth - entryInset * 2,
+      entryHeight - 4,
     );
-    entry.on("pointertap", () => {
-      if (!active) {
-        return;
-      }
-
-      if (index === selected) {
-        choose();
-      } else {
+    entry.on("pointerover", () => {
+      if (active && inView(index)) {
         select(index);
       }
     });
-    drawCard(card, 0, getTheme());
+    entry.on("pointertap", () => {
+      if (!inView(index)) {
+        return;
+      }
+
+      select(index);
+      choose();
+    });
     list.addChild(entry);
     entries.push({
       view: entry,
@@ -521,44 +505,14 @@ function createSelector(ticker: Ticker): Selector {
           return;
         }
 
-        drawCard(card, amount, getTheme());
+        name.tint = mix(0xffffff, getTheme().menuSelected, amount);
+        title.tint = mix(0xffffff, getTheme().menuSelected, amount);
         name.x = nameX + amount * selectShift;
         title.x = left + amount * selectShift;
         star.x = left + starRadius + amount * selectShift;
       }),
     });
     texts.push(name, title);
-  }
-
-  function drawCard(card: Graphics, amount: number, theme: Theme): void {
-    const top: number = -cardHeight / 2;
-    const left: number = -cardWidth / 2;
-
-    card
-      .clear()
-      .poly([
-        left + cardSlant,
-        top,
-        -left,
-        top,
-        -left - cardSlant,
-        -top,
-        left,
-        -top,
-      ])
-      .fill({ color: mix(cardColor, theme.accent, amount), alpha: cardAlpha })
-      .stroke({ color: theme.highlight, width: 2, alpha: amount })
-      .poly([
-        left + cardSlant,
-        top,
-        left + cardSlant + stripeWidth,
-        top,
-        left + stripeWidth,
-        -top,
-        left,
-        -top,
-      ])
-      .fill(amount > 0.5 ? theme.highlight : theme.accent);
   }
 
   rails
@@ -568,7 +522,8 @@ function createSelector(ticker: Ticker): Selector {
   mask.rect(0, 0, doorWidth, doorHeight).fill(0xffffff);
   door.mask = mask;
   view.position.set(doorX, doorY);
-  view.addChild(door, mask, rails);
+  door.addChild(rails);
+  view.addChild(door, mask);
   view.eventMode = "none";
   view.on("wheel", (event: FederatedWheelEvent) => {
     if (active && event.deltaY !== 0) {
@@ -588,8 +543,19 @@ function createSelector(ticker: Ticker): Selector {
       return;
     }
 
-    smoothDamp(scroll, selected, highlightSmoothing, current.deltaMS / 1000);
-    place();
+    smoothDamp(
+      highlightY,
+      entryY(selected),
+      highlightSmoothing,
+      current.deltaMS / 1000,
+    );
+    smoothDamp(
+      scroll,
+      scrollTarget,
+      highlightSmoothing,
+      current.deltaMS / 1000,
+    );
+    list.y = -scroll.value;
     drawArrows();
 
     if (typing) {
@@ -601,6 +567,23 @@ function createSelector(ticker: Ticker): Selector {
         drawSearch();
       }
     }
+
+    const top: number = highlightY.value;
+    const bottom: number = top + entryHeight - 4;
+
+    highlight
+      .clear()
+      .poly([
+        entryInset + entrySlant,
+        top,
+        doorWidth - entryInset,
+        top,
+        doorWidth - entryInset - entrySlant,
+        bottom,
+        entryInset,
+        bottom,
+      ])
+      .fill(getTheme().highlight);
   });
 
   window.addEventListener(
@@ -722,8 +705,8 @@ function createSelector(ticker: Ticker): Selector {
     view: view,
     setMenu: setMenu,
     rollDown: () => {
-      scroll.value = selected;
-      scroll.velocity = 0;
+      highlightY.value = entryY(selected);
+      highlightY.velocity = 0;
       return rollTo(1, downDuration);
     },
     rollUp: () => rollTo(0, upDuration),

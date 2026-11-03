@@ -1,57 +1,55 @@
-import type { Sound } from "../../types";
-import {
-  applyTranscript,
-  editTranscript,
-  formatTranscript,
-} from "../../transcript";
+import type { Background, Sound } from "../../types";
+import { applyTranscript, formatTranscript } from "../../transcript";
 import type { Studio } from "../studio";
 
-const lineSpeedMin: number = 5; // chars/s
-const lineSpeedMax: number = 120; // chars/s
-
 function addCutsceneTab(studio: Studio): void {
-  const { creations, preview, addTab, changed, refresh, playScene } = studio;
-  const { slider, choice, section, buttonRow } = studio.kit;
-  const { cutscene } = studio.pick;
+  const {
+    creations,
+    preview,
+    addTab,
+    changed,
+    refresh,
+    playScene,
+    editTranscript,
+  } = studio;
+  const { choice, section, buttonRow } = studio.kit;
+  const { cutscene, backgroundById } = studio.pick;
 
   addTab(
     "cutscene",
     () => creations.cutscenes,
     [
-      ...section("Scene", [
+      ...section("Setting", [
         choice(
-          "Voice",
+          "Background",
           () => [
             { value: null, label: "None" },
-            ...creations.sounds.map((value: Sound) => ({
+            ...creations.backgrounds.map((value: Background) => ({
               value: value.id as string | null,
               label: value.name,
             })),
           ],
-          () => cutscene().voice,
+          () => cutscene().background,
           (value: string | null) => {
-            cutscene().voice = value;
+            cutscene().background = value;
+            preview.setBackground(backgroundById(value));
           },
-        ),
-        slider(
-          "Text speed",
-          lineSpeedMin,
-          lineSpeedMax,
-          5,
-          () => cutscene().speed,
-          (value: number) => {
-            cutscene().speed = value;
-          },
+          "background",
         ),
       ]),
       ...section("Transcript", [
         buttonRow("Edit transcript", () =>
           editTranscript(
-            formatTranscript(cutscene(), creations.characters),
+            formatTranscript(
+              cutscene(),
+              creations.characters,
+              creations.sounds,
+            ),
             (text: string) => {
               const problem: string | null = applyTranscript(
                 cutscene(),
                 creations.characters,
+                creations.sounds,
                 text,
               );
 
@@ -62,12 +60,13 @@ function addCutsceneTab(studio: Studio): void {
 
               return problem;
             },
+            creations.sounds.map((value: Sound) => value.name),
           ),
         ),
       ]),
     ],
     () => {
-      preview.setBackground(null);
+      preview.setBackground(backgroundById(cutscene().background));
       preview.setPlayerVisible(false);
       preview.setSigil(null);
       playScene();

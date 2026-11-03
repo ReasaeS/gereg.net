@@ -1,6 +1,6 @@
 import { Assets, Container, Rectangle, Sprite, Texture } from "pixi.js";
-import { getTexture } from "../images";
-import type { Curve, Pattern, Vector, Wave } from "../types";
+import { energyOf, type Energy } from "../energy";
+import type { Bullet, Curve, Pattern, Vector, Wave } from "../types";
 import { placeAlong, solidSpans } from "../geometry";
 import { drift, series, sway, swayVector } from "../kinematics";
 import { hitboxRadius } from "../../game/player";
@@ -13,7 +13,7 @@ type BulletLayers = {
   core: Texture;
 };
 
-type Bullet = {
+type Round = {
   color: Sprite;
   core: Sprite | null;
   x: number; // units
@@ -90,8 +90,9 @@ async function createBullets(
   bulletLayer: Container,
   coreLayer: Container,
   target: Vector,
+  findBullet: (id: string | null) => Bullet | null,
 ): Promise<Bullets> {
-  const bullets: Array<Bullet> = new Array();
+  const bullets: Array<Round> = new Array();
   const layers: BulletLayers = await loadBullet();
   let retired: number = 0;
 
@@ -106,7 +107,7 @@ async function createBullets(
   }
 
   function retireOldest(): void {
-    const oldest: Bullet = bullets[retired++]!;
+    const oldest: Round = bullets[retired++]!;
 
     oldest.age = Infinity;
     oldest.color.visible = false;
@@ -130,23 +131,20 @@ async function createBullets(
       retireOldest();
     }
 
-    const custom: Texture | null = getTexture(source.sprite);
-    const color: Sprite = new Sprite(custom ?? layers.color);
-    const core: Sprite | null =
-      custom === null ? new Sprite(layers.core) : null;
+    const look: Bullet | null = findBullet(source.bullet);
+    const energy: Energy | null = look === null ? null : energyOf(look);
+    const color: Sprite = new Sprite(energy?.glow ?? layers.color);
+    const core: Sprite = new Sprite(energy?.core ?? layers.core);
     const scale: number =
       source.size / Math.max(color.texture.width, color.texture.height);
 
     color.anchor.set(0.5);
     color.scale.set(scale);
-    color.tint = custom === null ? source.color : 0xffffff;
+    color.tint = energy === null ? source.color : 0xffffff;
     bulletLayer.addChild(color);
-
-    if (core !== null) {
-      core.anchor.set(0.5);
-      core.scale.set(scale);
-      coreLayer.addChild(core);
-    }
+    core.anchor.set(0.5);
+    core.scale.set(scale);
+    coreLayer.addChild(core);
 
     bullets.push({
       color: color,
@@ -301,13 +299,13 @@ async function createBullets(
     );
   }
 
-  function speedOf(bullet: Bullet): number {
+  function speedOf(bullet: Round): number {
     return bullet.curve === "sinusoidal"
       ? bullet.speed
       : bullet.speed + series(bullet.derivatives, bullet.age);
   }
 
-  function headingOf(bullet: Bullet): number {
+  function headingOf(bullet: Round): number {
     return bullet.curve === "sinusoidal"
       ? bullet.angle +
           (sway(bullet.angleWaves, bullet.age, bullet.launch + bullet.age) *
@@ -316,13 +314,13 @@ async function createBullets(
       : bullet.angle;
   }
 
-  function steady(bullet: Bullet): boolean {
+  function steady(bullet: Round): boolean {
     return bullet.curve === "sinusoidal"
       ? bullet.angleWaves.length === 0
       : bullet.derivatives.length === 0 && bullet.drift.length === 0;
   }
 
-  function advance(bullet: Bullet, seconds: number): void {
+  function advance(bullet: Round, seconds: number): void {
     const size: number = steady(bullet) ? seconds : stepSize;
     let left: number = seconds;
 
@@ -344,7 +342,7 @@ async function createBullets(
     }
   }
 
-  function render(bullet: Bullet): void {
+  function render(bullet: Round): void {
     const [swayX, swayY] =
       bullet.curve === "sinusoidal"
         ? swayVector(bullet.swayWaves, bullet.age, bullet.launch + bullet.age)
@@ -363,7 +361,7 @@ async function createBullets(
     }
   }
 
-  function gone(bullet: Bullet): boolean {
+  function gone(bullet: Round): boolean {
     return (
       bullet.age > bulletLife ||
       bullet.shownX < -bullet.marginX ||
@@ -377,7 +375,7 @@ async function createBullets(
     let write: number = 0;
 
     for (let index = 0; index < bullets.length; index++) {
-      const bullet: Bullet = bullets[index]!;
+      const bullet: Round = bullets[index]!;
       const fromX: number = bullet.shownX;
       const fromY: number = bullet.shownY;
 
@@ -412,7 +410,7 @@ async function createBullets(
     let hit: boolean = false;
 
     for (let index = 0; index < bullets.length; index++) {
-      const bullet: Bullet = bullets[index]!;
+      const bullet: Round = bullets[index]!;
       const reach: number = hitboxRadius + bullet.radius;
       const touching: boolean =
         (bullet.shownX - x) ** 2 + (bullet.shownY - y) ** 2 < reach * reach;
@@ -446,7 +444,7 @@ async function createBullets(
     let count: number = 0;
 
     for (let index = retired; index < bullets.length; index++) {
-      const bullet: Bullet = bullets[index]!;
+      const bullet: Round = bullets[index]!;
       const reach: number = grazeReach + bullet.radius;
 
       if (

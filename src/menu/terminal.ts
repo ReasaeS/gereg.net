@@ -334,5 +334,28 @@ function createTerminal(app: Application): Terminal {
   };
 }
 
-export { createTerminal };
+export {
+  createTerminal,
+  monoFamily,
+  screenMargin,
+  lineSize,
+  lineHeight,
+  textColor,
+  firstDelay,
+  lineDelay,
+  headerColor,
+  headerTextColor,
+  headerPadding,
+  footerColor,
+  dividerGlyph,
+  footerMark,
+  tagWidth,
+  barWidth,
+  barFull,
+  barEmpty,
+  barSmoothing,
+  tipInterval,
+  blinkPeriod,
+  blinkOn,
+};
 export type { Category, Terminal };

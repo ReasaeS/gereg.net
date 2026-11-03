@@ -3,9 +3,12 @@ import type { Difficulty, Frame, Rank } from "./types";
 type Cosmetic =
   | "background"
   | "wallpaper"
+  | "bullet"
+  | "vessel"
   | "palette"
   | "sigil"
   | "sound"
+  | "ost"
   | "character"
   | "cutscene";
 
@@ -44,10 +47,13 @@ const cosmetics: Array<Rarity<Cosmetic>> = [
   { value: "background", label: "Background", color: "#7ad8ff", tier: 1 },
   { value: "wallpaper", label: "Wallpaper", color: "#3b82ff", tier: 2 },
   { value: "palette", label: "Palette", color: "#fff27a", tier: 3 },
-  { value: "sigil", label: "Sigil", color: "#ff3b3b", tier: 4 },
-  { value: "sound", label: "SFX", color: "#b48cff", tier: 5 },
-  { value: "cutscene", label: "Cutscene", color: "#7ae38f", tier: 6 },
-  { value: "character", label: "Character", color: "#ffb347", tier: 7 },
+  { value: "bullet", label: "Bullet", color: "#5ff0d0", tier: 4 },
+  { value: "vessel", label: "Vessel", color: "#c8d2e6", tier: 5 },
+  { value: "sigil", label: "Sigil", color: "#ff3b3b", tier: 6 },
+  { value: "sound", label: "SFX", color: "#b48cff", tier: 7 },
+  { value: "ost", label: "OST", color: "#ff8fb1", tier: 8 },
+  { value: "cutscene", label: "Cutscene", color: "#7ae38f", tier: 9 },
+  { value: "character", label: "Character", color: "#ffb347", tier: 10 },
 ];
 
 const ranks: Array<Rarity<Rank>> = [
@@ -63,7 +69,7 @@ const attacks: Array<Rarity<Attack>> = [
 ];
 
 const defaultName: RegExp =
-  /^(Stage|Run|Game|Pattern|Enemy|Background|Wallpaper|Palette|Sigil|Spell|Sound|Character|Cutscene) (\d+)$/;
+  /^(Stage|Run|Game|Pattern|Enemy|Background|Wallpaper|Bullet|Vessel|Palette|Sigil|Spell|Sound|OST|Character|Cutscene) (\d+)$/;
 
 function rarityOf<T>(list: Array<Rarity<T>>, value: T): Rarity<T> {
   return list.find((entry: Rarity<T>) => entry.value === value) ?? list[0]!;

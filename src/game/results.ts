@@ -1,6 +1,5 @@
 import { Container, Graphics, type Text } from "pixi.js";
 import { getTheme } from "../theme/theme";
-import { promptName, usingPad } from "./input";
 import { createGlide, type Glide } from "../ui/motion";
 import { createShadowText, createText, screenResolution } from "../ui/text";
 
@@ -137,14 +136,6 @@ function createResults(width: number, height: number): Results {
     setScale(scale);
   }
 
-  function continueHint(): string {
-    return (
-      promptName("shot") +
-      " CONTINUE" +
-      (usingPad() ? "" : "  ·  R RETRY  ·  CTRL + C COPY")
-    );
-  }
-
   function copy(): void {
     const owner: number = ++copyToken;
 
@@ -156,7 +147,7 @@ function createResults(width: number, height: number): Results {
         hint.text = message;
         window.setTimeout(() => {
           if (owner === copyToken && open) {
-            hint.text = continueHint();
+            hint.text = "";
           }
         }, copiedTime);
       });
@@ -169,7 +160,7 @@ function createResults(width: number, height: number): Results {
     name: string,
   ): void {
     copyToken++;
-    hint.text = continueHint();
+    hint.text = "";
     summary = [
       "GEREG.NET",
       name,

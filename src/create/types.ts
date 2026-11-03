@@ -23,7 +23,7 @@ type Difficulty = "easy" | "normal" | "hard" | "lunatic";
 type Pattern = {
   id: string;
   name: string;
-  sprite: string | null;
+  bullet: string | null;
   size: number; // units
   color: string;
   count: number;
@@ -50,10 +50,34 @@ type Pattern = {
   swayWaves: Array<Wave<Vector>>; // units
 };
 
+type Look = "energy" | "sprite";
+
+type Shape = "orb" | "rice" | "star" | "kunai" | "ring" | "heart" | "diamond";
+
+type Bullet = {
+  id: string;
+  name: string;
+  look: Look;
+  pixels: string;
+  shape: Shape;
+  glow: string;
+  core: string;
+  coreSize: number; // of body
+  glowSize: number; // of body
+  length: number; // of width
+};
+
+type Vessel = {
+  id: string;
+  name: string;
+  scale: number;
+  pixels: string;
+};
+
 type Enemy = {
   id: string;
   name: string;
-  sprite: string | null;
+  vessel: string | null;
   color: string;
   size: number; // units
   rank: Rank;
@@ -130,17 +154,27 @@ type Character = {
   emotions: Array<Emotion>;
 };
 
+type Pace = {
+  from: number; // chars
+  to: number; // chars
+  speed: number; // chars/s
+};
+
 type Line = {
   id: string;
   character: string;
   emotion: string;
   text: string;
+  focus?: boolean;
+  sound?: string;
+  paces?: Array<Pace>;
 };
 
 type Cutscene = {
   id: string;
   name: string;
   voice: string | null;
+  background: string | null;
   speed: number; // chars/s
   lines: Array<Line>;
 };
@@ -154,13 +188,18 @@ type Background = {
   scroll: number; // units/s
 };
 
+type Motif =
+  "stripes" | "checks" | "dots" | "grid" | "diamonds" | "zigzag" | "waves";
+
 type Wallpaper = {
   id: string;
   name: string;
-  sprite: string | null;
+  motif: Motif;
   base: string;
-  stripe: string;
-  stripes: number; // units
+  ink: string;
+  size: number; // units
+  spacing: number; // units
+  angle: number; // deg
 };
 
 type Palette = {
@@ -213,6 +252,19 @@ type Game = {
   id: string;
   name: string;
   runs: Record<Difficulty, string | null>;
+  ost: string | null;
+};
+
+type OstTrack = {
+  sound: string | null;
+  background: string | null;
+  wallpaper: string | null;
+};
+
+type Ost = {
+  id: string;
+  name: string;
+  tracks: Array<OstTrack>;
 };
 
 type Creations = {
@@ -223,10 +275,13 @@ type Creations = {
   enemies: Array<Enemy>;
   backgrounds: Array<Background>;
   wallpapers: Array<Wallpaper>;
+  bullets: Array<Bullet>;
+  vessels: Array<Vessel>;
   palettes: Array<Palette>;
   sigils: Array<Sigil>;
   spells: Array<Spell>;
   sounds: Array<Sound>;
+  osts: Array<Ost>;
   characters: Array<Character>;
   cutscenes: Array<Cutscene>;
 };
@@ -240,9 +295,14 @@ export type {
   Difficulty,
   Vector,
   Pattern,
+  Look,
+  Shape,
+  Bullet,
+  Vessel,
   Enemy,
   Bar,
   Background,
+  Motif,
   Wallpaper,
   Palette,
   Ring,
@@ -253,6 +313,7 @@ export type {
   Sound,
   Emotion,
   Character,
+  Pace,
   Line,
   Cutscene,
   Spawn,
@@ -260,6 +321,8 @@ export type {
   Stage,
   Run,
   Game,
+  Ost,
+  OstTrack,
   Creations,
   Side,
 };

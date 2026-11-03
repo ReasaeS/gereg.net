@@ -5,8 +5,17 @@ import {
   type Texture,
   type Ticker,
 } from "pixi.js";
-import { createHud, type Hud } from "./hud";
-import type { Stage, Vector } from "../create/types";
+import { createHud, type Hud, type PlayerAction } from "./hud";
+import type {
+  Creations,
+  Game,
+  Ost,
+  Sound,
+  Stage,
+  Vector,
+} from "../create/types";
+import { loadCreations } from "../create/storage";
+import { ostTracks } from "../create/packs";
 import {
   fieldHeight,
   fieldWidth,
@@ -53,7 +62,6 @@ import {
   bombKeys,
   createKeyboard,
   focusKeys,
-  promptName,
   shotKeys,
   steering,
   type Keyboard,
@@ -80,13 +88,12 @@ const titleTime: number = 2200; // ms
 const attractDelay: number = 350; // ms
 const emptyTime: number = 2200; // ms
 const favouriteTime: number = 1200; // ms
-const previewDetail: string = "ENTER TO PLAY  ·  F TO FAVOURITE";
+const previewDetail: string = "";
 const modesMenu: Menu = {
   heading: "PLAY",
   remember: true,
   choices: [
-    { name: "Story", title: "Fight through the stages" },
-    { name: "Custom", title: "Play your games" },
+    { name: "Single player", title: "Play your games" },
     { name: "Multiplayer", title: "Play alongside others" },
     { name: "Zen", title: "Roam under your own skies" },
     { name: "Watch", title: "Sit back while your stages play" },
@@ -107,6 +114,11 @@ const stageChoice: Choice = {
   title: "Practice from this stage",
 };
 const quitChoice: Choice = { name: "Quit", title: "Leave this run" };
+const playerKeys: Map<string, PlayerAction> = new Map([
+  ["Comma", "previous"],
+  ["KeyP", "toggle"],
+  ["Period", "next"],
+]);
 const pauseMenu: Menu = {
   heading: "PAUSED",
   choices: [resumeChoice, retryChoice, quitChoice],
@@ -146,7 +158,7 @@ async function createPlayfield(
     fieldHeight,
   );
   const clock: Clock = createClock();
-  const zen: Zen = createZen(hud.setLook);
+  const zen: Zen = createZen(hud.setLook, hud.setTrack);
   const custom: Custom = await createCustom(texture, droneTexture);
   const banner: Banner = createBanner(fieldWidth, fieldHeight);
   const results: Results = createResults(fieldWidth, fieldHeight);
@@ -174,6 +186,14 @@ async function createPlayfield(
     remember: true,
     searchable: true,
   };
+  const zenMenu: Menu = {
+    heading: "ZEN",
+    choices: new Array(),
+    remember: true,
+    searchable: true,
+  };
+  let zenOsts: Array<Ost> = new Array();
+  let zenOst: Ost | null = null;
   let startPlan: Plan | null = null;
   let startBack: Menu = customMenu;
   let customing: boolean = false;
@@ -297,7 +317,7 @@ async function createPlayfield(
       customMenu.choices[index]?.starred === true
         ? "ADDED TO FAVOURITES"
         : "REMOVED FROM FAVOURITES",
-      "F TO TOGGLE",
+      "",
       false,
     );
     tween(app.ticker, favouriteTime, () => undefined).then(() => {
@@ -329,6 +349,74 @@ async function createPlayfield(
       event.preventDefault();
     }
   });
+
+  window.addEventListener("keydown", (event: KeyboardEvent) => {
+    const action: PlayerAction | undefined = playerKeys.get(event.code);
+
+    if (
+      view.visible &&
+      zenning &&
+      active &&
+      action !== undefined &&
+      !event.repeat &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      usePlayer(action);
+      event.preventDefault();
+    }
+  });
+
+  hud.onPlayer((action: PlayerAction) => {
+    if (zenning) {
+      usePlayer(action);
+    }
+  });
+
+  function usePlayer(action: PlayerAction): void {
+    if (action === "previous") {
+      zen.previousTrack();
+    } else if (action === "toggle") {
+      zen.toggleTrack();
+    } else {
+      zen.nextTrack();
+    }
+  }
+
+  function openZenMenu(): Promise<void> {
+    const creations: Creations = loadCreations();
+    const songs: number = creations.sounds.filter(
+      (sound: Sound) => sound.source === "file" && sound.file !== null,
+    ).length;
+
+    zenOsts = creations.osts;
+    zenMenu.choices = [
+      {
+        name: "Everything",
+        title:
+          songs === 0
+            ? "No songs yet, just the skies"
+            : songs + (songs === 1 ? " song" : " songs") + ", shuffled",
+      },
+      ...zenOsts.map((ost: Ost) => {
+        const tracks: number = ostTracks(creations, ost).length;
+        const game: Game | undefined = creations.games.find(
+          (candidate: Game) => candidate.ost === ost.id,
+        );
+
+        return {
+          name: ost.name,
+          title:
+            tracks +
+            (tracks === 1 ? " track" : " tracks") +
+            (game === undefined ? "" : "  ·  " + game.name),
+        };
+      }),
+    ];
+
+    return openMenu(zenMenu);
+  }
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (
@@ -636,11 +724,7 @@ async function createPlayfield(
     banner.show(
       leg.stage.name.toUpperCase(),
       watching
-        ? "WATCH  ·  " +
-            leg.difficulty.toUpperCase() +
-            "  ·  " +
-            promptName("shot") +
-            " TO SPEED UP  ·  ESC TO EXIT"
+        ? "WATCH  ·  " + leg.difficulty.toUpperCase()
         : (plan?.practice === true ? "PRACTICE  ·  " : "") +
             (leg.total > 1 || plan?.practice === true
               ? (plan?.name.toUpperCase() ?? "") +
@@ -885,7 +969,7 @@ async function createPlayfield(
       hud.setElapsed(0);
       hud.setZen(true);
       pilot.squad.setDrones(false);
-      zen.start();
+      zen.start(zenOst);
     }
 
     hud.setReadout(false, true);
@@ -909,18 +993,19 @@ async function createPlayfield(
   selector.onChoose((index: number) => {
     if (menu === modesMenu) {
       if (index === 0) {
-        openMenu(stagesMenu);
-      } else if (index === 1) {
         openCustomMenu();
-      } else if (index === 2) {
+      } else if (index === 1) {
         openMenu(multiplayerMenu);
-      } else if (index === 3) {
-        startPlaying(true);
+      } else if (index === 2) {
+        openZenMenu();
       } else {
         startWatch();
       }
     } else if (menu === stagesMenu) {
       startPlaying(false);
+    } else if (menu === zenMenu) {
+      zenOst = index === 0 ? null : (zenOsts[index - 1] ?? null);
+      startPlaying(true);
     } else if (menu === customMenu && custom.count() > 0) {
       if (customPick !== index) {
         difficultyMenu.selected = 0;
@@ -990,11 +1075,7 @@ async function createPlayfield(
       ...(customing && legOrder > 0 ? [stageChoice] : new Array<Choice>()),
       quitChoice,
     ];
-    banner.show(
-      "PAUSED",
-      (customing ? formatLength(runTime) + "  ·  " : "") + "ESC TO RESUME",
-      false,
-    );
+    banner.show("PAUSED", customing ? formatLength(runTime) : "", false);
     openMenu(pauseMenu);
   }
 
@@ -1055,7 +1136,12 @@ async function createPlayfield(
     }
 
     stopZen();
-    openMenu(wasZen ? modesMenu : stagesMenu);
+
+    if (wasZen) {
+      openZenMenu();
+    } else {
+      openMenu(stagesMenu);
+    }
   }
 
   function goBack(): boolean {

@@ -7,6 +7,7 @@ import {
   Text,
   type Application,
   type FederatedPointerEvent,
+  type FederatedWheelEvent,
   type Ticker,
 } from "pixi.js";
 import {
@@ -58,8 +59,8 @@ type Editor = {
   view: Container;
   setActive: (active: boolean) => void;
   enter?: () => void;
-  fullscreen?: () => boolean;
   topic?: () => Topic;
+  bounds?: () => Rectangle;
 };
 
 const maxUndo: number = 100;
@@ -134,6 +135,8 @@ const mixerNames: Array<string> = ["HUE", "SATURATION", "BRIGHTNESS"];
 const recentCount: number = 8;
 const recentStorageKey: string = "geregnet.recentColors";
 const previewScale: number = 3;
+const largestSide: number = 128; // px
+const zoomLevels: Array<number> = [1, 2, 4, 8];
 const previewTop: number = 20; // px
 const transparent: number = 0;
 const statusSize: number = 20; // px
@@ -578,10 +581,21 @@ function createPlate(
   return { view: view, size: size, active: active, lit: lit };
 }
 
-function createEditor(app: Application): Editor {
-  let drawing: Drawing = drawings[0]!;
+function createEditor(
+  app: Application,
+  list: Array<Drawing> = drawings,
+  store: (target: Drawing) => void = saveDrawing,
+  powered: boolean = true,
+  centered: boolean = false,
+  zoomable: boolean = false,
+): Editor {
+  let drawing: Drawing = list[0]!;
   const view: Container = new Container();
+  const layer: Container = new Container();
+  const extent: Rectangle = new Rectangle();
   const board: Container = new Container();
+  const lens: Container = new Container();
+  const lensMask: Graphics = new Graphics();
   const checker: Graphics = new Graphics();
   const canvas: Sprite = new Sprite(drawing.texture);
   const grid: Graphics = new Graphics();
@@ -598,7 +612,6 @@ function createEditor(app: Application): Editor {
   const caption: Text = createText(captionSize, iconColor);
   const slots: Container = new Container();
   const title: Text = createText(titleSize, "#ffffff");
-  const hint: Text = createText(hintSize, hintColor);
   const swatches: Container = new Container();
   const colorPanel: Container = new Container();
   const selection: Graphics = new Graphics();
@@ -633,6 +646,12 @@ function createEditor(app: Application): Editor {
   let swatchSize: number = swatchMaxSize;
   let powering: boolean = false;
   let hoveredAction: Action | null = null;
+  let laidSide: number = 0;
+  let zoom: number = 1;
+  let panX: number = 0;
+  let panY: number = 0;
+  let panning: Point | null = null;
+  const slotSprites: Array<Sprite> = new Array();
   const power: Power = createPower(app, playerTexture(), droneTexture());
   const drawingParts: Array<Container> = [
     board,
@@ -692,6 +711,10 @@ function createEditor(app: Application): Editor {
     mixer.visible = amount > 0;
   });
 
+  function side(): number {
+    return drawing.pixels.size;
+  }
+
   function slotsWidth(): number {
     return cartridges.length * (slotSize + slotGap) - slotGap;
   }
@@ -719,7 +742,7 @@ function createEditor(app: Application): Editor {
   }
 
   function save(): void {
-    saveDrawing(drawing);
+    store(drawing);
   }
 
   function remember(): void {
@@ -792,7 +815,7 @@ function createEditor(app: Application): Editor {
   function importSprite(): void {
     navigator.clipboard
       .readText()
-      .then(importText, () => tell("Press Ctrl+V to paste a sprite"));
+      .then(importText, () => tell("Could not read the clipboard"));
   }
 
   async function importImage(file: File | undefined): Promise<void> {
@@ -810,19 +833,19 @@ function createEditor(app: Application): Editor {
       const scratch: HTMLCanvasElement = document.createElement("canvas");
       const context: CanvasRenderingContext2D = scratch.getContext("2d")!;
       const scale: number = Math.min(
-        spriteSize / image.width,
-        spriteSize / image.height,
+        side() / image.width,
+        side() / image.height,
       );
       const width: number = Math.max(Math.round(image.width * scale), 1);
       const height: number = Math.max(Math.round(image.height * scale), 1);
 
-      scratch.width = spriteSize;
-      scratch.height = spriteSize;
+      scratch.width = side();
+      scratch.height = side();
       context.imageSmoothingEnabled = false;
       context.drawImage(
         image,
-        Math.floor((spriteSize - width) / 2),
-        Math.floor((spriteSize - height) / 2),
+        Math.floor((side() - width) / 2),
+        Math.floor((side() - height) / 2),
         width,
         height,
       );
@@ -831,8 +854,8 @@ function createEditor(app: Application): Editor {
       const pixels: Uint8ClampedArray = context.getImageData(
         0,
         0,
-        spriteSize,
-        spriteSize,
+        side(),
+        side(),
       ).data;
 
       remember();
@@ -866,8 +889,19 @@ function createEditor(app: Application): Editor {
     setPixel(drawing.pixels, x, y, value);
 
     if (mirror) {
-      setPixel(drawing.pixels, spriteSize - 1 - x, y, value);
+      setPixel(drawing.pixels, side() - 1 - x, y, value);
     }
+  }
+
+  function onBoard(event: FederatedPointerEvent): boolean {
+    board.toLocal(event.global, undefined, local);
+
+    return (
+      local.x >= 0 &&
+      local.y >= 0 &&
+      local.x < cell * side() &&
+      local.y < cell * side()
+    );
   }
 
   function cellAt(event: FederatedPointerEvent): Array<number> {
@@ -877,7 +911,12 @@ function createEditor(app: Application): Editor {
   }
 
   function begin(event: FederatedPointerEvent): void {
-    if (!active) {
+    if (!active || !onBoard(event)) {
+      return;
+    }
+
+    if (zoomable && event.button === 1) {
+      panning = new Point(event.global.x + panX, event.global.y + panY);
       return;
     }
 
@@ -911,7 +950,7 @@ function createEditor(app: Application): Editor {
       floodFill(drawing.pixels, x, y, value);
 
       if (mirror) {
-        floodFill(drawing.pixels, spriteSize - 1 - x, y, value);
+        floodFill(drawing.pixels, side() - 1 - x, y, value);
       }
 
       refresh();
@@ -936,8 +975,8 @@ function createEditor(app: Application): Editor {
   }
 
   function drawShape(x: number, y: number): void {
-    const toX: number = Math.min(Math.max(x, 0), spriteSize - 1);
-    const toY: number = Math.min(Math.max(y, 0), spriteSize - 1);
+    const toX: number = Math.min(Math.max(x, 0), side() - 1);
+    const toY: number = Math.min(Math.max(y, 0), side() - 1);
 
     if (shapeBase === null) {
       return;
@@ -969,9 +1008,20 @@ function createEditor(app: Application): Editor {
   }
 
   function move(event: FederatedPointerEvent): void {
+    if (panning !== null) {
+      panX = panning.x - event.global.x;
+      panY = panning.y - event.global.y;
+      applyZoom();
+      return;
+    }
+
     const [x, y] = cellAt(event) as [number, number];
 
-    drawHover(x, y);
+    if (stroking || onBoard(event)) {
+      drawHover(x, y);
+    } else {
+      clearHover();
+    }
 
     if (!stroking) {
       return;
@@ -990,6 +1040,8 @@ function createEditor(app: Application): Editor {
   }
 
   function end(): void {
+    panning = null;
+
     if (!stroking) {
       return;
     }
@@ -1012,17 +1064,40 @@ function createEditor(app: Application): Editor {
       return;
     }
 
-    const columns: Array<number> = mirror ? [x, spriteSize - 1 - x] : [x];
+    const columns: Array<number> = mirror ? [x, side() - 1 - x] : [x];
+
+    const span: number = cell * side();
+    const step: number = cell * zoom;
 
     for (const column of columns) {
+      const at: number = column * step - panX;
+
       hover.rect(column * cell, y * cell, cell, cell);
-      marks.rect(board.x + column * cell, board.y - rulerSize, cell, rulerSize);
+
+      if (at + step > 0 && at < span) {
+        marks.rect(
+          board.x + Math.max(at, 0),
+          board.y - rulerSize,
+          Math.min(at + step, span) - Math.max(at, 0),
+          rulerSize,
+        );
+      }
     }
 
-    hover.stroke({ color: hoverColor, width: 2, alpha: 0.8 });
-    marks
-      .rect(board.x - rulerSize, board.y + y * cell, rulerSize, cell)
-      .fill({ color: getTheme().accent, alpha: 0.7 });
+    const row: number = y * step - panY;
+
+    hover.stroke({ color: hoverColor, width: 2 / zoom, alpha: 0.8 });
+
+    if (row + step > 0 && row < span) {
+      marks.rect(
+        board.x - rulerSize,
+        board.y + Math.max(row, 0),
+        rulerSize,
+        Math.min(row + step, span) - Math.max(row, 0),
+      );
+    }
+
+    marks.fill({ color: getTheme().accent, alpha: 0.7 });
     readout.text =
       "X " + String(x).padStart(2, "0") + "  Y " + String(y).padStart(2, "0");
   }
@@ -1276,7 +1351,7 @@ function createEditor(app: Application): Editor {
   }
 
   function selectDrawing(index: number): void {
-    const next: Drawing | undefined = drawings[index];
+    const next: Drawing | undefined = list[index];
 
     if (next === undefined || (next === drawing && !powering)) {
       return;
@@ -1291,6 +1366,11 @@ function createEditor(app: Application): Editor {
     small.texture = drawing.texture;
     large.texture = drawing.texture;
     clearHover();
+
+    if (laidSide !== side()) {
+      layout();
+    }
+
     refresh();
   }
 
@@ -1315,18 +1395,23 @@ function createEditor(app: Application): Editor {
   function layoutRulers(boardSize: number): void {
     ticks.clear();
 
-    for (let line = 0; line <= spriteSize; line++) {
+    for (let line = 0; line <= side(); line++) {
       const major: boolean = line % gridMajor === 0;
       const length: number = major ? rulerMajor : rulerMinor;
-      const at: number = line * cell;
+      const atX: number = line * cell * zoom - panX;
+      const atY: number = line * cell * zoom - panY;
 
-      if (!major && cell < rulerMinCell) {
+      if (!major && cell * zoom < rulerMinCell) {
         continue;
       }
 
-      ticks
-        .rect(board.x + at - 0.5, board.y - length, 1, length)
-        .rect(board.x - length, board.y + at - 0.5, length, 1);
+      if (atX >= 0 && atX <= boardSize) {
+        ticks.rect(board.x + atX - 0.5, board.y - length, 1, length);
+      }
+
+      if (atY >= 0 && atY <= boardSize) {
+        ticks.rect(board.x - length, board.y + atY - 0.5, length, 1);
+      }
     }
 
     ticks
@@ -1338,22 +1423,69 @@ function createEditor(app: Application): Editor {
       const value: number = (index % (numbers.length / 2)) * gridMajor;
       const number: Text = numbers[index]!;
 
-      if (index < numbers.length / 2) {
-        number.anchor.set(0, 0);
-        number.position.set(
-          board.x + value * cell + 3,
-          board.y - rulerSize + 1,
-        );
+      const across: boolean = index < numbers.length / 2;
+      const at: number = value * cell * zoom - (across ? panX : panY);
+
+      number.anchor.set(0, 0);
+
+      if (across) {
+        number.position.set(board.x + at + 3, board.y - rulerSize + 1);
       } else {
-        number.anchor.set(0, 0);
-        number.position.set(
-          board.x - rulerSize + 1,
-          board.y + value * cell + 2,
-        );
+        number.position.set(board.x - rulerSize + 1, board.y + at + 2);
       }
 
-      number.visible = value < spriteSize;
+      number.visible =
+        value < side() && at >= 0 && at <= boardSize - rulerText * 2;
     }
+  }
+
+  function drawGrid(boardSize: number): void {
+    grid.clear();
+
+    for (let line = 1; line < side(); line++) {
+      const alpha: number = line % gridMajor === 0 ? gridMajorAlpha : gridAlpha;
+
+      grid
+        .moveTo(line * cell, 0)
+        .lineTo(line * cell, boardSize)
+        .moveTo(0, line * cell)
+        .lineTo(boardSize, line * cell)
+        .stroke({ color: gridColor, alpha: alpha, width: 1 / zoom });
+    }
+  }
+
+  function applyZoom(): void {
+    const boardSize: number = cell * side();
+
+    panX = Math.min(Math.max(panX, 0), boardSize * (zoom - 1));
+    panY = Math.min(Math.max(panY, 0), boardSize * (zoom - 1));
+    lens.scale.set(zoom);
+    lens.position.set(-panX, -panY);
+    drawGrid(boardSize);
+    layoutRulers(boardSize);
+    size.text =
+      side() + " × " + side() + " PX" + (zoom > 1 ? "  ·  " + zoom + "X" : "");
+  }
+
+  function zoomAt(event: FederatedWheelEvent): void {
+    if (!zoomable || !active) {
+      return;
+    }
+
+    const index: number = zoomLevels.indexOf(zoom);
+    const next: number =
+      zoomLevels[
+        Math.min(
+          Math.max(index + (event.deltaY < 0 ? 1 : -1), 0),
+          zoomLevels.length - 1,
+        )
+      ]!;
+    const local: Point = board.toLocal(event.global);
+
+    panX = ((local.x + panX) / zoom) * next - local.x;
+    panY = ((local.y + panY) / zoom) * next - local.y;
+    zoom = next;
+    applyZoom();
   }
 
   function layoutTools(boardSize: number): number {
@@ -1379,17 +1511,17 @@ function createEditor(app: Application): Editor {
   }
 
   function layout(): void {
+    laidSide = side();
+
     const width: number = app.screen.width;
     const height: number = app.screen.height;
     const boardSize: number =
       Math.max(
-        Math.floor(
-          Math.min(height * boardHeight, width * boardWidth) / spriteSize,
-        ),
+        Math.floor(Math.min(height * boardHeight, width * boardWidth) / side()),
         1,
-      ) * spriteSize;
+      ) * side();
 
-    cell = boardSize / spriteSize;
+    cell = boardSize / side();
     board.position.set(
       Math.round(width / 2 - boardSize / 2),
       Math.round(height * boardCenterY - boardSize / 2),
@@ -1397,33 +1529,24 @@ function createEditor(app: Application): Editor {
     canvas.scale.set(cell);
     checker.clear();
 
-    for (let y = 0; y < spriteSize; y++) {
-      for (let x = 0; x < spriteSize; x++) {
+    for (let y = 0; y < side(); y++) {
+      for (let x = 0; x < side(); x++) {
         checker
           .rect(x * cell, y * cell, cell, cell)
           .fill((x + y) % 2 === 0 ? checkerLight : checkerDark);
       }
     }
 
-    grid.clear();
-
-    for (let line = 1; line < spriteSize; line++) {
-      const alpha: number = line % gridMajor === 0 ? gridMajorAlpha : gridAlpha;
-
-      grid
-        .moveTo(line * cell, 0)
-        .lineTo(line * cell, boardSize)
-        .moveTo(0, line * cell)
-        .lineTo(boardSize, line * cell)
-        .stroke({ color: gridColor, alpha: alpha, width: 1 });
-    }
+    lensMask.clear().rect(0, 0, boardSize, boardSize).fill(0xffffff);
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+    applyZoom();
 
     frame
       .clear()
       .rect(0, 0, boardSize, boardSize)
       .stroke({ color: iconColor, width: frameWidth, alignment: 0 });
-    layoutRulers(boardSize);
-
     const toolsWidth: number = layoutTools(boardSize);
 
     tools.position.set(
@@ -1431,7 +1554,6 @@ function createEditor(app: Application): Editor {
       board.y,
     );
     readout.position.set(board.x, board.y + boardSize + readoutGap);
-    size.text = spriteSize + " × " + spriteSize + " PX";
     size.anchor.set(1, 0);
     size.position.set(board.x + boardSize, board.y + boardSize + readoutGap);
 
@@ -1489,8 +1611,16 @@ function createEditor(app: Application): Editor {
         (palette.length / paletteColumns) * (swatchSize + swatchGap) +
         panelGap,
     );
+    const previewZoom: number = Math.max(
+      Math.floor((spriteSize * previewScale) / side()),
+      1,
+    );
+
+    large.scale.set(previewZoom);
+    large.visible = previewZoom > 1;
+    previewLabel.text = previewZoom > 1 ? "1X  ·  " + previewZoom + "X" : "1X";
     small.position.set(0, previewTop);
-    large.position.set(spriteSize + panelGap / 2, previewTop);
+    large.position.set(side() + panelGap / 2, previewTop);
 
     const left: number = tools.x - benchPadding;
     const top: number = board.y - rulerSize - benchPadding;
@@ -1502,14 +1632,25 @@ function createEditor(app: Application): Editor {
     const bottom: number =
       Math.max(
         board.y + boardSize + readoutGap + readoutSize * 1.4,
-        preview.y + previewTop + spriteSize * previewScale,
+        preview.y + previewTop + side() * previewZoom,
       ) + benchPadding;
 
     drawBench(left, top, right - left, bottom - top);
     slots.position.set(left, top - slotBottom - slotSize);
+    extent.x = left;
+    extent.y = slots.y;
+    extent.width = right - left;
+    extent.height = bottom - slots.y;
+
+    if (centered) {
+      layer.position.set(
+        Math.round(width / 2 - extent.x - extent.width / 2),
+        Math.round(height / 2 - extent.y - extent.height / 2),
+      );
+    }
+
     title.y = slots.y + slotSize / 2;
     titleFade.snap(titleFade.value());
-    hint.position.set(right, slots.y + slotSize / 2);
     status.position.set(board.x + boardSize / 2, bottom + statusGap);
     drop.layout();
     power.layout(tools.x, board.y, right - benchPadding - tools.x, boardSize);
@@ -1717,10 +1858,10 @@ function createEditor(app: Application): Editor {
     tools.addChild(plate.view);
   }
 
-  for (let index = 0; index <= drawings.length; index++) {
+  for (let index = 0; index < list.length + (powered ? 1 : 0); index++) {
     const content: Container = new Container();
     const number: Text = createText(keySize, hintColor);
-    const target: Drawing | undefined = drawings[index];
+    const target: Drawing | undefined = list[index];
     const plate: Plate = createPlate(
       slotSize,
       content,
@@ -1746,7 +1887,8 @@ function createEditor(app: Application): Editor {
       const sprite: Sprite = new Sprite(target.texture);
 
       sprite.anchor.set(0.5);
-      sprite.scale.set(slotSprite);
+      sprite.scale.set((slotSprite * spriteSize) / target.pixels.size);
+      slotSprites.push(sprite);
       content.addChild(sprite);
     }
 
@@ -1758,18 +1900,16 @@ function createEditor(app: Application): Editor {
     slots.addChild(plate.view);
   }
 
-  for (let index = 0; index < 2 * (spriteSize / gridMajor + 1); index++) {
+  for (let index = 0; index < 2 * (largestSide / gridMajor + 1); index++) {
     const number: Text = createText(rulerText, hintColor);
 
-    number.text = String((index % (spriteSize / gridMajor + 1)) * gridMajor);
+    number.text = String((index % (largestSide / gridMajor + 1)) * gridMajor);
     numbers.push(number);
   }
 
   caption.anchor.set(0.5, 0);
   tools.addChild(caption);
   title.anchor.set(0, 0.5);
-  hint.text = "1 – " + (drawings.length + 1) + "  TO SWITCH";
-  hint.anchor.set(1, 0.5);
   rulers.addChild(ticks, marks, ...numbers, readout, size);
   inkChip.position.set(0, 0);
   inkLabel.anchor.set(0, 0.5);
@@ -1806,19 +1946,18 @@ function createEditor(app: Application): Editor {
   mixer.eventMode = "none";
   colorPanel.addChild(swatches, mixer);
   mixFade.snap(0);
-  large.scale.set(previewScale);
-  previewLabel.text = "1X  ·  3X";
   preview.addChild(previewLabel, small, large);
-  board.addChild(checker, canvas, grid, hover, frame);
+  lens.addChild(checker, canvas, grid, hover);
+  lens.mask = lensMask;
+  board.addChild(lens, lensMask, frame);
   status.anchor.set(0.5, 0);
   status.alpha = 0;
   mode.snap(0);
   clearHover();
-  view.addChild(
+  layer.addChild(
     bench,
     slots,
     title,
-    hint,
     board,
     rulers,
     tools,
@@ -1827,8 +1966,8 @@ function createEditor(app: Application): Editor {
     preview,
     status,
     power.view,
-    drop.view,
   );
+  view.addChild(layer, drop.view);
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
     const text: string | undefined = event.clipboardData?.getData("text");
@@ -1850,12 +1989,18 @@ function createEditor(app: Application): Editor {
   canvas.eventMode = "static";
   canvas.cursor = "crosshair";
   canvas.on("pointerdown", begin);
+  canvas.on("wheel", zoomAt);
   canvas.on("globalpointermove", move);
   canvas.on("pointerup", end);
   canvas.on("pointerupoutside", end);
   app.canvas.addEventListener("contextmenu", (event: MouseEvent) =>
     event.preventDefault(),
   );
+  app.canvas.addEventListener("mousedown", (event: MouseEvent) => {
+    if (zoomable && active && event.button === 1) {
+      event.preventDefault();
+    }
+  });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (!active) {
@@ -1867,9 +2012,9 @@ function createEditor(app: Application): Editor {
     if (!command && event.code.startsWith("Digit")) {
       const index: number = Number(event.code.slice(5)) - 1;
 
-      if (drawings[index] !== undefined) {
+      if (list[index] !== undefined) {
         selectDrawing(index);
-      } else if (index === drawings.length) {
+      } else if (powered && index === list.length) {
         showPower(true);
       } else {
         return;
@@ -1941,7 +2086,7 @@ function createEditor(app: Application): Editor {
   }
 
   function enter(): void {
-    drawing = drawings[0]!;
+    drawing = list[0]!;
     stroking = false;
     hoveredAction = null;
     showPower(false);
@@ -1949,6 +2094,23 @@ function createEditor(app: Application): Editor {
     canvas.texture = drawing.texture;
     small.texture = drawing.texture;
     large.texture = drawing.texture;
+
+    for (let index = 0; index < slotSprites.length; index++) {
+      const target: Drawing = list[index]!;
+
+      slotSprites[index]!.texture = target.texture;
+      slotSprites[index]!.scale.set(
+        (slotSprite * spriteSize) / target.pixels.size,
+      );
+    }
+
+    if (laidSide !== side()) {
+      layout();
+    }
+
+    zoom = 1;
+    panning = null;
+    applyZoom();
     canvasFade.snap(1);
     refresh();
     titleFade.snap(1);
@@ -1967,10 +2129,16 @@ function createEditor(app: Application): Editor {
     view: view,
     setActive: setActive,
     enter: enter,
-    fullscreen: () => true,
     topic: () => "customise",
+    bounds: () =>
+      new Rectangle(
+        layer.x + extent.x,
+        layer.y + extent.y,
+        extent.width,
+        extent.height,
+      ),
   };
 }
 
-export { createEditor };
+export { createEditor, slotSize };
 export type { Editor };

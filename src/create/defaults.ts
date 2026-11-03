@@ -4,6 +4,8 @@ import type {
   Bar,
   Background,
   Wallpaper,
+  Bullet,
+  Vessel,
   Palette,
   Ring,
   Sigil,
@@ -18,9 +20,13 @@ import type {
   Stage,
   Run,
   Game,
+  Ost,
   Difficulty,
   Creations,
 } from "./types";
+import { createPixels, encodePixels, type Pixels } from "../editor/pixels";
+import { spriteSize } from "../editor/drawings";
+import { drawBulletDefault, drawVesselDefault } from "../editor/default";
 
 function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -30,7 +36,7 @@ function defaultPattern(): Pattern {
   return {
     id: createId(),
     name: "Ring",
-    sprite: null,
+    bullet: null,
     size: 18,
     color: "#ff3b3b",
     count: 16,
@@ -62,7 +68,7 @@ function defaultEnemy(pattern: string | null): Enemy {
   return {
     id: createId(),
     name: "Fairy",
-    sprite: null,
+    vessel: null,
     color: "#7ad8ff",
     size: 28,
     rank: "regular",
@@ -96,11 +102,116 @@ function defaultWallpaper(): Wallpaper {
   return {
     id: createId(),
     name: "Midnight",
-    sprite: null,
+    motif: "stripes",
     base: "#030c2a",
-    stripe: "#0a2160",
-    stripes: 5,
+    ink: "#0a2160",
+    size: 4,
+    spacing: 10,
+    angle: 45,
   };
+}
+
+function defaultBullet(): Bullet {
+  return {
+    id: createId(),
+    name: "Spark",
+    look: "energy",
+    pixels: defaultBulletPixels(),
+    shape: "orb",
+    glow: "#ff3b3b",
+    core: "#ffffff",
+    coreSize: 0.5,
+    glowSize: 0.4,
+    length: 1,
+  };
+}
+
+const bulletSide: number = 16; // px
+
+function defaultBulletPixels(): string {
+  const pixels: Pixels = createPixels(bulletSide);
+
+  drawBulletDefault(pixels);
+
+  return encodePixels(pixels);
+}
+
+function repairBullet(bullet: Bullet): void {
+  const stale: Bullet & Record<string, unknown> = bullet;
+
+  bullet.look = bullet.look === "sprite" ? "sprite" : "energy";
+  bullet.pixels =
+    typeof bullet.pixels === "string" ? bullet.pixels : defaultBulletPixels();
+  delete stale["spin"];
+  delete stale["pulse"];
+}
+
+const vesselScales: Array<number> = [1, 2, 4];
+
+function vesselSide(vessel: Vessel): number {
+  return spriteSize * vessel.scale;
+}
+
+function defaultVesselPixels(): string {
+  const pixels: Pixels = createPixels(spriteSize);
+
+  drawVesselDefault(pixels);
+
+  return encodePixels(pixels);
+}
+
+function defaultVessel(): Vessel {
+  return {
+    id: createId(),
+    name: "Wasp",
+    scale: 1,
+    pixels: defaultVesselPixels(),
+  };
+}
+
+function repairVessel(vessel: Vessel): void {
+  const stale: Vessel & Record<string, unknown> = vessel;
+
+  vessel.scale = vessel.scale ?? 1;
+
+  if (
+    !vesselScales.includes(vessel.scale) ||
+    typeof vessel.pixels !== "string"
+  ) {
+    vessel.scale = 1;
+    vessel.pixels = defaultVesselPixels();
+  }
+
+  for (const key of [
+    "model",
+    "cells",
+    "body",
+    "trim",
+    "glow",
+    "pieces",
+    "structure",
+    "hull",
+    "length",
+    "width",
+    "cockpit",
+    "wings",
+    "span",
+    "engines",
+    "thrust",
+    "guns",
+    "compartments",
+    "mirror",
+  ]) {
+    delete stale[key];
+  }
+}
+
+function repairEnemy(enemy: Enemy): void {
+  const stale: Enemy & { sprite?: unknown; ship?: string | null } = enemy;
+
+  enemy.vessel = enemy.vessel ?? stale.ship ?? null;
+  delete stale.sprite;
+  delete stale.ship;
 }
 
 function defaultPalette(): Palette {
@@ -241,6 +352,34 @@ function defaultCharacter(
   };
 }
 
+function repairCharacter(character: Character): void {
+  const stale: Character & { mode?: unknown; look?: unknown } = character;
+
+  delete stale.mode;
+  delete stale.look;
+
+  for (const emotion of character.emotions) {
+    delete (emotion as Emotion & { face?: unknown }).face;
+  }
+}
+
+function repairWallpaper(wallpaper: Wallpaper): void {
+  const stale: Wallpaper & {
+    sprite?: unknown;
+    stripe?: string;
+    stripes?: number;
+  } = wallpaper;
+
+  wallpaper.motif = wallpaper.motif ?? "stripes";
+  wallpaper.ink = wallpaper.ink ?? stale.stripe ?? wallpaper.base;
+  wallpaper.size = wallpaper.size ?? Math.round((stale.stripes ?? 0) * 0.7);
+  wallpaper.spacing = wallpaper.spacing ?? 10;
+  wallpaper.angle = wallpaper.angle ?? 45;
+  delete stale.sprite;
+  delete stale.stripe;
+  delete stale.stripes;
+}
+
 function defaultLine(character: Character, text: string): Line {
   return {
     id: createId(),
@@ -258,6 +397,7 @@ function defaultCutscene(cast: Array<Character>): Cutscene {
     id: createId(),
     name: "Meeting",
     voice: null,
+    background: null,
     speed: 30,
     lines:
       first === undefined || second === undefined
@@ -348,10 +488,29 @@ function defaultGame(): Game {
     id: createId(),
     name: "Game",
     runs: { easy: null, normal: null, hard: null, lunatic: null },
+    ost: null,
+  };
+}
+
+function defaultOst(tracks: Array<string>): Ost {
+  return {
+    id: createId(),
+    name: "OST",
+    tracks: (tracks.length === 0 ? [null] : tracks).map(
+      (sound: string | null) => ({
+        sound: sound,
+        background: null,
+        wallpaper: null,
+      }),
+    ),
   };
 }
 
 export {
+  bulletSide,
+  repairBullet,
+  vesselScales,
+  vesselSide,
   defaultSpawnY,
   createId,
   defaultPattern,
@@ -359,6 +518,11 @@ export {
   defaultBar,
   defaultBackground,
   defaultWallpaper,
+  defaultBullet,
+  defaultVessel,
+  repairVessel,
+  repairEnemy,
+  repairWallpaper,
   defaultPalette,
   defaultRing,
   defaultSigil,
@@ -369,6 +533,7 @@ export {
   defaultSound,
   defaultEmotion,
   defaultCharacter,
+  repairCharacter,
   defaultLine,
   defaultCutscene,
   derivativeNames,
@@ -377,4 +542,5 @@ export {
   defaultStage,
   defaultRun,
   defaultGame,
+  defaultOst,
 };

@@ -1,8 +1,7 @@
-import { Container, Graphics, Sprite, type Texture } from "pixi.js";
-import { getTexture } from "../images";
-import type { Enemy, Pattern, Rank, Sigil, Spell } from "../types";
+import { Container, Graphics } from "pixi.js";
+import type { Enemy, Pattern, Rank, Vessel, Sigil, Spell } from "../types";
 import { drawSigil } from "../sigil";
-import { drawShape } from "../shape";
+import { drawBody } from "../vessel";
 import { motion, velocity, type Path } from "../kinematics";
 import type { Squad, Target } from "../../game/drones";
 import type { Bomb } from "../../game/bomb";
@@ -17,7 +16,6 @@ type Actor = {
   view: Container;
   sigil: Graphics;
   body: Graphics;
-  sprite: Sprite;
   x: number; // units
   y: number; // units
   path: Path;
@@ -43,6 +41,7 @@ type Lookups = {
   sigil: (id: string | null) => Sigil | null;
   spell: (id: string | null) => Spell | null;
   pattern: (id: string | null) => Pattern | null;
+  vessel: (id: string | null) => Vessel | null;
 };
 
 type Actors = {
@@ -102,19 +101,8 @@ function createActors(
 
   function dress(actor: Actor): void {
     const enemy: Enemy = actor.enemy;
-    const texture: Texture | null = getTexture(enemy.sprite);
 
-    actor.body.visible = texture === null;
-    actor.sprite.visible = texture !== null;
-
-    if (texture !== null) {
-      actor.sprite.texture = texture;
-      actor.sprite.scale.set(
-        enemy.size / Math.max(texture.width, texture.height),
-      );
-    }
-
-    drawShape(actor.body, enemy.color, enemy.size);
+    drawBody(actor.body, enemy, find.vessel(enemy.vessel));
 
     const found: Sigil | null = find.sigil(actor.spell?.sigil ?? null);
 
@@ -273,7 +261,6 @@ function createActors(
       view: new Container(),
       sigil: new Graphics(),
       body: new Graphics(),
-      sprite: new Sprite(),
       x: x,
       y: y,
       path: path,
@@ -290,8 +277,7 @@ function createActors(
       staged: staged,
     };
 
-    actor.sprite.anchor.set(0.5);
-    actor.view.addChild(actor.sigil, actor.body, actor.sprite);
+    actor.view.addChild(actor.sigil, actor.body);
     layer.addChild(actor.view);
     actors.push(actor);
     arm(actor, bar ?? 0);

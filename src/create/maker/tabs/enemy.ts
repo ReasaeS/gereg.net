@@ -1,4 +1,4 @@
-import type { Bar, Pattern, Rank, Sound, Spell } from "../../types";
+import type { Bar, Pattern, Rank, Vessel, Sound, Spell } from "../../types";
 import { defaultBar, limitBars } from "../../defaults";
 import { ranks } from "../../rarity";
 import { brightColors } from "../swatches";
@@ -12,7 +12,6 @@ function addEnemyTab(studio: Studio): void {
     addTab,
     changed,
     refresh,
-    spriteRow,
     renameDefault,
   } = studio;
   const { rarityOptions, slider, choice, colors, section, actionRow } =
@@ -29,15 +28,32 @@ function addEnemyTab(studio: Studio): void {
     () => creations.enemies,
     [
       ...section("Look", [
-        spriteRow(),
-        colors(
-          "Colour",
-          brightColors,
-          () => enemy().color,
-          (value: string) => {
-            enemy().color = value;
+        choice(
+          "Vessel",
+          () => [
+            { value: null, label: "None" },
+            ...creations.vessels.map((value: Vessel) => ({
+              value: value.id as string | null,
+              label: value.name,
+            })),
+          ],
+          () => enemy().vessel,
+          (value: string | null) => {
+            enemy().vessel = value;
           },
+          "vessel",
         ),
+        {
+          ...colors(
+            "Colour",
+            brightColors,
+            () => enemy().color,
+            (value: string) => {
+              enemy().color = value;
+            },
+          ),
+          shown: () => enemy().vessel === null,
+        },
         slider(
           "Size",
           12,
@@ -73,6 +89,7 @@ function addEnemyTab(studio: Studio): void {
           (value: string | null) => {
             enemy().pattern = value;
           },
+          "pattern",
         ),
         {
           ...choice(
@@ -90,6 +107,7 @@ function addEnemyTab(studio: Studio): void {
             (value: string | null) => {
               enemy().theme = value;
             },
+            "sound",
           ),
           shown: () => enemy().rank !== "regular",
         },
@@ -173,6 +191,7 @@ function addEnemyTab(studio: Studio): void {
             (value: string | null) => {
               bar().spell = value;
             },
+            "spell",
           ),
           shown: () => enemy().rank !== "regular",
         },

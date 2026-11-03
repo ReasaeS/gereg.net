@@ -1,8 +1,6 @@
-import { Container, Graphics, Sprite, type Texture } from "pixi.js";
-import { drawStripes } from "../game/field";
+import { Container, Graphics } from "pixi.js";
 import { createGlide, type Glide } from "../ui/motion";
 import { defaultWallpaper } from "./defaults";
-import { getTexture, loadTexture } from "./images";
 import type { Wallpaper } from "./types";
 
 type WallpaperView = {
@@ -11,7 +9,102 @@ type WallpaperView = {
 };
 
 const plainWallpaper: Wallpaper = defaultWallpaper();
-const painted: WeakMap<Container, Wallpaper> = new WeakMap();
+const spacingMin: number = 4; // units
+const waveSteps: number = 8;
+
+function drawMotif(
+  graphics: Graphics,
+  wallpaper: Wallpaper,
+  reach: number,
+  scale: number,
+): void {
+  const size: number = wallpaper.size * scale;
+  const spacing: number = Math.max(spacingMin, wallpaper.spacing) * scale;
+  const ink: string = wallpaper.ink;
+  const count: number = Math.ceil(reach / spacing);
+
+  if (wallpaper.motif === "stripes") {
+    for (let i = -count; i <= count; i++) {
+      graphics.rect(i * spacing - size / 2, -reach, size, reach * 2);
+    }
+
+    graphics.fill(ink);
+    return;
+  }
+
+  if (wallpaper.motif === "grid") {
+    for (let i = -count; i <= count; i++) {
+      graphics.rect(i * spacing - size / 2, -reach, size, reach * 2);
+      graphics.rect(-reach, i * spacing - size / 2, reach * 2, size);
+    }
+
+    graphics.fill(ink);
+    return;
+  }
+
+  if (wallpaper.motif === "zigzag" || wallpaper.motif === "waves") {
+    const rise: number = spacing / 2;
+
+    for (let row = -count; row <= count; row++) {
+      const y: number = row * spacing;
+
+      graphics.moveTo(-reach - spacing, y);
+
+      for (let x = -count - 1; x <= count; x++) {
+        if (wallpaper.motif === "zigzag") {
+          graphics.lineTo(x * spacing + spacing / 2, y - rise / 2);
+          graphics.lineTo((x + 1) * spacing, y);
+          continue;
+        }
+
+        for (let step = 1; step <= waveSteps; step++) {
+          const t: number = step / waveSteps;
+
+          graphics.lineTo(
+            (x + t) * spacing,
+            y - (Math.sin(t * Math.PI * 2) * rise) / 2,
+          );
+        }
+      }
+
+      graphics.stroke({ width: size, color: ink, join: "round" });
+    }
+
+    return;
+  }
+
+  for (let row = -count; row <= count; row++) {
+    for (let column = -count; column <= count; column++) {
+      if (wallpaper.motif === "checks" && (row + column) % 2 !== 0) {
+        continue;
+      }
+
+      const x: number =
+        column * spacing +
+        (wallpaper.motif === "checks" ? 0 : (Math.abs(row) % 2) * spacing) / 2;
+      const y: number = row * spacing;
+
+      if (wallpaper.motif === "dots") {
+        graphics.circle(x, y, size / 2);
+      } else if (wallpaper.motif === "diamonds") {
+        graphics.poly([
+          x,
+          y - size / 2,
+          x + size / 2,
+          y,
+          x,
+          y + size / 2,
+          x - size / 2,
+          y,
+        ]);
+      } else {
+        graphics.rect(x - size / 2, y - size / 2, size, size);
+      }
+    }
+  }
+
+  graphics.fill(ink);
+}
 
 function paintWallpaper(
   layer: Container,
@@ -21,46 +114,30 @@ function paintWallpaper(
   scale: number,
 ): void {
   const value: Wallpaper = wallpaper ?? plainWallpaper;
-  const stripes: Graphics = new Graphics();
-  const texture: Texture | null = getTexture(value.sprite);
+  const base: Graphics = new Graphics()
+    .rect(0, 0, width, height)
+    .fill(value.base);
 
   for (const child of layer.removeChildren()) {
     child.destroy();
   }
 
-  painted.set(layer, value);
-  drawStripes(
-    stripes,
-    width,
-    height,
-    value.base,
-    value.stripe,
-    value.stripes,
-    scale,
-  );
-  layer.addChild(stripes);
+  layer.addChild(base);
 
-  if (texture !== null) {
-    const image: Sprite = new Sprite(texture);
-    const mask: Graphics = new Graphics()
-      .rect(0, 0, width, height)
-      .fill(0xffffff);
-
-    image.anchor.set(0.5);
-    image.scale.set(Math.max(width / texture.width, height / texture.height));
-    image.position.set(width / 2, height / 2);
-    image.mask = mask;
-    layer.addChild(image, mask);
+  if (value.size <= 0) {
     return;
   }
 
-  if (value.sprite !== null) {
-    void loadTexture(value.sprite).then((loaded: Texture | null) => {
-      if (loaded !== null && !layer.destroyed && painted.get(layer) === value) {
-        paintWallpaper(layer, wallpaper, width, height, scale);
-      }
-    });
-  }
+  const motif: Graphics = new Graphics();
+  const mask: Graphics = new Graphics()
+    .rect(0, 0, width, height)
+    .fill(0xffffff);
+
+  drawMotif(motif, value, Math.hypot(width, height) / 2, scale);
+  motif.position.set(width / 2, height / 2);
+  motif.angle = value.angle;
+  motif.mask = mask;
+  layer.addChild(motif, mask);
 }
 
 function createWallpaperView(

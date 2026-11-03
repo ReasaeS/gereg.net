@@ -2,6 +2,7 @@ import type { Application, Container } from "pixi.js";
 import type {
   Background,
   Bar,
+  Bullet,
   Character,
   Creations,
   Cutscene,
@@ -9,10 +10,12 @@ import type {
   Enemy,
   Game,
   Keyframe,
+  Ost,
   Palette,
   Pattern,
   Ring,
   Run,
+  Vessel,
   Sigil,
   Sound,
   Spawn,
@@ -47,6 +50,7 @@ type Cursor = {
   ring: number;
   bar: number;
   emotion: number;
+  track: number;
 };
 
 type Selection = {
@@ -58,8 +62,11 @@ type Selection = {
   enemy: () => Enemy;
   background: () => Background;
   wallpaper: () => Wallpaper;
+  bullet: () => Bullet;
+  vessel: () => Vessel;
   palette: () => Palette;
   sound: () => Sound;
+  ost: () => Ost;
   sigil: () => Sigil;
   spell: () => Spell;
   cutscene: () => Cutscene;
@@ -73,6 +80,8 @@ type Selection = {
   enemyById: (id: string | null) => Enemy | null;
   backgroundById: (id: string | null) => Background | null;
   wallpaperById: (id: string | null) => Wallpaper | null;
+  bulletById: (id: string | null) => Bullet | null;
+  vesselById: (id: string | null) => Vessel | null;
   spellById: (id: string | null) => Spell | null;
   sigilById: (id: string | null) => Sigil | null;
   soundById: (id: string | null) => Sound | null;
@@ -106,6 +115,13 @@ type Studio = {
   pause: () => void;
   buildMarkers: () => void;
   placeMarkers: () => void;
+  paintVessel: () => void;
+  paintBullet: () => void;
+  editTranscript: (
+    initial: string,
+    apply: (text: string) => string | null,
+    sounds: Array<string>,
+  ) => void;
 };
 
 export type { Item, Tab, Cursor, Selection, Studio };

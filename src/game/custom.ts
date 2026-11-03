@@ -9,6 +9,8 @@ import { difficulties, rarityOf, type Rarity } from "../create/rarity";
 import { packLength, runStages } from "../create/packs";
 import type {
   Background,
+  Bullet,
+  Vessel,
   Creations,
   Difficulty,
   Game as GameCard,
@@ -177,6 +179,8 @@ async function createCustom(
     (id: string | null) => byId<Sigil>(creations.sigils, id),
     (id: string | null) => byId<Spell>(creations.spells, id),
     (id: string | null) => byId<Pattern>(creations.patterns, id),
+    (id: string | null) => byId<Bullet>(creations.bullets, id),
+    (id: string | null) => byId<Vessel>(creations.vessels, id),
   );
 
   preview.view.visible = false;

@@ -2,20 +2,18 @@ import {
   Container,
   Graphics,
   Rectangle,
-  Sprite,
   type FederatedPointerEvent,
   type Point,
-  type Texture,
 } from "pixi.js";
 import type { Enemy, Spawn } from "../types";
-import { getTexture } from "../images";
-import { drawShape } from "../shape";
+import { drawBody } from "../vessel";
 import { motion } from "../kinematics";
 import { getTheme } from "../../theme/theme";
 import { previewHeight, previewWidth } from "../preview/preview";
 import type { Studio } from "./studio";
 
 type Markers = {
+  view: Container;
   build: () => void;
   place: () => void;
 };
@@ -28,8 +26,9 @@ const trailSteps: number = 48;
 
 function createMarkers(studio: Studio): Markers {
   const { preview, cursor, changed, refresh, refreshControls } = studio;
-  const { keyframe, spawn, enemyById } = studio.pick;
+  const { keyframe, spawn, enemyById, vesselById } = studio.pick;
 
+  const view: Container = new Container();
   const markerLayer: Container = new Container();
   const guides: Graphics = new Graphics();
   const ghosts: Array<Container> = new Array();
@@ -45,20 +44,10 @@ function createMarkers(studio: Studio): Markers {
     for (const value of keyframe().spawns) {
       const ghost: Container = new Container();
       const found: Enemy | null = enemyById(value.enemy);
-      const texture: Texture | null = getTexture(found?.sprite ?? null);
+      const body: Graphics = new Graphics();
 
-      if (found !== null && texture !== null) {
-        const image: Sprite = new Sprite(texture);
-
-        image.anchor.set(0.5);
-        image.scale.set(found.size / Math.max(texture.width, texture.height));
-        ghost.addChild(image);
-      } else {
-        const body: Graphics = new Graphics();
-
-        drawShape(body, found?.color ?? "#6b6b85", found?.size ?? 24);
-        ghost.addChild(body);
-      }
+      drawBody(body, found, vesselById(found?.vessel ?? null));
+      ghost.addChild(body);
 
       ghost.alpha = markerAlpha;
       markerLayer.addChild(ghost);
@@ -142,7 +131,7 @@ function createMarkers(studio: Studio): Markers {
   }
 
   function dragTo(event: FederatedPointerEvent): void {
-    const local: Point = preview.overlay.toLocal(event.global);
+    const local: Point = view.toLocal(event.global);
 
     spawn().x = Math.min(Math.max(local.x / previewWidth, 0), 1);
     spawn().y = Math.min(Math.max(local.y / previewHeight, 0), 1);
@@ -151,11 +140,12 @@ function createMarkers(studio: Studio): Markers {
     refreshControls();
   }
 
-  preview.overlay.addChild(guides, markerLayer);
-  preview.overlay.eventMode = "static";
-  preview.overlay.hitArea = new Rectangle(0, 0, previewWidth, previewHeight);
-  preview.overlay.on("pointerdown", (event: FederatedPointerEvent) => {
-    const local: Point = preview.overlay.toLocal(event.global);
+  view.addChild(guides, markerLayer);
+  view.eventMode = "static";
+  view.hitArea = new Rectangle(0, 0, previewWidth, previewHeight);
+  preview.overlay.addChild(view);
+  view.on("pointerdown", (event: FederatedPointerEvent) => {
+    const local: Point = view.toLocal(event.global);
     const index: number = markerAt(local.x, local.y);
 
     if (index < 0) {
@@ -166,7 +156,7 @@ function createMarkers(studio: Studio): Markers {
     dragging = true;
     refresh();
   });
-  preview.overlay.on("globalpointermove", (event: FederatedPointerEvent) => {
+  view.on("globalpointermove", (event: FederatedPointerEvent) => {
     if (dragging) {
       dragTo(event);
     }
@@ -182,10 +172,10 @@ function createMarkers(studio: Studio): Markers {
     preview.seek(keyframe().time);
   }
 
-  preview.overlay.on("pointerup", endDrag);
-  preview.overlay.on("pointerupoutside", endDrag);
+  view.on("pointerup", endDrag);
+  view.on("pointerupoutside", endDrag);
 
-  return { build: buildMarkers, place: placeMarkers };
+  return { view: view, build: buildMarkers, place: placeMarkers };
 }
 
 export { createMarkers };

@@ -38,6 +38,7 @@ import {
   getResolution,
   getShake,
   getHitbox,
+  getAutosave,
   getFullscreen,
   getDim,
   getTv,
@@ -48,6 +49,7 @@ import {
   onResolution,
   onShake,
   onHitbox,
+  onAutosave,
   onFullscreen,
   onDim,
   onTv,
@@ -60,6 +62,7 @@ import {
   setResolution,
   setShake,
   setHitbox,
+  setAutosave,
   setFullscreen,
   setDim,
   setTv,
@@ -70,6 +73,7 @@ import {
 import type { PageContent } from "../menu/page";
 import { smoothDamp, type Spring } from "../effects/tween/tween";
 import { getTheme } from "../theme/theme";
+import { onTyping } from "../ui/typing";
 
 type Row = {
   view: Container;
@@ -391,12 +395,15 @@ function createSettings(app: Application): PageContent {
   const tvButtons: Array<Button> = new Array();
   const shakeButtons: Array<Button> = new Array();
   const hitboxButtons: Array<Button> = new Array();
+  const autosaveButtons: Array<Button> = new Array();
   const fullscreenButtons: Array<Button> = new Array();
   const rateButtons: Array<Button> = new Array();
   const resolutionButtons: Array<Button> = new Array();
   const navButtons: Array<Button> = new Array();
   const keyButtons: Array<Button> = new Array();
   let listening: Binding | null = null;
+
+  onTyping(() => listening !== null);
 
   function listen(binding: Binding): void {
     listening = listening === binding ? null : binding;
@@ -497,6 +504,17 @@ function createSettings(app: Application): PageContent {
           hitboxButtons,
         ),
         createSliderRow("background dim", getDim, setDim),
+      ],
+    },
+    {
+      name: "create",
+      rows: [
+        createToggleRow(
+          "transcript autosave",
+          getAutosave,
+          setAutosave,
+          autosaveButtons,
+        ),
       ],
     },
     {
@@ -810,6 +828,7 @@ function createSettings(app: Application): PageContent {
   onCrt(refresh);
   onShake(refresh);
   onHitbox(refresh);
+  onAutosave(refresh);
   onFullscreen(refresh);
   onDim(refresh);
   onTv(refresh);
