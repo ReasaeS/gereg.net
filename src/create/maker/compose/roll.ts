@@ -32,7 +32,7 @@ import {
   rollChoices,
   soloScore,
 } from "../../arrange";
-import { createText } from "../../../ui/text";
+import { createLabelText, fitText } from "../../../ui/text";
 import type { Option } from "../../../ui/widgets";
 import { createButton, createDropdown, type Button } from "./controls";
 import {
@@ -47,8 +47,6 @@ import {
   blackRow,
   hoverAlpha,
   isBlack,
-  createLabel,
-  fitLabel,
   labelSize,
   noteColor,
   noteEdge,
@@ -569,9 +567,9 @@ function createRoll(session: Session): Panel {
             : "";
 
       if (label !== "" && box.height >= labelSize) {
-        const word: Text = createLabel(labelSize, noteText);
+        const word: Text = createLabelText(labelSize, noteText, false);
 
-        fitLabel(word, label, box.width - 4);
+        fitText(word, label, box.width - 4);
         word.anchor.set(0, 0.5);
         word.position.set(box.x + 2, box.y + box.height / 2);
         words.addChild(word);
@@ -625,7 +623,7 @@ function createRoll(session: Session): Panel {
         continue;
       }
 
-      const word: Text = createText(smallSize, color);
+      const word: Text = createLabelText(smallSize, color);
 
       word.text =
         laneMode === "roll"
@@ -1235,7 +1233,7 @@ function createRoll(session: Session): Panel {
   }
 
   for (let row = 0; row < rowCount; row++) {
-    const text: Text = createLabel(smallSize + 1, "#1c2226");
+    const text: Text = createLabelText(smallSize + 1, "#1c2226", false);
 
     text.anchor.set(1, 0.5);
     keyTexts.push(text);

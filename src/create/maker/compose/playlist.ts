@@ -16,6 +16,7 @@ import {
   removeTrack,
   songBarsMost,
 } from "../../arrange";
+import { createLabelText, fitText } from "../../../ui/text";
 import { buttonHeight, createButton, type Button } from "./controls";
 import {
   areaLeft,
@@ -36,8 +37,6 @@ import {
   smallSize,
   textColor,
   clipSize,
-  createLabel,
-  fitLabel,
   type Panel,
   type Session,
 } from "./shared";
@@ -256,7 +255,7 @@ function createPlaylist(session: Session): Panel {
         x + clip.length * stepWidth,
         labelWidth + gridWidth,
       );
-      const name: Text = createLabel(clipSize, blackKey);
+      const name: Text = createLabelText(clipSize, blackKey, false);
 
       clipsDrawn
         .rect(
@@ -291,7 +290,7 @@ function createPlaylist(session: Session): Panel {
       marks(clip, pattern, x + clipInset, y + clipInset * 2 + headerHeight);
       name.anchor.set(0, 0.5);
       name.position.set(left + clipInset + 2, y + clipInset + headerHeight / 2);
-      fitLabel(name, pattern.name, right - left - clipInset * 2 - 4);
+      fitText(name, pattern.name, right - left - clipInset * 2 - 4);
       names.addChild(name);
     }
   }
@@ -550,7 +549,7 @@ function createPlaylist(session: Session): Panel {
   }
 
   for (let bar = 0; bar < shownBars; bar++) {
-    const text: Text = createLabel(smallSize + 1, dimColor);
+    const text: Text = createLabelText(smallSize + 1, dimColor);
 
     text.anchor.set(0, 0.5);
     rulerTexts.push(text);
@@ -558,7 +557,7 @@ function createPlaylist(session: Session): Panel {
   }
 
   for (let row = 0; row < shownTracks; row++) {
-    const text: Text = createLabel(clipSize, textColor);
+    const text: Text = createLabelText(clipSize, textColor);
     const remover: Button = createButton("×", removeWidth, () => {
       session.record();
       removeTrack(score(), firstTrack + row);

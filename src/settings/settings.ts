@@ -76,8 +76,8 @@ const tuningStorageKey: string = "geregnet.tvshape";
 const tuningDefaults: Map<Tuning, number> = new Map([
   ["curvature", 0.4],
   ["vignette", 0.3],
-  ["scanlines", 0.47],
-  ["fringe", 0.4],
+  ["scanlines", 0.3],
+  ["fringe", 0.15],
   ["glow", 0.35],
   ["flicker", 0.1],
 ]);

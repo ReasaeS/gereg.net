@@ -1,7 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 import type { Channel, Insert } from "../../types";
 import { delayHigh, delayLow, insertCount, volumeMost } from "../../arrange";
-import { createText } from "../../../ui/text";
+import { createLabelText } from "../../../ui/text";
 import {
   buttonHeight,
   createButton,
@@ -180,7 +180,7 @@ function createMixer(session: Session): Panel {
 
   for (let index = 0; index < insertCount; index++) {
     const strip: Container = new Container();
-    const number: Text = createText(smallSize, dimColor);
+    const number: Text = createLabelText(smallSize, dimColor);
     const name: Button = createButton("", stripWidth - stripInset * 2, () =>
       rename(insert(index).name, (value: string) => {
         session.record();
@@ -202,8 +202,8 @@ function createMixer(session: Session): Panel {
     );
     const knobs: Array<Knob> = new Array();
     const values: Array<Text> = new Array();
-    const level: Text = createText(smallSize, textColor);
-    const routed: Text = createText(smallSize, dimColor);
+    const level: Text = createLabelText(smallSize, textColor);
+    const routed: Text = createLabelText(smallSize, dimColor);
     const fader: Knob = createFader(
       faderHeight,
       0,
@@ -225,8 +225,8 @@ function createMixer(session: Session): Panel {
     strip.addChild(number, name.view);
     settings.forEach((setting: Setting, order: number) => {
       const y: number = knobsTop + order * knobGap;
-      const label: Text = createText(smallSize, dimColor);
-      const value: Text = createText(smallSize, textColor);
+      const label: Text = createLabelText(smallSize, dimColor);
+      const value: Text = createLabelText(smallSize, textColor);
       const knob: Knob = createKnob(
         knobRadius,
         setting.min,

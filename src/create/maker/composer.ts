@@ -9,7 +9,7 @@ import {
   soloScore,
 } from "../arrange";
 import { playTrack, previewNote, stopPreview, type Track } from "../sound";
-import { createText, screenResolution, sharpen } from "../../ui/text";
+import { createLabelText, screenResolution, sharpen } from "../../ui/text";
 import { createGlide, type Glide } from "../../ui/motion";
 import { hudHeight, hudWidth } from "../../game/field";
 import { createRack } from "./compose/rack";
@@ -94,11 +94,11 @@ function createComposer(
   const backdrop: Graphics = new Graphics();
   const board: Container = new Container();
   const overlay: Container = new Container();
-  const title: Text = createText(titleSize, textColor);
-  const info: Text = createText(infoSize, dimColor);
-  const tempo: Text = createText(tempoSize, accentColor);
-  const hint: Text = createText(hintSize, dimColor);
-  const keys: Text = createText(hintSize, dimColor);
+  const title: Text = createLabelText(titleSize, textColor);
+  const info: Text = createLabelText(infoSize, dimColor);
+  const tempo: Text = createLabelText(tempoSize, accentColor);
+  const hint: Text = createLabelText(hintSize, dimColor);
+  const keys: Text = createLabelText(hintSize, dimColor);
   const patternBar: Container = new Container();
   const amount: Glide = createGlide(0, (value: number) => {
     view.alpha = value;

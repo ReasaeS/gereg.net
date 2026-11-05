@@ -22,7 +22,7 @@ import {
   removeChannel,
   volumeMost,
 } from "../../arrange";
-import { createText } from "../../../ui/text";
+import { createLabelText } from "../../../ui/text";
 import type { Option } from "../../../ui/widgets";
 import {
   buttonHeight,
@@ -95,7 +95,7 @@ const fieldGap: number = 34; // units
 const bigKnob: number = 13; // units
 const knobRowHeight: number = 52; // units
 const toolGap: number = 6; // units
-const toolWidth: number = (fieldWidth - toolGap * 2) / 3; // units
+const toolWidth: number = (fieldWidth - toolGap) / 2; // units
 const addWidth: number = 110; // units
 const nameLength: number = 12;
 const doubleTap: number = 350; // ms
@@ -113,7 +113,7 @@ function createRack(session: Session): Panel {
   const playhead: Graphics = new Graphics();
   const settings: Container = new Container();
   const settingsBack: Graphics = new Graphics();
-  const heading: Text = createText(textSize, textColor);
+  const heading: Text = createLabelText(textSize, textColor);
   const pageList: Array<Button> = new Array();
   const rowList: Array<Row> = new Array();
   const add: Button = createButton("+ Add channel", addWidth, addOne);
@@ -241,7 +241,7 @@ function createRack(session: Session): Panel {
     true,
   );
   const renameButton: Button = createButton("Rename", toolWidth, renameOne);
-  const rollButton: Button = createButton("Piano roll", toolWidth, () =>
+  const rollButton: Button = createButton("Piano roll", fieldWidth, () =>
     session.show("roll"),
   );
   const deleteButton: Button = createButton("Delete", toolWidth, deleteOne);
@@ -251,13 +251,13 @@ function createRack(session: Session): Panel {
     "Sample",
     "Mixer insert",
   ].map((name: string) => {
-    const text: Text = createText(smallSize, dimColor);
+    const text: Text = createLabelText(smallSize, dimColor);
 
     text.text = name.toUpperCase();
     return text;
   });
   const knobLabels: Array<Text> = ["Volume", "Pan"].map((name: string) => {
-    const text: Text = createText(smallSize, dimColor);
+    const text: Text = createLabelText(smallSize, dimColor);
 
     text.text = name.toUpperCase();
     text.anchor.set(0.5, 0);
@@ -383,7 +383,7 @@ function createRack(session: Session): Panel {
         () => tap(channel),
         () => session.channel() === channel,
       );
-      const number: Text = createText(smallSize, dimColor);
+      const number: Text = createLabelText(smallSize, dimColor);
 
       panKnob.view.position.set(panX, middle);
       volumeKnob.view.position.set(volumeX, middle);
@@ -546,12 +546,10 @@ function createRack(session: Session): Panel {
     volume.refresh();
     pan.refresh();
     y += knobRowHeight;
+    rollButton.view.position.set(settingsInset, y);
+    y += buttonHeight + toolGap;
     renameButton.view.position.set(settingsInset, y);
-    rollButton.view.position.set(settingsInset + toolWidth + toolGap, y);
-    deleteButton.view.position.set(
-      settingsInset + (toolWidth + toolGap) * 2,
-      y,
-    );
+    deleteButton.view.position.set(settingsInset + toolWidth + toolGap, y);
   }
 
   function redraw(): void {

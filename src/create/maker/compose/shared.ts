@@ -1,5 +1,4 @@
-import type { Container, Text } from "pixi.js";
-import { createText } from "../../../ui/text";
+import type { Container } from "pixi.js";
 import type { Channel, Note, Score, Sequence } from "../../types";
 
 type View = "playlist" | "rack" | "roll" | "mixer";
@@ -35,17 +34,10 @@ const areaTop: number = 100; // units
 const areaBottom: number = 440; // units
 const areaWidth: number = areaRight - areaLeft; // units
 const areaHeight: number = areaBottom - areaTop; // units
-const textSize: number = 8; // units
-const smallSize: number = 7; // units
+const textSize: number = 9; // units
+const smallSize: number = 8; // units
 const labelSize: number = 10; // units
 const clipSize: number = 9; // units
-const labelFamily: Array<string> = [
-  "Segoe UI",
-  "Roboto",
-  "Helvetica Neue",
-  "Arial",
-  "sans-serif",
-];
 const windowColor: string = "#262e33";
 const toolbarColor: string = "#3a454b";
 const panelColor: string = "#323c42";
@@ -114,29 +106,6 @@ function inScale(score: Score, pitch: number, steps: Array<number>): boolean {
   return steps.includes((((pitch - 57 - score.key) % 12) + 12) % 12);
 }
 
-function createLabel(size: number, color: string): Text {
-  const text: Text = createText(size, color);
-
-  text.style.fontFamily = labelFamily;
-  text.style.fontStyle = "normal";
-  text.style.fontWeight = "700";
-  return text;
-}
-
-function fitLabel(text: Text, label: string, width: number): void {
-  text.text = label;
-
-  for (
-    let length = label.length - 1;
-    length > 0 && text.width > width;
-    length--
-  ) {
-    text.text = label.slice(0, length) + "…";
-  }
-
-  text.visible = text.width <= width;
-}
-
 function rename(current: string, apply: (name: string) => void): void {
   const typed: string | null = window.prompt("Name", current);
 
@@ -187,8 +156,6 @@ export {
   pitchName,
   isBlack,
   inScale,
-  createLabel,
-  fitLabel,
   rename,
 };
 export type { View, Mode, Session, Panel };

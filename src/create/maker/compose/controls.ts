@@ -7,7 +7,7 @@ import {
   type FederatedWheelEvent,
   type Point,
 } from "pixi.js";
-import { createText } from "../../../ui/text";
+import { createLabelText } from "../../../ui/text";
 import { createGlide, mix, type Glide } from "../../../ui/motion";
 import type { Option } from "../../../ui/widgets";
 
@@ -58,7 +58,7 @@ function createButton(
 ): Button {
   const view: Container = new Container();
   const back: Graphics = new Graphics();
-  const label: Text = createText(buttonSize, "#ffffff");
+  const label: Text = createLabelText(buttonSize, "#ffffff", false);
   const lit: Glide = createGlide(0, draw);
   const hover: Glide = createGlide(0, draw);
 
@@ -363,7 +363,7 @@ function createDropdown<T>(
     list.forEach((option: Option<T>, index: number) => {
       const row: Container = new Container();
       const shade: Graphics = new Graphics();
-      const text: Text = createText(buttonSize, "#ffffff");
+      const text: Text = createLabelText(buttonSize, "#ffffff", false);
       const chosen: boolean = option.value === get();
       const glow: Glide = createGlide(0, (amount: number) => {
         if (shade.destroyed) {
