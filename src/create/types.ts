@@ -120,30 +120,91 @@ type Spell = {
 
 type Waveform = "square" | "sine" | "sawtooth" | "triangle" | "noise";
 
-type SoundSource = "synth" | "file" | "song";
+type SoundSource = "synth" | "file" | "song" | "ambient";
 
 type Bassline = "sub" | "reese";
 
 type Singer = "lead" | "choir" | "bank" | "ritsu";
 
+type Tone =
+  | "saw"
+  | "square"
+  | "piano"
+  | "guitar"
+  | "bell"
+  | "organ"
+  | "strings"
+  | "flute"
+  | "hoover";
+
+type Note = {
+  step: number;
+  length: number; // steps
+  pitch: number; // midi
+  velocity: number;
+  roll: number;
+  vowel: number;
+};
+
+type Channel = {
+  id: string;
+  name: string;
+  instrument: string;
+  kit: number;
+  volume: number;
+  pan: number;
+  insert: number;
+  mute: boolean;
+  sample: string | null;
+  cut: boolean;
+};
+
+type Sequence = {
+  id: string;
+  name: string;
+  bars: number;
+  notes: Record<string, Array<Note>>;
+};
+
+type Clip = {
+  pattern: string;
+  track: number;
+  step: number;
+  length: number; // steps
+};
+
+type Insert = {
+  name: string;
+  volume: number;
+  pan: number;
+  mute: boolean;
+  grit: number;
+  space: number;
+  delay: number; // steps
+  filter: number;
+};
+
 type Score = {
   tempo: number; // bpm
   key: number; // semitones
-  bars: number;
   swing: number;
-  grit: number;
-  space: number;
-  bass: Bassline;
-  drums: Array<Array<number>>;
-  bassline: Array<number>;
-  pads: Array<number>;
-  kits: Array<number>;
-  mutes: Array<number>;
-  vocals: Array<number>;
-  vowels: Array<number>;
-  voice: number;
   singer: Singer;
   voicebank: Array<string | null>;
+  lyrics: string;
+  shared: boolean;
+  channels: Array<Channel>;
+  patterns: Array<Sequence>;
+  clips: Array<Clip>;
+  tracks: number;
+  inserts: Array<Insert>;
+};
+
+type Ambience = {
+  levels: Array<number>;
+  brightness: number;
+  motion: number;
+  length: number; // s
+  seed: number;
 };
 
 type Sound = {
@@ -162,6 +223,7 @@ type Sound = {
   vibratoRate: number; // Hz
   volume: number;
   score: Score;
+  ambience: Ambience;
 };
 
 type Side = "left" | "right";
@@ -337,7 +399,14 @@ export type {
   SoundSource,
   Bassline,
   Singer,
+  Tone,
+  Note,
+  Channel,
+  Sequence,
+  Clip,
+  Insert,
   Score,
+  Ambience,
   Sound,
   Emotion,
   Character,

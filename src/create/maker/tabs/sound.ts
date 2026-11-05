@@ -1,21 +1,14 @@
 import { Container, Graphics, Text } from "pixi.js";
-import type {
-  Bassline,
-  Singer,
-  Sound,
-  SoundSource,
-  Waveform,
-} from "../../types";
+import type { Singer, Sound, SoundSource, Waveform } from "../../types";
 import { drawSound, importAudio, loadAudio, playSound } from "../../sound";
+import { keyNames, swingMax, tempoMax, tempoMin, vowels } from "../../jungle";
 import {
-  barOptions,
-  keyNames,
-  resizeScore,
-  swingMax,
-  tempoMax,
-  tempoMin,
-  vowels,
-} from "../../jungle";
+  ambientLayers,
+  ambientLengthMax,
+  ambientLengthMin,
+  ambientPresets,
+  type Preset,
+} from "../../ambience";
 import { getTheme } from "../../../theme/theme";
 import { createText } from "../../../ui/text";
 import { fieldHeight, fieldWidth } from "../../../game/field";
@@ -33,10 +26,14 @@ const sourceOptions: Array<Option<SoundSource>> = [
   { value: "synth", label: "Synth" },
   { value: "file", label: "File" },
   { value: "song", label: "Song" },
+  { value: "ambient", label: "Ambience" },
 ];
-const bassOptions: Array<Option<Bassline>> = [
-  { value: "sub", label: "Sub" },
-  { value: "reese", label: "Reese" },
+const presetOptions: Array<Option<number>> = [
+  { value: -1, label: "Custom" },
+  ...ambientPresets.map((preset: Preset, index: number) => ({
+    value: index,
+    label: preset.name,
+  })),
 ];
 const singerOptions: Array<Option<Singer>> = [
   { value: "lead", label: "Lead" },
@@ -47,11 +44,8 @@ const singerOptions: Array<Option<Singer>> = [
 const keyOptions: Array<Option<number>> = keyNames.map(
   (name: string, index: number) => ({ value: index, label: name + " minor" }),
 );
-const barChoices: Array<Option<number>> = barOptions.map((bars: number) => ({
-  value: bars,
-  label: bars + (bars === 1 ? " bar" : " bars"),
-}));
 const soundDelay: number = 250; // ms
+const presetMatch: number = 0.001;
 const soundNameGap: number = 12; // units
 const soundNameSize: number = 8; // units
 const pitchMin: number = 40; // Hz
@@ -108,6 +102,42 @@ function addSoundTab(studio: Studio): SoundTab {
         hearSound();
       },
     );
+  }
+
+  function ambientSlider(
+    name: string,
+    min: number,
+    max: number,
+    step: number,
+    key: "brightness" | "motion" | "length",
+  ): Control {
+    return slider(
+      name,
+      min,
+      max,
+      step,
+      () => sound().ambience[key],
+      (value: number) => {
+        sound().ambience[key] = value;
+        hearSound();
+      },
+    );
+  }
+
+  function presetOf(value: Sound): number {
+    return ambientPresets.findIndex((preset: Preset) =>
+      preset.levels.every(
+        (level: number, index: number) =>
+          Math.abs((value.ambience.levels[index] ?? 0) - level) < presetMatch,
+      ),
+    );
+  }
+
+  function varyAmbience(): void {
+    sound().ambience.seed++;
+    changed();
+    refresh();
+    playSound(sound());
   }
 
   function randomSound(): void {
@@ -167,6 +197,10 @@ function addSoundTab(studio: Studio): SoundTab {
             composeSong,
           ),
           shown: () => sound().source === "song",
+        },
+        {
+          ...actionRow("Play", () => playSound(sound()), "Vary", varyAmbience),
+          shown: () => sound().source === "ambient",
         },
         soundSlider("Volume", 0.05, 1, 0.05, "volume"),
       ]),
@@ -232,24 +266,6 @@ function addSoundTab(studio: Studio): SoundTab {
               hearSound();
             },
           ),
-          choice(
-            "Length",
-            () => barChoices,
-            () => sound().score.bars,
-            (value: number) => {
-              resizeScore(sound().score, value);
-              hearSound();
-            },
-          ),
-          choice(
-            "Bass",
-            () => bassOptions,
-            () => sound().score.bass,
-            (value: Bassline) => {
-              sound().score.bass = value;
-              hearSound();
-            },
-          ),
           slider(
             "Swing",
             0,
@@ -258,17 +274,6 @@ function addSoundTab(studio: Studio): SoundTab {
             () => sound().score.swing,
             (value: number) => {
               sound().score.swing = value;
-              hearSound();
-            },
-          ),
-          slider(
-            "Grit",
-            0,
-            1,
-            0.05,
-            () => sound().score.grit,
-            (value: number) => {
-              sound().score.grit = value;
               hearSound();
             },
           ),
@@ -305,30 +310,47 @@ function addSoundTab(studio: Studio): SoundTab {
             ),
             shown: () => sound().score.singer === "bank",
           })),
-          slider(
-            "Vocals",
-            0,
-            1,
-            0.05,
-            () => sound().score.voice,
-            (value: number) => {
-              sound().score.voice = value;
-              hearSound();
-            },
-          ),
-          slider(
-            "Space",
-            0,
-            1,
-            0.05,
-            () => sound().score.space,
-            (value: number) => {
-              sound().score.space = value;
-              hearSound();
-            },
-          ),
         ],
         () => sound().source === "song",
+      ),
+      ...section(
+        "Ambience",
+        [
+          choice(
+            "Preset",
+            () => presetOptions,
+            () => presetOf(sound()),
+            (value: number) => {
+              if (value >= 0) {
+                sound().ambience.levels = [...ambientPresets[value]!.levels];
+                hearSound();
+              }
+            },
+          ),
+          ...ambientLayers.map((name: string, index: number) =>
+            slider(
+              name,
+              0,
+              1,
+              0.05,
+              () => sound().ambience.levels[index] ?? 0,
+              (value: number) => {
+                sound().ambience.levels[index] = value;
+                hearSound();
+              },
+            ),
+          ),
+          ambientSlider("Brightness", 0, 1, 0.05, "brightness"),
+          ambientSlider("Motion", 0, 1, 0.05, "motion"),
+          ambientSlider(
+            "Loop length",
+            ambientLengthMin,
+            ambientLengthMax,
+            1,
+            "length",
+          ),
+        ],
+        () => sound().source === "ambient",
       ),
       ...section(
         "Envelope",
@@ -366,12 +388,14 @@ function addSoundTab(studio: Studio): SoundTab {
     soundName.text =
       value.source === "file"
         ? (value.fileName || "NO FILE").toUpperCase()
-        : value.source === "song"
-          ? value.score.tempo +
-            " BPM  ·  " +
-            keyNames[value.score.key] +
-            " MINOR"
-          : "";
+        : value.source === "ambient"
+          ? "AMBIENCE  ·  " + value.ambience.length + " S LOOP"
+          : value.source === "song"
+            ? value.score.tempo +
+              " BPM  ·  " +
+              keyNames[value.score.key] +
+              " MINOR"
+            : "";
   }
 
   const audioPicker: HTMLInputElement = document.createElement("input");

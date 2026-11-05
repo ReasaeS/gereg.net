@@ -17,6 +17,7 @@ const ornamentLength: number = 0.16; // of screen width
 const ornamentGap: number = 30; // px
 const focusGap: number = 16; // px
 const headerY: number = 0.11; // of screen height
+const headerMargin: number = 24; // px
 
 function createTabs(
   app: Application,
@@ -139,6 +140,12 @@ function createTabs(
       tab.x -= (tabX - tabGap) / 2;
     }
 
+    const span: number =
+      tabX -
+      tabGap +
+      (ornamentGap + app.screen.width * ornamentLength + diamondSize) * 2;
+
+    view.scale.set(Math.min((app.screen.width - headerMargin * 2) / span, 1));
     view.position.set(
       Math.round(app.screen.width / 2),
       Math.round(app.screen.height * headerY),

@@ -113,7 +113,7 @@ function blankEntry(
   }
 
   if (kind === "sound") {
-    return defaultSound();
+    return { ...defaultSound(), source: deal.source ?? "synth" };
   }
 
   if (kind === "character") {

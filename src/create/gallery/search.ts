@@ -14,19 +14,11 @@ import {
   categoryList,
   categoryTypes,
   orderList,
-  orderNames,
   type Category,
   type Order,
   type Search,
 } from "./kinds";
-import {
-  cardInner,
-  createSerif,
-  detailColor,
-  diamond,
-  trim,
-  trimLit,
-} from "./style";
+import { cardInner, createSerif, diamond, trim, trimLit } from "./style";
 
 type SearchBar = {
   view: Container;
@@ -51,22 +43,24 @@ type Option = {
 
 const optionSize: number = 12; // px
 const optionGap: number = 24; // px
-const groupGap: number = 44; // px
 const rowGap: number = 34; // px
 const markY: number = 13; // px
 const markSize: number = 3; // px
 const optionHover: number = 1.06;
 const idleAlpha: number = 0.55;
-const fieldWidth: number = 260; // px
+const fieldWidth: number = 360; // px
 const fieldHeight: number = 26; // px
 const fieldPadding: number = 10; // px
 const fieldSize: number = 13; // px
 const fieldEnd: number = 4; // px
 const iconRadius: number = 5; // px
-const queryLength: number = 24;
+const queryLength: number = 64;
 const caretBlink: number = 1; // s
 const rowFade: number = 0.2; // s
-const placeholder: string = "SEARCH BY NAME";
+const placeholder: string = "SEARCH BY NAME · SORT: · SHOW:";
+const sortCommand: string = "sort:";
+const showCommand: string = "show:";
+const reverseWord: string = "reverse";
 
 function createOption(text: string, color: string, tap: () => void): Option {
   const view: Container = new Container();
@@ -147,47 +141,139 @@ function placeRow(items: Array<Container>, widths: Array<number>): number {
 function createSearchBar(app: Application, changed: () => void): SearchBar {
   const view: Container = new Container();
   const top: Container = new Container();
-  const bottom: Container = new Container();
+  const hints: Container = new Container();
   const field: Container = new Container();
   const box: Graphics = new Graphics();
   const icon: Graphics = new Graphics();
   const input: Text = createSerif(fieldSize, "#ffffff");
-  const sortLabel: Text = createSerif(optionSize, detailColor);
-  const showLabel: Text = createSerif(optionSize, detailColor);
-  const filters: Map<Category, Set<string>> = new Map();
   const focus: Glide = createGlide(0, drawField);
-  const bottomFade: Glide = createGlide(
-    1,
+  const hintFade: Glide = createGlide(
+    0,
     (value: number) => {
-      bottom.alpha = value;
+      hints.alpha = value;
+      hints.visible = value > 0;
     },
     rowFade,
   );
-  const orders: Array<Option> = orderList.map((order: Order) =>
-    createOption(orderNames.get(order)!, trimLit, () => setOrder(order)),
-  );
-  const reverse: Option = createOption("reverse", trimLit, () => {
-    reversed = !reversed;
-    paint();
-    changed();
-  });
-  let all: Option | null = null;
-  let types: Array<[Option, string]> = new Array();
+  let suggestions: Array<string> = new Array();
   let category: Category = categoryList[0]!;
   let query: string = "";
-  let order: Order = "rarity";
-  let reversed: boolean = false;
   let typing: boolean = false;
   let active: boolean = false;
   let caretTime: number = 0;
   let width: number = 0;
 
-  for (const value of categoryList) {
-    filters.set(value, new Set());
+  function tokens(): Array<string> {
+    return query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((token: string) => token !== "");
   }
 
-  function selection(): Set<string> {
-    return filters.get(category)!;
+  function typeLabels(): Array<Rarity<unknown>> {
+    return categoryTypes(category);
+  }
+
+  function parse(): Search {
+    const words: Array<string> = new Array();
+    const types: Set<string> = new Set();
+    let order: Order = "rarity";
+    let reversed: boolean = false;
+
+    for (const token of tokens()) {
+      if (token.startsWith(sortCommand)) {
+        const value: string = token.slice(sortCommand.length);
+
+        if (value === reverseWord) {
+          reversed = true;
+        } else if (orderList.includes(value as Order)) {
+          order = value as Order;
+        }
+      } else if (token.startsWith(showCommand)) {
+        for (const value of token.slice(showCommand.length).split(",")) {
+          const found: Rarity<unknown> | undefined = typeLabels().find(
+            (rarity: Rarity<unknown>) => rarity.label.toLowerCase() === value,
+          );
+
+          if (found !== undefined) {
+            types.add(found.label);
+          }
+        }
+      } else {
+        words.push(token);
+      }
+    }
+
+    if (types.size === typeLabels().length) {
+      types.clear();
+    }
+
+    return {
+      query: words.join(" "),
+      order: order,
+      reversed: reversed,
+      types: types,
+    };
+  }
+
+  function choices(): Array<[string, string]> {
+    const last: string = query.endsWith(" ")
+      ? ""
+      : (query.toLowerCase().split(/\s+/).pop() ?? "");
+    const all: Array<[string, string]> = last.startsWith(sortCommand)
+      ? [...orderList, reverseWord].map((value: string) => [
+          sortCommand + value,
+          trimLit,
+        ])
+      : last.startsWith(showCommand)
+        ? typeLabels().map((rarity: Rarity<unknown>) => [
+            showCommand + rarity.label.toLowerCase(),
+            rarity.color,
+          ])
+        : [
+            [sortCommand, trimLit],
+            [showCommand, trimLit],
+          ];
+
+    return all.filter(
+      ([token]: [string, string]) => token.startsWith(last) && token !== last,
+    );
+  }
+
+  function buildHints(): void {
+    for (const child of hints.removeChildren()) {
+      child.destroy({ children: true });
+    }
+
+    const found: Array<[string, string]> = choices();
+    const present: Array<string> = tokens();
+    const options: Array<Option> = found.map(
+      ([token, color]: [string, string]) =>
+        createOption(token, color, () => complete(token)),
+    );
+
+    suggestions = found.map(([token]: [string, string]) => token);
+
+    for (let index = 0; index < options.length; index++) {
+      options[index]!.lit = present.includes(found[index]![0]);
+      paintOption(options[index]!);
+      hints.addChild(options[index]!.view);
+    }
+
+    placeRow(
+      options.map((option: Option) => option.view),
+      options.map((option: Option) => option.label.width),
+    );
+    hints.scale.set(1);
+    hints.scale.set(Math.min(width / Math.max(hints.width, 1), 1));
+  }
+
+  function complete(token: string): void {
+    const words: Array<string> = query.split(" ");
+
+    words[words.length - 1] = token;
+    setQuery(words.join(" ") + (token.endsWith(":") ? "" : " "));
+    setTyping(true);
   }
 
   function drawField(amount: number): void {
@@ -225,6 +311,9 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
     typing = value && active;
     caretTime = 0;
     focus.set(typing ? 1 : 0);
+    hintFade.set(typing ? 1 : 0);
+    hints.eventMode = typing ? "static" : "none";
+    buildHints();
     drawInput();
   }
 
@@ -235,88 +324,9 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
 
     query = value.slice(0, queryLength);
     caretTime = 0;
+    buildHints();
     drawInput();
     changed();
-  }
-
-  function setOrder(value: Order): void {
-    if (value === order) {
-      return;
-    }
-
-    order = value;
-    paint();
-    changed();
-  }
-
-  function toggleType(label: string | null): void {
-    const chosen: Set<string> = selection();
-
-    if (label === null) {
-      chosen.clear();
-    } else if (chosen.has(label)) {
-      chosen.delete(label);
-    } else {
-      chosen.add(label);
-    }
-
-    if (chosen.size === types.length) {
-      chosen.clear();
-    }
-
-    paint();
-    changed();
-  }
-
-  function paint(): void {
-    const chosen: Set<string> = selection();
-
-    for (let index = 0; index < orders.length; index++) {
-      orders[index]!.lit = orderList[index] === order;
-      paintOption(orders[index]!);
-    }
-
-    reverse.lit = reversed;
-    paintOption(reverse);
-
-    if (all !== null) {
-      all.lit = chosen.size === 0;
-      paintOption(all);
-    }
-
-    for (const [option, label] of types) {
-      option.lit = chosen.has(label);
-      paintOption(option);
-    }
-  }
-
-  function buildTypes(): void {
-    for (const child of bottom.removeChildren()) {
-      if (child !== showLabel) {
-        child.destroy({ children: true });
-      }
-    }
-
-    all = createOption("all", trimLit, () => toggleType(null));
-    types = categoryTypes(category).map((rarity: Rarity<unknown>) => [
-      createOption(rarity.label, rarity.color, () => toggleType(rarity.label)),
-      rarity.label,
-    ]);
-    bottom.addChild(showLabel, all.view);
-
-    for (const [option] of types) {
-      bottom.addChild(option.view);
-    }
-
-    placeRow(
-      [showLabel, all.view, ...types.map(([option]) => option.view)],
-      [
-        showLabel.width,
-        all.label.width,
-        ...types.map(([option]) => option.label.width),
-      ],
-    );
-    paint();
   }
 
   function layout(available: number): void {
@@ -326,22 +336,14 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
       return;
     }
 
-    for (const row of [top, bottom]) {
-      row.scale.set(1);
-      row.scale.set(Math.min(width / Math.max(row.width, 1), 1));
-    }
+    top.scale.set(1);
+    top.scale.set(Math.min(width / Math.max(top.width, 1), 1));
+    buildHints();
   }
 
   function setCategory(value: Category): void {
-    if (value === category && all !== null) {
-      return;
-    }
-
     category = value;
-    buildTypes();
-    layout(width);
-    bottomFade.snap(0);
-    bottomFade.set(1);
+    buildHints();
   }
 
   function setActive(value: boolean): void {
@@ -354,13 +356,7 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
 
   function reset(): void {
     query = "";
-
-    for (const chosen of filters.values()) {
-      chosen.clear();
-    }
-
     setTyping(false);
-    paint();
   }
 
   icon
@@ -383,37 +379,12 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
   field.hitArea = new Rectangle(0, 0, fieldWidth, fieldHeight);
   field.pivot.set(fieldWidth / 2, fieldHeight / 2);
   field.on("pointertap", () => setTyping(true));
-  sortLabel.text = "SORT";
-  sortLabel.anchor.set(0.5);
-  showLabel.text = "SHOW";
-  showLabel.anchor.set(0.5);
-  top.addChild(field, sortLabel, reverse.view);
-
-  for (const option of orders) {
-    top.addChild(option.view);
-  }
-
-  const topItems: Array<Container> = [
-    field,
-    sortLabel,
-    ...orders.map((option: Option) => option.view),
-    reverse.view,
-  ];
-  const topWidths: Array<number> = [
-    fieldWidth + groupGap - optionGap,
-    sortLabel.width,
-    ...orders.map((option: Option) => option.label.width),
-    reverse.label.width + groupGap - optionGap,
-  ];
-
-  placeRow(topItems, topWidths);
-  field.x -= (groupGap - optionGap) / 2;
-  reverse.view.x += (groupGap - optionGap) / 2;
-  bottom.y = rowGap;
-  view.addChild(top, bottom);
+  top.addChild(field);
+  hints.y = rowGap;
+  hints.visible = false;
+  view.addChild(top, hints);
   drawField(0);
   drawInput();
-  buildTypes();
 
   app.ticker.add((ticker: Ticker) => {
     if (!typing) {
@@ -429,7 +400,12 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
       const bounds: Bounds = field.getBounds();
       const point: Point = app.renderer.events.pointer.global;
 
-      if (!bounds.containsPoint(point.x, point.y)) {
+      const hinted: Bounds = hints.getBounds();
+
+      if (
+        !bounds.containsPoint(point.x, point.y) &&
+        !hinted.containsPoint(point.x, point.y)
+      ) {
         setTyping(false);
       }
     }
@@ -473,6 +449,8 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
       if (event.key === "Escape") {
         setQuery("");
         setTyping(false);
+      } else if (event.key === "Tab" && suggestions.length > 0) {
+        complete(suggestions[0]!);
       } else if (
         event.key === "Enter" ||
         event.key === "Tab" ||
@@ -494,13 +472,12 @@ function createSearchBar(app: Application, changed: () => void): SearchBar {
   return {
     view: view,
     height: rowGap + optionSize,
-    search: () => ({
-      query: query,
-      order: order,
-      reversed: reversed,
-      types: selection(),
-    }),
-    filtering: () => query.trim() !== "" || selection().size > 0,
+    search: parse,
+    filtering: () => {
+      const search: Search = parse();
+
+      return search.query !== "" || search.types.size > 0;
+    },
     focused: () => typing,
     layout: layout,
     setCategory: setCategory,

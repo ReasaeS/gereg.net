@@ -1,16 +1,29 @@
 import type { Graphics } from "pixi.js";
-import type { Score, Sound } from "./types";
-import { effectiveVolume, type Channel } from "../settings/settings";
+import type { Channel as Instrument, Note, Score, Sound } from "./types";
+import { effectiveVolume, getSafe, type Channel } from "../settings/settings";
 import { readBlob, storeBlob } from "./images";
-import { renderScore, scoreLength } from "./jungle";
+import {
+  patchOf,
+  renderScore,
+  scoreLength,
+  stepsPerBar,
+  syllableNames,
+  syllablesOf,
+} from "./jungle";
+import { renderAmbience } from "./ambience";
 
 const drawRate: number = 11025; // Hz
 const drawDetail: number = 256;
 const noiseSeed: number = 12345;
 const buffers: Map<string, AudioBuffer> = new Map();
 const loading: Map<string, Promise<AudioBuffer | null>> = new Map();
-const scores: Map<string, Float32Array<ArrayBuffer>> = new Map();
+const scores: Map<string, Array<Float32Array<ArrayBuffer>>> = new Map();
 const scoreCache: number = 16;
+const previews: Map<string, Array<Float32Array<ArrayBuffer>>> = new Map();
+const previewCache: number = 48;
+const previewSteps: number = 4;
+const previewLead: number = 2; // steps
+let notePreview: AudioBufferSourceNode | null = null;
 const songMinimum: number = 90; // s
 const resampled: WeakMap<
   AudioBuffer,
@@ -23,7 +36,9 @@ const ritsuVoices: Array<string> = [
   "voices/ritsu/i.wav",
   "voices/ritsu/o.wav",
   "voices/ritsu/n.wav",
+  "voices/ritsu/e.wav",
 ];
+const lyricFolder: string = "voices/ritsu/lyrics/";
 let library: Array<Sound> = new Array();
 let context: AudioContext | null = null;
 
@@ -33,27 +48,43 @@ type Track = {
 };
 
 function isMusic(sound: Sound): boolean {
-  return sound.source === "file" || sound.source === "song";
+  return (
+    sound.source === "file" ||
+    sound.source === "song" ||
+    sound.source === "ambient"
+  );
 }
 
 function canPlay(sound: Sound): boolean {
   return (
-    sound.source === "song" || (sound.source === "file" && sound.file !== null)
+    sound.source === "song" ||
+    sound.source === "ambient" ||
+    (sound.source === "file" && sound.file !== null)
   );
 }
 
 function songLength(score: Score): number {
-  const loop: number = scoreLength(score);
+  return repeated(scoreLength(score));
+}
 
+function repeated(loop: number): number {
   return loop * Math.max(Math.ceil(songMinimum / loop), 1);
+}
+
+function trackLength(sound: Sound): number {
+  return sound.source === "ambient"
+    ? repeated(sound.ambience.length)
+    : songLength(sound.score);
 }
 
 function soundLength(sound: Sound): number {
   return sound.source === "song"
     ? songLength(sound.score)
-    : sound.source === "file"
-      ? (bufferOf(sound)?.duration ?? 0)
-      : sound.attack + sound.sustain + sound.decay;
+    : sound.source === "ambient"
+      ? sound.ambience.length
+      : sound.source === "file"
+        ? (bufferOf(sound)?.duration ?? 0)
+        : sound.attack + sound.sustain + sound.decay;
 }
 
 function synthLength(sound: Sound): number {
@@ -196,8 +227,55 @@ function voiceFiles(score: Score): Array<string | null> {
   );
 }
 
+function sampleSounds(score: Score): Array<Sound> {
+  const ids: Set<string> = new Set(
+    score.channels
+      .map((channel: Instrument) => channel.sample)
+      .filter((id: string | null): id is string => id !== null),
+  );
+
+  return library.filter(
+    (sound: Sound) =>
+      ids.has(sound.id) &&
+      (sound.source === "file" || sound.source === "synth"),
+  );
+}
+
+function sampleChoices(): Array<{ value: string | null; label: string }> {
+  return [
+    { value: null, label: "None" },
+    ...library
+      .filter(
+        (sound: Sound) => sound.source === "file" || sound.source === "synth",
+      )
+      .map((sound: Sound) => ({ value: sound.id, label: sound.name })),
+  ];
+}
+
+function lyricNames(score: Score): Array<string> {
+  return score.singer === "ritsu"
+    ? [...new Set(syllablesOf(score.lyrics))].filter((syllable: string) =>
+        syllableNames.includes(syllable),
+      )
+    : new Array();
+}
+
 function loadVoices(score: Score): Promise<unknown> {
-  return Promise.all(voiceFiles(score).map(loadAudio));
+  return Promise.all(
+    [
+      ...voiceFiles(score),
+      ...lyricNames(score).map(
+        (syllable: string) => lyricFolder + syllable + ".wav",
+      ),
+      ...sampleSounds(score).map((sound: Sound) => sound.file),
+    ].map(loadAudio),
+  );
+}
+
+function heard(score: Score, guarded: boolean): Score {
+  return guarded && getSafe() && score.shared && score.lyrics !== ""
+    ? { ...score, lyrics: "" }
+    : score;
 }
 
 function resample(
@@ -244,50 +322,134 @@ function voiceSamples(file: string | null, rate: number): Float32Array | null {
   return found;
 }
 
-function scoreSamples(score: Score, rate: number): Float32Array<ArrayBuffer> {
+function scoreSamples(
+  score: Score,
+  rate: number,
+  cache: Map<string, Array<Float32Array<ArrayBuffer>>> = scores,
+): Array<Float32Array<ArrayBuffer>> {
   const files: Array<string | null> = voiceFiles(score);
   const voices: Array<Float32Array | null> = files.map((file: string | null) =>
     voiceSamples(file, rate),
   );
+  const clips: Map<string, Float32Array> = new Map();
+
+  for (const syllable of lyricNames(score)) {
+    const samples: Float32Array | null = voiceSamples(
+      lyricFolder + syllable + ".wav",
+      rate,
+    );
+
+    if (samples !== null) {
+      clips.set(syllable, samples);
+    }
+  }
+
+  const samples: Map<string, Float32Array> = new Map();
+  const used: Array<string> = new Array();
+
+  for (const sound of sampleSounds(score)) {
+    const found: Float32Array | null =
+      sound.source === "file" ? voiceSamples(sound.file, rate) : null;
+
+    if (sound.source === "synth" || found !== null) {
+      used.push(
+        sound.id +
+          "=" +
+          (sound.source === "file" ? sound.file : JSON.stringify(sound)),
+      );
+    }
+
+    if (found !== null) {
+      samples.set(sound.id, found);
+    }
+  }
+
   const key: string =
     rate +
     ":" +
     JSON.stringify(score) +
     ":" +
+    used.join(",") +
+    ":" +
     files
       .map((file: string | null, index: number) =>
         voices[index] === null ? "" : file,
       )
-      .join(",");
-  const cached: Float32Array<ArrayBuffer> | undefined = scores.get(key);
+      .join(",") +
+    ":" +
+    [...clips.keys()].join(",");
+  const cached: Array<Float32Array<ArrayBuffer>> | undefined = cache.get(key);
 
   if (cached !== undefined) {
     return cached;
   }
 
-  const samples: Float32Array<ArrayBuffer> = renderScore(score, rate, voices);
-
-  scores.set(key, samples);
-
-  if (scores.size > scoreCache) {
-    scores.delete(scores.keys().next().value!);
+  for (const sound of sampleSounds(score)) {
+    if (sound.source === "synth") {
+      samples.set(sound.id, synthesize(sound, rate));
+    }
   }
+
+  const rendered: Array<Float32Array<ArrayBuffer>> = renderScore(
+    score,
+    rate,
+    voices,
+    clips,
+    samples,
+  );
+
+  remember(key, rendered, cache, cache === scores ? scoreCache : previewCache);
+
+  return rendered;
+}
+
+function remember(
+  key: string,
+  samples: Array<Float32Array<ArrayBuffer>>,
+  cache: Map<string, Array<Float32Array<ArrayBuffer>>> = scores,
+  limit: number = scoreCache,
+): void {
+  cache.set(key, samples);
+
+  if (cache.size > limit) {
+    cache.delete(cache.keys().next().value!);
+  }
+}
+
+function ambientSamples(
+  sound: Sound,
+  rate: number,
+): Array<Float32Array<ArrayBuffer>> {
+  const key: string = rate + ":ambience:" + JSON.stringify(sound.ambience);
+  const cached: Array<Float32Array<ArrayBuffer>> | undefined = scores.get(key);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const samples: Array<Float32Array<ArrayBuffer>> = [
+    renderAmbience(sound.ambience, rate),
+  ];
+
+  remember(key, samples);
 
   return samples;
 }
 
 function scoreBuffer(score: Score): AudioBuffer {
-  const samples: Float32Array<ArrayBuffer> = scoreSamples(
-    score,
-    audio().sampleRate,
-  );
+  return samplesBuffer(scoreSamples(score, audio().sampleRate));
+}
+
+function samplesBuffer(sides: Array<Float32Array<ArrayBuffer>>): AudioBuffer {
   const buffer: AudioBuffer = audio().createBuffer(
-    1,
-    samples.length,
+    sides.length,
+    sides[0]!.length,
     audio().sampleRate,
   );
 
-  buffer.copyToChannel(samples, 0);
+  sides.forEach((side: Float32Array<ArrayBuffer>, index: number) => {
+    buffer.copyToChannel(side, index);
+  });
 
   return buffer;
 }
@@ -310,6 +472,49 @@ function start(
   source.start();
 
   return source;
+}
+
+function previewNote(score: Score, channel: Instrument, note: Note): void {
+  const step: number =
+    patchOf(channel.instrument).family === "vocal" ? previewLead : 0;
+  const preview: Score = {
+    ...score,
+    channels: [{ ...channel, mute: false }],
+    patterns: [
+      {
+        id: "preview",
+        name: "",
+        bars: 1,
+        notes: {
+          [channel.id]: [
+            {
+              ...note,
+              step: step,
+              length: Math.min(note.length, previewSteps),
+            },
+          ],
+        },
+      },
+    ],
+    clips: [{ pattern: "preview", track: 0, step: 0, length: stepsPerBar }],
+  };
+
+  void loadVoices(preview).then(() => {
+    try {
+      if (audio().state === "suspended") {
+        void audio().resume();
+      }
+
+      notePreview?.stop();
+      notePreview = start(
+        samplesBuffer(scoreSamples(preview, audio().sampleRate, previews)),
+        1,
+        "soundtrack",
+      );
+    } catch {
+      console.warn("Could not preview the note");
+    }
+  });
 }
 
 function stopPreview(): void {
@@ -351,6 +556,17 @@ function playSound(sound: Sound): () => void {
       return stop;
     }
 
+    if (sound.source === "ambient") {
+      stopPreview();
+      songPreview = stop;
+      source = start(
+        samplesBuffer(ambientSamples(sound, audio().sampleRate)),
+        sound.volume,
+        "soundtrack",
+      );
+      return stop;
+    }
+
     const samples: Float32Array<ArrayBuffer> = synthesize(
       sound,
       audio().sampleRate,
@@ -374,7 +590,9 @@ function playTrack(
   sound: Sound,
   ended: (played: boolean) => void,
   offset: number = 0,
+  guarded: boolean = false,
 ): Track {
+  const score: Score = heard(sound.score, guarded);
   let source: AudioBufferSourceNode | null = null;
   let stopped: boolean = false;
   let startedAt: number = 0;
@@ -385,8 +603,12 @@ function playTrack(
 
   const ready: Promise<AudioBuffer | null> =
     sound.source === "song"
-      ? loadVoices(sound.score).then(() => scoreBuffer(sound.score))
-      : loadAudio(sound.file);
+      ? loadVoices(score).then(() => scoreBuffer(score))
+      : sound.source === "ambient"
+        ? Promise.resolve(
+            samplesBuffer(ambientSamples(sound, audio().sampleRate)),
+          )
+        : loadAudio(sound.file);
 
   void ready.then((buffer: AudioBuffer | null) => {
     if (stopped) {
@@ -410,8 +632,8 @@ function playTrack(
       }
     };
 
-    if (sound.source === "song") {
-      const length: number = songLength(sound.score);
+    if (sound.source === "song" || sound.source === "ambient") {
+      const length: number = trackLength(sound);
       const begin: number = offset % length;
 
       node.loop = true;
@@ -449,8 +671,10 @@ function drawSound(
     sound.source === "synth"
       ? synthesize(sound, drawRate)
       : sound.source === "song"
-        ? scoreSamples(sound.score, drawRate)
-        : (buffer?.getChannelData(0) ?? new Float32Array(1));
+        ? scoreSamples(sound.score, drawRate)[0]!
+        : sound.source === "ambient"
+          ? ambientSamples(sound, drawRate)[0]!
+          : (buffer?.getChannelData(0) ?? new Float32Array(1));
   const scale: number = sound.source === "synth" ? 1 : sound.volume;
   const columns: number = Math.max(Math.floor(width / 2), 1);
   const stride: number = Math.max(
@@ -502,6 +726,8 @@ export {
   stopPreview,
   useSounds,
   playTrack,
+  previewNote,
+  sampleChoices,
   drawSound,
 };
 export type { Track };

@@ -13,6 +13,7 @@ import type {
   Rank,
   Sigil,
   Sound,
+  SoundSource,
   Run,
   Vessel,
   Spell,
@@ -20,16 +21,21 @@ import type {
   Wallpaper,
 } from "../types";
 import {
+  audio,
   cosmetics,
   difficulties,
+  story,
+  visuals,
   attacks,
   defaultName,
   forms,
   gameRarity,
   ranks,
   rarityOf,
+  type Cosmetic,
   type Rarity,
 } from "../rarity";
+import { isMusic } from "../sound";
 
 type Kind =
   | "stage"
@@ -49,7 +55,7 @@ type Kind =
   | "character"
   | "cutscene";
 
-type Category = "stage" | "cosmetic" | "enemy" | "pattern";
+type Category = "stage" | "enemy" | "pattern" | "visual" | "audio" | "story";
 
 type Action = "rename" | "duplicate" | "export" | "delete";
 
@@ -81,6 +87,7 @@ type Deal = {
   kind: Kind;
   frame: Frame | null;
   rank: Rank | null;
+  source: SoundSource | null;
   rarity: Rarity<unknown>;
   text: string;
 };
@@ -94,18 +101,29 @@ type Search = {
   types: Set<string>;
 };
 
-const categoryList: Array<Category> = ["stage", "enemy", "pattern", "cosmetic"];
+const categoryList: Array<Category> = [
+  "stage",
+  "enemy",
+  "pattern",
+  "visual",
+  "audio",
+  "story",
+];
 const categoryNames: Map<Category, string> = new Map([
   ["stage", "stages"],
-  ["cosmetic", "cosmetics"],
   ["enemy", "enemies"],
   ["pattern", "patterns"],
+  ["visual", "visuals"],
+  ["audio", "audio"],
+  ["story", "story"],
 ]);
 const itemNames: Map<Category, string> = new Map([
   ["stage", "stage"],
-  ["cosmetic", "cosmetic"],
   ["enemy", "enemy"],
   ["pattern", "pattern"],
+  ["visual", "visual"],
+  ["audio", "audio"],
+  ["story", "story"],
 ]);
 
 const packOrder: Array<Kind> = ["game", "run", "stage"];
@@ -127,18 +145,21 @@ const dealTexts: Map<string, string> = new Map([
   ["vessel", "A craft for enemies"],
   ["palette", "Menu colours"],
   ["sigil", "Rings behind a spell"],
-  ["sound", "An effect or song"],
+  ["sound", "A sound effect"],
+  ["music", "A song or track"],
+  ["ambience", "Wind, rain and waves"],
   ["ost", "Songs for a game"],
   ["cutscene", "A conversation"],
   ["character", "A speaker"],
 ]);
 
+const soundSources: Array<[Cosmetic, SoundSource]> = [
+  ["sound", "synth"],
+  ["music", "song"],
+  ["ambience", "ambient"],
+];
+
 const orderList: Array<Order> = ["rarity", "name", "created"];
-const orderNames: Map<Order, string> = new Map([
-  ["rarity", "rarity"],
-  ["name", "a - z"],
-  ["created", "created"],
-]);
 
 function categoryOf(kind: Kind): Category {
   if (kind === "stage" || kind === "enemy") {
@@ -153,7 +174,15 @@ function categoryOf(kind: Kind): Category {
     return "pattern";
   }
 
-  return "cosmetic";
+  if (kind === "sound" || kind === "ost") {
+    return "audio";
+  }
+
+  if (kind === "cutscene" || kind === "character") {
+    return "story";
+  }
+
+  return "visual";
 }
 
 function categoryTypes(category: Category): Array<Rarity<unknown>> {
@@ -169,7 +198,19 @@ function categoryTypes(category: Category): Array<Rarity<unknown>> {
     return attacks;
   }
 
-  return cosmetics;
+  return cosmeticTypes(category);
+}
+
+function cosmeticTypes(category: Category): Array<Rarity<Cosmetic>> {
+  if (category === "audio") {
+    return audio;
+  }
+
+  if (category === "story") {
+    return story;
+  }
+
+  return visuals;
 }
 
 function categoryDeals(category: Category): Array<Deal> {
@@ -178,13 +219,23 @@ function categoryDeals(category: Category): Array<Deal> {
     frame: Frame | null,
     rarity: Rarity<unknown>,
     rank: Rank | null = null,
+    source: SoundSource | null = null,
   ): Deal {
     return {
       kind: kind,
       frame: frame,
       rank: rank,
+      source: source,
       rarity: rarity,
-      text: dealTexts.get(frame ?? rank ?? kind) ?? "",
+      text:
+        dealTexts.get(
+          frame ??
+            rank ??
+            soundSources.find(
+              ([, value]: [Cosmetic, SoundSource]) => value === source,
+            )?.[0] ??
+            kind,
+        ) ?? "",
     };
   }
 
@@ -206,8 +257,24 @@ function categoryDeals(category: Category): Array<Deal> {
     );
   }
 
-  return cosmetics.map((cosmetic: Rarity<Kind>) =>
-    deal(cosmetic.value, null, cosmetic),
+  if (category === "audio") {
+    return audio.map((sound: Rarity<Cosmetic>) =>
+      sound.value === "ost"
+        ? deal("ost", null, sound)
+        : deal(
+            "sound",
+            null,
+            sound,
+            null,
+            soundSources.find(
+              ([key]: [Cosmetic, SoundSource]) => key === sound.value,
+            )?.[1] ?? "synth",
+          ),
+    );
+  }
+
+  return cosmeticTypes(category).map((cosmetic: Rarity<Cosmetic>) =>
+    deal(cosmetic.value as Kind, null, cosmetic),
   );
 }
 
@@ -234,6 +301,19 @@ function entryRarity(entry: Entry): Rarity<unknown> {
 
   if (entry.kind === "spell") {
     return rarityOf(attacks, "spell");
+  }
+
+  if (entry.kind === "sound") {
+    const sound: Sound = entry.item as Sound;
+
+    return rarityOf(
+      audio,
+      sound.source === "ambient"
+        ? "ambience"
+        : isMusic(sound)
+          ? "music"
+          : "sound",
+    );
   }
 
   return rarityOf(cosmetics, entry.kind);
@@ -298,6 +378,12 @@ function listEntries(source: Creations, category: Category): Array<Entry> {
     add("spell", source.spells);
   } else if (category === "enemy") {
     add("enemy", source.enemies);
+  } else if (category === "audio") {
+    add("sound", source.sounds);
+    add("ost", source.osts);
+  } else if (category === "story") {
+    add("cutscene", source.cutscenes);
+    add("character", source.characters);
   } else {
     add("background", source.backgrounds);
     add("wallpaper", source.wallpapers);
@@ -305,10 +391,6 @@ function listEntries(source: Creations, category: Category): Array<Entry> {
     add("vessel", source.vessels);
     add("palette", source.palettes);
     add("sigil", source.sigils);
-    add("sound", source.sounds);
-    add("ost", source.osts);
-    add("cutscene", source.cutscenes);
-    add("character", source.characters);
   }
 
   return list.sort((first: Entry, second: Entry) =>
@@ -370,7 +452,6 @@ export {
   categoryNames,
   itemNames,
   orderList,
-  orderNames,
   categoryTypes,
   categoryOf,
   categoryDeals,

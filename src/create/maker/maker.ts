@@ -178,6 +178,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     app,
     () => changed(),
     () => refresh(),
+    (initial: string, apply: (text: string) => string | null) =>
+      script.open(initial, apply, new Array(), "lyrics"),
   );
   const toast: Toast = createToast(app);
   let frameScale: number = 1;
@@ -747,9 +749,9 @@ async function createMaker(app: Application): Promise<PageContent> {
     editor,
     gallery.view,
     browser.view,
-    script.view,
     painter.view,
     composer.view,
+    script.view,
     drop.view,
     toast.view,
   );

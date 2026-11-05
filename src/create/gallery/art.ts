@@ -36,6 +36,7 @@ import { getTheme } from "../../theme/theme";
 import { drawVessel, drawBody } from "../vessel";
 import { drawSigil, sigilRadius } from "../sigil";
 import { drawSound, soundLength } from "../sound";
+import { songBars } from "../jungle";
 import { paintWallpaper } from "../wallpaper";
 import { energyOf, type Energy } from "../energy";
 import { drawPalette } from "../palette";
@@ -564,16 +565,18 @@ function drawEntry(
 
     drawSoundArt(art, sound, width, height);
     detail =
-      sound.source === "song"
-        ? "jungle  ·  " +
-          sound.score.tempo +
-          " bpm  ·  " +
-          sound.score.bars +
-          (sound.score.bars === 1 ? " bar" : " bars")
-        : (sound.source === "file" ? "file" : sound.wave) +
-          "  ·  " +
-          soundLength(sound).toFixed(2) +
-          "s";
+      sound.source === "ambient"
+        ? "ambience  ·  " + sound.ambience.length + "s loop"
+        : sound.source === "song"
+          ? "jungle  ·  " +
+            sound.score.tempo +
+            " bpm  ·  " +
+            songBars(sound.score) +
+            (songBars(sound.score) === 1 ? " bar" : " bars")
+          : (sound.source === "file" ? "file" : sound.wave) +
+            "  ·  " +
+            soundLength(sound).toFixed(2) +
+            "s";
   } else if (entry.kind === "ost") {
     const ost: Ost = item as Ost;
     const tracks: Array<Sound> = ostTracks(creations, ost);

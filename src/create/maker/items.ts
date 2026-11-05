@@ -136,6 +136,12 @@ function forgetCosmetic(creations: Creations, id: string): void {
     soundItem.score.voicebank = soundItem.score.voicebank.map(
       (voice: string | null) => (voice === id ? null : voice),
     );
+
+    for (const channel of soundItem.score.channels) {
+      if (channel.sample === id) {
+        channel.sample = null;
+      }
+    }
   }
 
   for (const cutsceneItem of creations.cutscenes) {

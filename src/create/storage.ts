@@ -34,7 +34,8 @@ import {
   repairBullet,
 } from "./defaults";
 import { wallAngle } from "./geometry";
-import { repairScore } from "./jungle";
+import { repairScore } from "./arrange";
+import { repairAmbience } from "./ambience";
 import { useSounds } from "./sound";
 import { defaultCreations } from "./starter";
 
@@ -218,6 +219,7 @@ function readCreations(): Creations {
       sound.file = sound.file ?? null;
       sound.fileName = sound.fileName ?? "";
       sound.score = repairScore(sound.score);
+      sound.ambience = repairAmbience(sound.ambience);
     }
 
     for (const cutscene of creations.cutscenes) {

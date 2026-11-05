@@ -39,6 +39,7 @@ import {
   getShake,
   getHitbox,
   getAutosave,
+  getSafe,
   getFullscreen,
   getDim,
   getTv,
@@ -50,6 +51,7 @@ import {
   onShake,
   onHitbox,
   onAutosave,
+  onSafe,
   onFullscreen,
   onDim,
   onTv,
@@ -63,6 +65,7 @@ import {
   setShake,
   setHitbox,
   setAutosave,
+  setSafe,
   setFullscreen,
   setDim,
   setTv,
@@ -396,6 +399,7 @@ function createSettings(app: Application): PageContent {
   const shakeButtons: Array<Button> = new Array();
   const hitboxButtons: Array<Button> = new Array();
   const autosaveButtons: Array<Button> = new Array();
+  const safeButtons: Array<Button> = new Array();
   const fullscreenButtons: Array<Button> = new Array();
   const rateButtons: Array<Button> = new Array();
   const resolutionButtons: Array<Button> = new Array();
@@ -504,6 +508,7 @@ function createSettings(app: Application): PageContent {
           hitboxButtons,
         ),
         createSliderRow("background dim", getDim, setDim),
+        createToggleRow("safe for work", getSafe, setSafe, safeButtons),
       ],
     },
     {
@@ -829,6 +834,7 @@ function createSettings(app: Application): PageContent {
   onShake(refresh);
   onHitbox(refresh);
   onAutosave(refresh);
+  onSafe(refresh);
   onFullscreen(refresh);
   onDim(refresh);
   onTv(refresh);

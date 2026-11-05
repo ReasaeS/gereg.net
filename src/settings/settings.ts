@@ -432,6 +432,44 @@ function onAutosave(listener: CrtListener): void {
   autosaveListeners.push(listener);
 }
 
+const safeStorageKey: string = "geregnet.safe";
+const safeListeners: Array<CrtListener> = new Array();
+let safe: boolean = loadSafe();
+
+function loadSafe(): boolean {
+  try {
+    return localStorage.getItem(safeStorageKey) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function getSafe(): boolean {
+  return safe;
+}
+
+function setSafe(value: boolean): void {
+  if (value === safe) {
+    return;
+  }
+
+  safe = value;
+
+  try {
+    localStorage.setItem(safeStorageKey, value ? "on" : "off");
+  } catch {
+    console.warn("Could not save the safe for work setting");
+  }
+
+  for (const listener of safeListeners) {
+    listener(safe);
+  }
+}
+
+function onSafe(listener: CrtListener): void {
+  safeListeners.push(listener);
+}
+
 const dimStorageKey: string = "geregnet.dim";
 const dimListeners: Array<RateListener> = new Array();
 let dim: number = loadDim();
@@ -533,6 +571,9 @@ export {
   getAutosave,
   setAutosave,
   onAutosave,
+  getSafe,
+  setSafe,
+  onSafe,
   getFullscreen,
   setFullscreen,
   onFullscreen,

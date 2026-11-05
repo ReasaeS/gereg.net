@@ -1,33 +1,37 @@
+import { Container, Graphics, Text, type Application } from "pixi.js";
+import type { Channel, Note, Score, Sequence, Sound } from "../types";
+import { keyNames, scoreLength, songBars, stepLength } from "../jungle";
 import {
-  Container,
-  Graphics,
-  Point,
-  Rectangle,
-  Text,
-  type Application,
-  type FederatedPointerEvent,
-} from "pixi.js";
-import type { Score, Sound } from "../types";
-import {
-  beatsPerBar,
-  drumLanes,
-  keyNames,
-  kits,
-  vowels,
-  noteName,
-  noteRows,
-  scoreLength,
-  stepCount,
-  stepsPerBar,
-} from "../jungle";
-import { playTrack, stopPreview, type Track } from "../sound";
-import { getTheme } from "../../theme/theme";
+  addPattern,
+  clonePattern,
+  fitPattern,
+  removePattern,
+  soloScore,
+} from "../arrange";
+import { playTrack, previewNote, stopPreview, type Track } from "../sound";
 import { createText, screenResolution, sharpen } from "../../ui/text";
 import { createGlide, type Glide } from "../../ui/motion";
-import { chipHeight, createChip, type Chip } from "../../ui/widgets";
 import { hudHeight, hudWidth } from "../../game/field";
-
-type Part = "drums" | "bass" | "pads" | "vocals";
+import { createRack } from "./compose/rack";
+import { createRoll } from "./compose/roll";
+import { createPlaylist } from "./compose/playlist";
+import { createMixer } from "./compose/mixer";
+import { buttonHeight, createButton, type Button } from "./compose/controls";
+import {
+  accentColor,
+  areaBottom,
+  areaLeft,
+  areaRight,
+  dimColor,
+  rename,
+  textColor,
+  toolbarColor,
+  windowColor,
+  type Mode,
+  type Panel,
+  type Session,
+  type View,
+} from "./compose/shared";
 
 type Composer = {
   view: Container;
@@ -37,494 +41,382 @@ type Composer = {
   layout: (scale: number) => void;
 };
 
-type Stroke = {
-  value: number;
-  erase: boolean;
-};
-
-type Clip = {
-  part: Part;
-  steps: Array<Array<number>>;
-  kit: number;
-  vowels: Array<number>;
-};
-
-const backdropColor: string = "#01040f";
-const backdropAlpha: number = 0.97;
-const titleSize: number = 16; // units
-const titleY: number = 22; // units
-const infoY: number = 38; // units
-const toolbarY: number = 58; // units
-const barsY: number = 80; // units
-const gridLeft: number = 32; // units
-const gridRight: number = 608; // units
-const gridTop: number = 98; // units
-const labelWidth: number = 44; // units
-const labelSize: number = 9; // units
-const cellHeight: number = 34; // units
-const cellInset: number = 2; // units
-const partWidth: number = 56; // units
-const barWidth: number = 24; // units
-const chipGap: number = 6; // units
-const playWidth: number = 56; // units
-const doneWidth: number = 60; // units
-const muteWidth: number = 84; // units
-const copyWidth: number = 70; // units
-const kitWidth: number = 84; // units
-const toolsGap: number = 10; // units
-const hintSize: number = 8; // units
-const hintGap: number = 10; // units
-const infoSize: number = 9; // units
-const laneColor: string = "#030c2a";
-const beatColor: string = "#0a2160";
-const labelColor: string = "#9fd8ff";
-const bassColor: string = "#7ad8ff";
-const padColor: string = "#b48aff";
-const vocalColor: string = "#ff6fd8";
-const ghostAlpha: number = 0.55;
-const mutedAlpha: number = 0.3;
-const hoverAlpha: number = 0.18;
-const playheadAlpha: number = 0.16;
-const sweepWidth: number = 2; // units
-const partNames: Array<[Part, string]> = [
-  ["drums", "Drums"],
-  ["bass", "Bass"],
-  ["pads", "Pads"],
-  ["vocals", "Vocals"],
+const titleSize: number = 12; // units
+const titleY: number = 14; // units
+const infoY: number = 30; // units
+const transportY: number = 22; // units
+const bandBottom: number = 44; // units
+const toolbarY: number = 56; // units
+const patternY: number = 80; // units
+const hintY: number = 450; // units
+const hintGap: number = 11; // units
+const hintSize: number = 7; // units
+const infoSize: number = 7; // units
+const buttonGap: number = 4; // units
+const modeWidth: number = 40; // units
+const playWidth: number = 46; // units
+const stopWidth: number = 46; // units
+const doneWidth: number = 50; // units
+const tempoWidth: number = 64; // units
+const tempoSize: number = 10; // units
+const arrowWidth: number = 18; // units
+const patternWidth: number = 110; // units
+const newWidth: number = 44; // units
+const cloneWidth: number = 52; // units
+const deleteWidth: number = 56; // units
+const historyMost: number = 80;
+const recordGap: number = 400; // ms
+const restartDelay: number = 200; // ms
+const viewNames: Array<[View, string, number, string]> = [
+  ["playlist", "Playlist", 66, "F5"],
+  ["rack", "Channel rack", 90, "F6"],
+  ["roll", "Piano roll", 76, "F7"],
+  ["mixer", "Mixer", 56, "F9"],
 ];
+const hints: Record<View, string> = {
+  playlist:
+    "CLICK TO PLACE THE PATTERN  ·  DRAG TO MOVE  ·  DRAG THE END TO STRETCH  ·  RIGHT-CLICK TO DELETE",
+  rack: "CLICK STEPS TO PLACE HITS  ·  RIGHT-CLICK TO CLEAR  ·  DRAG KNOBS  ·  DOUBLE-CLICK A CHANNEL FOR ITS PIANO ROLL",
+  roll: "CLICK DRAWS  ·  DRAG MOVES  ·  SHIFT+DRAG COPIES  ·  CTRL+DRAG SELECTS  ·  RIGHT-CLICK ERASES  ·  CTRL+C V B  ·  DEL",
+  mixer:
+    "DRAG KNOBS AND FADERS  ·  DOUBLE-CLICK RESETS  ·  ROUTE CHANNELS FROM THE CHANNEL RACK",
+};
+const keysHint: string =
+  "SPACE PLAY  ·  L PATTERN / SONG  ·  F5 F6 F7 F9 VIEWS  ·  CTRL+Z UNDO  ·  CTRL+Y REDO";
 
 function createComposer(
   app: Application,
   changed: () => void,
   closed: () => void,
+  write: (initial: string, apply: (text: string) => string | null) => void,
 ): Composer {
   const view: Container = new Container();
   const backdrop: Graphics = new Graphics();
   const board: Container = new Container();
-  const title: Text = createText(titleSize, "#ffffff");
-  const info: Text = createText(infoSize, labelColor);
-  const hint: Text = createText(hintSize, labelColor);
-  const grid: Container = new Container();
-  const cells: Graphics = new Graphics();
-  const hover: Graphics = new Graphics();
-  const playhead: Graphics = new Graphics();
-  const labels: Container = new Container();
-  const barChips: Container = new Container();
-  const barList: Array<Chip> = new Array();
-  const tools: Container = new Container();
+  const overlay: Container = new Container();
+  const title: Text = createText(titleSize, textColor);
+  const info: Text = createText(infoSize, dimColor);
+  const tempo: Text = createText(tempoSize, accentColor);
+  const hint: Text = createText(hintSize, dimColor);
+  const keys: Text = createText(hintSize, dimColor);
+  const patternBar: Container = new Container();
   const amount: Glide = createGlide(0, (value: number) => {
     view.alpha = value;
     view.visible = value > 0;
   });
-  const fade: Glide = createGlide(1, (value: number) => {
-    grid.alpha = value;
-  });
   let sound: Sound | null = null;
-  let part: Part = "drums";
-  let bar: number = 0;
-  let stroke: Stroke | null = null;
-  let track: Track | null = null;
+  let current: View = "rack";
+  let patternId: string = "";
+  let channelId: string = "";
+  let mode: Mode = "song";
   let playing: boolean = false;
+  let playMode: Mode = "song";
+  let track: Track | null = null;
   let token: number = 0;
-  let clip: Clip | null = null;
-  const partChips: Array<Chip> = partNames.map(
-    ([value, name]: [Part, string]) =>
-      createChip(
+  let restartTimer: number | null = null;
+  let lastRecord: number = 0;
+  let boardScale: number = 1;
+  const undoList: Array<string> = new Array();
+  const redoList: Array<string> = new Array();
+
+  const session: Session = {
+    score: score,
+    pattern: pattern,
+    channel: channel,
+    choosePattern: choosePattern,
+    chooseChannel: (value: Channel) => {
+      channelId = value.id;
+    },
+    show: show,
+    record: record,
+    edited: edited,
+    refresh: refresh,
+    write: write,
+    playhead: playhead,
+    overlay: () => overlay,
+    hear: (value: Channel, note: Note) => previewNote(score(), value, note),
+  };
+  const panels: Record<View, Panel> = {
+    playlist: createPlaylist(session),
+    rack: createRack(session),
+    roll: createRoll(session),
+    mixer: createMixer(session),
+  };
+  const fades: Record<View, Glide> = {
+    playlist: panelGlide("playlist"),
+    rack: panelGlide("rack"),
+    roll: panelGlide("roll"),
+    mixer: panelGlide("mixer"),
+  };
+  const viewButtons: Array<Button> = viewNames.map(
+    ([value, name, width]: [View, string, number, string]) =>
+      createButton(
         name,
-        partWidth,
-        () => choosePart(value),
-        () => part === value,
+        width,
+        () => show(value),
+        () => current === value,
       ),
   );
-  const play: Chip = createChip(
+  const patternMode: Button = createButton(
+    "Pat",
+    modeWidth,
+    () => chooseMode("pattern"),
+    () => mode === "pattern",
+  );
+  const songMode: Button = createButton(
+    "Song",
+    modeWidth,
+    () => chooseMode("song"),
+    () => mode === "song",
+  );
+  const play: Button = createButton(
     "Play",
     playWidth,
     togglePlaying,
     () => playing,
   );
-  const done: Chip = createChip("Done", doneWidth, close);
-  const mute: Chip = createChip("Mute", muteWidth, toggleMute, muted);
-  const copy: Chip = createChip("Copy bar", copyWidth, copyBar);
-  const paste: Chip = createChip("Paste bar", copyWidth, pasteBar);
-  const kit: Chip = createChip("Kit", kitWidth, nextKit);
-  const vowelRow: Container = new Container();
-  const vowelChips: Array<Chip> = new Array();
+  const stop: Button = createButton("Stop", stopWidth, () => {
+    stopPlaying();
+    paintButtons();
+  });
+  const done: Button = createButton("Done", doneWidth, close);
+  const previous: Button = createButton("<", arrowWidth, () =>
+    cyclePattern(-1),
+  );
+  const patternButton: Button = createButton("", patternWidth, renamePattern);
+  const next: Button = createButton(">", arrowWidth, () => cyclePattern(1));
+  const newButton: Button = createButton("New", newWidth, newPattern);
+  const cloneButton: Button = createButton("Clone", cloneWidth, copyPattern);
+  const deleteButton: Button = createButton(
+    "Delete",
+    deleteWidth,
+    deletePattern,
+  );
+
+  function panelGlide(value: View): Glide {
+    return createGlide(0, (amount: number) => {
+      panels[value].view.alpha = amount;
+      panels[value].view.visible = amount > 0;
+    });
+  }
 
   function score(): Score {
     return sound!.score;
   }
 
-  function rows(): number {
-    return part === "drums" ? drumLanes.length : noteRows;
+  function pattern(): Sequence {
+    const found: Sequence =
+      score().patterns.find((entry: Sequence) => entry.id === patternId) ??
+      score().patterns[0]!;
+
+    patternId = found.id;
+    return found;
   }
 
-  function cellWidth(): number {
-    return (gridRight - gridLeft - labelWidth) / stepsPerBar;
+  function channel(): Channel | null {
+    const found: Channel | null =
+      score().channels.find((entry: Channel) => entry.id === channelId) ??
+      score().channels[0] ??
+      null;
+
+    channelId = found?.id ?? "";
+    return found;
   }
 
-  function line(): Array<number> {
-    return part === "bass"
-      ? score().bassline
-      : part === "pads"
-        ? score().pads
-        : score().vocals;
-  }
+  function choosePattern(value: Sequence): void {
+    patternId = value.id;
+    refresh();
 
-  function partIndex(): number {
-    return partNames.findIndex(([value]: [Part, string]) => value === part);
-  }
-
-  function muted(): boolean {
-    return sound !== null && score().mutes[partIndex()] === 1;
-  }
-
-  function edited(): void {
-    changed();
-
-    if (playing) {
+    if (playing && playMode === "pattern") {
       restart();
     }
   }
 
-  function toggleMute(): void {
-    const mutes: Array<number> = score().mutes;
-
-    mutes[partIndex()] = mutes[partIndex()] === 1 ? 0 : 1;
-    drawCells();
-    paintChips();
-    edited();
-  }
-
-  function nextKit(): void {
-    score().kits[bar] = (score().kits[bar]! + 1) % kits.length;
-    paintChips();
-    edited();
-  }
-
-  function nextVowel(beat: number): void {
-    const index: number = bar * beatsPerBar + beat;
-
-    score().vowels[index] = (score().vowels[index]! + 1) % vowels.length;
-    paintChips();
-    edited();
-  }
-
-  function barSteps(list: Array<number>): Array<number> {
-    return list.slice(bar * stepsPerBar, (bar + 1) * stepsPerBar);
-  }
-
-  function copyBar(): void {
-    clip = {
-      part: part,
-      steps:
-        part === "drums" ? score().drums.map(barSteps) : [barSteps(line())],
-      kit: score().kits[bar]!,
-      vowels: score().vowels.slice(bar * beatsPerBar, (bar + 1) * beatsPerBar),
-    };
-    copy.label.text = "COPIED";
-  }
-
-  function pasteBar(): void {
-    if (clip === null || (clip.part === "drums") !== (part === "drums")) {
+  function show(value: View): void {
+    if (current === value) {
+      panels[value].redraw();
       return;
     }
 
-    const targets: Array<Array<number>> =
-      part === "drums" ? score().drums : [line()];
+    fades[current].set(0);
+    panels[current].view.eventMode = "none";
+    current = value;
+    panels[value].view.eventMode = "passive";
+    fades[value].snap(0);
+    fades[value].set(1);
+    refresh();
+  }
 
-    clip.steps.forEach((steps: Array<number>, index: number) => {
-      targets[index]!.splice(bar * stepsPerBar, stepsPerBar, ...steps);
-    });
+  function snapshot(): string {
+    return JSON.stringify(score());
+  }
 
-    if (clip.part === "drums") {
-      score().kits[bar] = clip.kit;
+  function record(): void {
+    const now: number = performance.now();
+
+    if (now - lastRecord < recordGap) {
+      lastRecord = now;
+      return;
     }
 
-    if (clip.part === "vocals" && part === "vocals") {
-      score().vowels.splice(bar * beatsPerBar, beatsPerBar, ...clip.vowels);
+    lastRecord = now;
+    undoList.push(snapshot());
+    redoList.length = 0;
+
+    if (undoList.length > historyMost) {
+      undoList.shift();
+    }
+  }
+
+  function travel(from: Array<string>, to: Array<string>): void {
+    const state: string | undefined = from.pop();
+
+    if (state === undefined || sound === null) {
+      return;
     }
 
-    redraw(true);
+    to.push(snapshot());
+    sound.score = JSON.parse(state) as Score;
+    lastRecord = 0;
     edited();
+    refresh();
   }
 
-  function degreeOf(row: number): number {
-    return noteRows - 1 - row;
-  }
+  function edited(): void {
+    fitPattern(score(), pattern());
+    changed();
+    describe();
 
-  function cellColor(): string {
-    return part === "drums"
-      ? getTheme().ring
-      : part === "bass"
-        ? bassColor
-        : part === "pads"
-          ? padColor
-          : vocalColor;
-  }
-
-  function filled(row: number, step: number): number {
-    if (part === "drums") {
-      return score().drums[row]?.[step] ?? 0;
+    if (!playing) {
+      return;
     }
 
-    return line()[step] === degreeOf(row) ? 1 : 0;
-  }
+    if (restartTimer !== null) {
+      window.clearTimeout(restartTimer);
+    }
 
-  function drawCells(): void {
-    const width: number = cellWidth();
+    restartTimer = window.setTimeout(() => {
+      restartTimer = null;
 
-    cells.clear();
-    cells.alpha = muted() ? mutedAlpha : 1;
-
-    for (let row = 0; row < rows(); row++) {
-      for (let column = 0; column < stepsPerBar; column++) {
-        const step: number = bar * stepsPerBar + column;
-        const x: number = labelWidth + column * width;
-        const y: number = row * cellHeight;
-
-        cells
-          .rect(
-            x + cellInset / 2,
-            y + cellInset / 2,
-            width - cellInset,
-            cellHeight - cellInset,
-          )
-          .fill(column % 4 === 0 ? beatColor : laneColor);
-
-        if (filled(row, step) === 1) {
-          const joined: boolean =
-            part !== "drums" &&
-            column > 0 &&
-            line()[step - 1] === degreeOf(row);
-
-          cells
-            .rect(
-              x + (joined ? -cellInset / 2 : cellInset * 1.5),
-              y + cellInset * 1.5,
-              width - (joined ? cellInset * 2 : cellInset * 3),
-              cellHeight - cellInset * 3,
-            )
-            .fill({
-              color: cellColor(),
-              alpha: part === "drums" && row === 2 ? ghostAlpha : 1,
-            });
-        }
+      if (playing) {
+        restart();
       }
-    }
-  }
-
-  function drawLabels(): void {
-    for (const child of labels.removeChildren()) {
-      child.destroy();
-    }
-
-    for (let row = 0; row < rows(); row++) {
-      const label: Text = createText(labelSize, labelColor);
-      const degree: number = degreeOf(row);
-
-      label.text =
-        part === "drums"
-          ? drumLanes[row]!.toUpperCase()
-          : noteName(score(), degree) + (degree >= 7 ? "'" : "");
-      label.anchor.set(0, 0.5);
-      label.position.set(0, row * cellHeight + cellHeight / 2);
-      labels.addChild(label);
-    }
-  }
-
-  function buildBars(): void {
-    for (const child of barChips.removeChildren()) {
-      child.destroy({ children: true });
-    }
-
-    barList.length = 0;
-
-    for (let index = 0; index < score().bars; index++) {
-      const chip: Chip = createChip(
-        String(index + 1),
-        barWidth,
-        () => chooseBar(index),
-        () => bar === index,
-      );
-
-      chip.view.x = index * (barWidth + chipGap);
-      barChips.addChild(chip.view);
-      barList.push(chip);
-    }
-  }
-
-  function paintChips(): void {
-    for (const chip of partChips) {
-      chip.paint();
-    }
-
-    for (const chip of barList) {
-      chip.paint();
-    }
-
-    play.paint();
-    play.label.text = playing ? "STOP" : "PLAY";
-    mute.paint();
-    mute.label.text = "MUTE " + part.toUpperCase();
-    kit.label.text = "KIT: " + kits[score().kits[bar]!]!.name.toUpperCase();
-    kit.view.visible = part === "drums";
-    vowelChips.forEach((chip: Chip, beat: number) => {
-      chip.label.text =
-        vowels[score().vowels[bar * beatsPerBar + beat]!]!.name.toUpperCase();
-    });
-    vowelRow.visible = part === "vocals";
+    }, restartDelay);
   }
 
   function describe(): void {
     const value: Score = score();
+    const bars: number = songBars(value);
 
     title.text = sound!.name.toUpperCase();
+    tempo.text = value.tempo + " BPM";
     info.text =
-      value.tempo +
-      " BPM  ·  " +
       keyNames[value.key] +
-      " MINOR  ·  " +
-      (value.bass === "sub" ? "SUB BASS" : "REESE BASS");
-    hint.text =
-      part === "drums"
-        ? "CLICK TO PLACE A HIT  ·  DRAG TO PAINT  ·  SPACE TO PLAY"
-        : part === "vocals"
-          ? "DRAG ACROSS ROWS TO SING  ·  TOUCHING NOTES GLIDE  ·  CLICK A VOWEL TO CHANGE IT"
-          : "DRAG ALONG A ROW FOR A LONG NOTE  ·  CLICK A NOTE TO ERASE  ·  SPACE TO PLAY";
-    vowelRow.y = gridTop + rows() * cellHeight + toolsGap;
-    tools.y = vowelRow.y + (part === "vocals" ? chipHeight + toolsGap : 0);
-    hint.y = tools.y + chipHeight + hintGap;
-    copy.label.text = "COPY BAR";
+      " MINOR  ·  SONG " +
+      bars +
+      (bars === 1 ? " BAR" : " BARS") +
+      "  ·  " +
+      value.channels.length +
+      " CHANNELS  ·  " +
+      value.patterns.length +
+      " PATTERNS";
   }
 
-  function redraw(animate: boolean): void {
+  function paintButtons(): void {
+    for (const button of viewButtons) {
+      button.paint();
+    }
+
+    patternMode.paint();
+    songMode.paint();
+    play.paint();
+    patternButton.label.text = pattern().name.toUpperCase().slice(0, 16);
+    deleteButton.view.alpha = score().patterns.length > 1 ? 1 : 0.4;
+    patternBar.visible = current !== "mixer";
+  }
+
+  function refresh(): void {
     if (sound === null) {
       return;
     }
 
-    if (animate) {
-      fade.snap(0);
-      fade.set(1);
-    }
-
-    bar = Math.min(bar, score().bars - 1);
-    drawLabels();
-    drawCells();
+    pattern();
+    channel();
     describe();
-    grid.hitArea = new Rectangle(
-      labelWidth,
-      0,
-      gridRight - gridLeft - labelWidth,
-      rows() * cellHeight,
+    paintButtons();
+    hint.text = hints[current];
+    panels[current].redraw();
+  }
+
+  function cyclePattern(direction: number): void {
+    const list: Array<Sequence> = score().patterns;
+
+    choosePattern(
+      list[(list.indexOf(pattern()) + direction + list.length) % list.length]!,
     );
-
-    if (barList.length !== score().bars) {
-      buildBars();
-    }
-
-    paintChips();
   }
 
-  function choosePart(value: Part): void {
-    if (part === value) {
+  function renamePattern(): void {
+    const target: Sequence = pattern();
+
+    rename(target.name, (name: string) => {
+      record();
+      target.name = name;
+      edited();
+      refresh();
+    });
+  }
+
+  function newPattern(): void {
+    record();
+
+    const created: Sequence | null = addPattern(score());
+
+    if (created !== null) {
+      choosePattern(created);
+      edited();
+    }
+  }
+
+  function copyPattern(): void {
+    record();
+
+    const created: Sequence | null = clonePattern(score(), pattern());
+
+    if (created !== null) {
+      choosePattern(created);
+      edited();
+    }
+  }
+
+  function deletePattern(): void {
+    const list: Array<Sequence> = score().patterns;
+
+    if (list.length <= 1) {
       return;
     }
 
-    part = value;
-    redraw(true);
-  }
+    const index: number = list.indexOf(pattern());
 
-  function chooseBar(index: number): void {
-    if (bar === index) {
-      return;
-    }
-
-    bar = index;
-    redraw(true);
-  }
-
-  function cellAt(event: FederatedPointerEvent): Point | null {
-    const local: Point = grid.toLocal(event.global);
-    const column: number = Math.floor((local.x - labelWidth) / cellWidth());
-    const row: number = Math.floor(local.y / cellHeight);
-
-    if (column < 0 || column >= stepsPerBar || row < 0 || row >= rows()) {
-      return null;
-    }
-
-    return new Point(column, row);
-  }
-
-  function apply(cell: Point): void {
-    if (stroke === null) {
-      return;
-    }
-
-    const step: number = bar * stepsPerBar + cell.x;
-
-    if (part === "drums") {
-      score().drums[cell.y]![step] = stroke.value;
-    } else {
-      line()[step] = stroke.erase ? -1 : degreeOf(cell.y);
-    }
-
-    drawCells();
-  }
-
-  function begin(event: FederatedPointerEvent): void {
-    const cell: Point | null = cellAt(event);
-
-    if (cell === null || event.button !== 0) {
-      return;
-    }
-
-    const on: boolean = filled(cell.y, bar * stepsPerBar + cell.x) === 1;
-
-    stroke = { value: on ? 0 : 1, erase: on };
-    apply(cell);
-  }
-
-  function move(event: FederatedPointerEvent): void {
-    hover.clear();
-
-    if (sound === null) {
-      return;
-    }
-
-    const cell: Point | null = cellAt(event);
-
-    if (cell !== null) {
-      hover
-        .rect(
-          labelWidth + cell.x * cellWidth() + cellInset / 2,
-          cell.y * cellHeight + cellInset / 2,
-          cellWidth() - cellInset,
-          cellHeight - cellInset,
-        )
-        .fill({ color: "#ffffff", alpha: hoverAlpha });
-    }
-
-    if (stroke !== null && cell !== null) {
-      apply(cell);
-    }
-  }
-
-  function end(): void {
-    if (stroke === null) {
-      return;
-    }
-
-    stroke = null;
+    record();
+    removePattern(score(), pattern().id);
+    patternId =
+      score().patterns[Math.min(index, score().patterns.length - 1)]!.id;
     edited();
+    refresh();
+  }
+
+  function playedScore(): Score {
+    return playMode === "pattern" ? soloScore(score(), pattern()) : score();
   }
 
   function loop(offset: number): void {
-    const current: number = ++token;
+    const currentToken: number = ++token;
 
     track = playTrack(
-      sound!,
+      { ...sound!, score: playedScore() },
       (played: boolean) => {
-        if (played && playing && current === token) {
+        if (played && playing && currentToken === token) {
           loop(0);
         }
       },
@@ -533,22 +425,41 @@ function createComposer(
   }
 
   function restart(): void {
+    const length: number = scoreLength(playedScore());
     const position: number = track?.position() ?? 0;
 
     track?.stop();
-    loop(position % scoreLength(score()));
+    playMode = mode;
+    loop(playMode === "pattern" ? 0 : position % length);
   }
 
   function togglePlaying(): void {
-    playing = !playing;
-
     if (playing) {
-      loop(0);
-    } else {
       stopPlaying();
+    } else {
+      playing = true;
+      playMode = mode;
+      loop(0);
     }
 
-    paintChips();
+    paintButtons();
+  }
+
+  function chooseMode(value: Mode): void {
+    if (mode === value) {
+      return;
+    }
+
+    mode = value;
+
+    if (playing) {
+      token++;
+      track?.stop();
+      playMode = mode;
+      loop(0);
+    }
+
+    paintButtons();
   }
 
   function stopPlaying(): void {
@@ -556,48 +467,38 @@ function createComposer(
     token++;
     track?.stop();
     track = null;
-    playhead.clear();
+
+    if (restartTimer !== null) {
+      window.clearTimeout(restartTimer);
+      restartTimer = null;
+    }
   }
 
-  function drawPlayhead(): void {
-    playhead.clear();
-
-    if (!playing || track === null || sound === null) {
-      return;
+  function playhead(wanted: Mode): number | null {
+    if (!playing || track === null || sound === null || wanted !== playMode) {
+      return null;
     }
 
-    const length: number = scoreLength(score());
-    const progress: number = (track.position() % length) / length;
-    const step: number = Math.floor(progress * stepCount(score()));
-    const width: number = cellWidth();
+    const played: Score = playedScore();
 
-    if (Math.floor(step / stepsPerBar) !== bar) {
-      return;
-    }
-
-    const column: number = step % stepsPerBar;
-    const sweep: number = (progress * score().bars - bar) * stepsPerBar * width;
-
-    playhead
-      .rect(labelWidth + column * width, 0, width, rows() * cellHeight)
-      .fill({ color: "#ffffff", alpha: playheadAlpha })
-      .rect(
-        labelWidth + sweep - sweepWidth / 2,
-        0,
-        sweepWidth,
-        rows() * cellHeight,
-      )
-      .fill({ color: "#ffffff", alpha: playheadAlpha * 3 });
+    return (track.position() % scoreLength(played)) / stepLength(played);
   }
 
   function open(value: Sound): void {
     stopPreview();
     sound = value;
-    part = "drums";
-    bar = 0;
-    stroke = null;
-    buildBars();
-    redraw(false);
+    patternId = "";
+    channelId = "";
+    undoList.length = 0;
+    redoList.length = 0;
+    lastRecord = 0;
+
+    for (const [name] of viewNames) {
+      fades[name].snap(name === current ? 1 : 0);
+      panels[name].view.eventMode = name === current ? "passive" : "none";
+    }
+
+    refresh();
     view.eventMode = "passive";
     amount.set(1);
   }
@@ -607,91 +508,112 @@ function createComposer(
       return;
     }
 
-    end();
     stopPlaying();
-    paintChips();
+    paintButtons();
     sound = null;
-    hover.clear();
     view.eventMode = "none";
     amount.set(0);
     closed();
   }
 
-  function layout(scale: number): void {
+  function band(top: number, bottom: number, color: string): void {
     backdrop
-      .clear()
-      .rect(0, 0, app.screen.width, app.screen.height)
-      .fill({ color: backdropColor, alpha: backdropAlpha });
+      .rect(
+        0,
+        board.y + top * boardScale,
+        app.screen.width,
+        (bottom - top) * boardScale,
+      )
+      .fill(color);
+  }
+
+  function layout(scale: number): void {
+    boardScale = scale;
     board.scale.set(scale);
     board.position.set(
       Math.round(app.screen.width / 2 - (hudWidth * scale) / 2),
       Math.round(app.screen.height / 2 - (hudHeight * scale) / 2),
     );
+    backdrop
+      .clear()
+      .rect(0, 0, app.screen.width, app.screen.height)
+      .fill(windowColor);
+    band(-hudHeight, bandBottom, toolbarColor);
+    band(areaBottom + 4, hudHeight * 2, toolbarColor);
+    backdrop
+      .rect(0, board.y + bandBottom * scale, app.screen.width, 1)
+      .fill("#1a2125");
     sharpen(board, screenResolution(scale));
   }
 
-  title.anchor.set(0.5);
-  title.position.set(hudWidth / 2, titleY);
-  partChips.forEach((chip: Chip, index: number) => {
-    chip.view.position.set(
-      gridLeft + index * (partWidth + chipGap),
-      toolbarY - chipHeight / 2,
-    );
-  });
-  play.view.position.set(
-    gridRight - doneWidth - chipGap - playWidth,
-    toolbarY - chipHeight / 2,
-  );
-  done.view.position.set(gridRight - doneWidth, toolbarY - chipHeight / 2);
-  barChips.position.set(gridLeft, barsY - chipHeight / 2);
-  info.anchor.set(0.5);
-  info.position.set(hudWidth / 2, infoY);
+  title.position.set(areaLeft, titleY - titleSize / 2);
+  info.position.set(areaLeft, infoY - infoSize / 2);
   (
     [
-      [mute, muteWidth],
-      [copy, copyWidth],
-      [paste, copyWidth],
-      [kit, kitWidth],
-    ] as Array<[Chip, number]>
-  ).reduce((x: number, [chip, width]: [Chip, number]) => {
-    chip.view.x = x;
-    tools.addChild(chip.view);
+      [patternMode, modeWidth],
+      [songMode, modeWidth],
+      [play, playWidth],
+      [stop, stopWidth],
+    ] as Array<[Button, number]>
+  ).reduce(
+    (x: number, [button, width]: [Button, number]) => {
+      button.view.position.set(x, transportY - buttonHeight / 2);
 
-    return x + width + chipGap;
-  }, gridLeft);
+      return x + width + buttonGap;
+    },
+    areaRight -
+      doneWidth -
+      tempoWidth -
+      (modeWidth * 2 + playWidth + stopWidth + buttonGap * 5),
+  );
+  tempo.anchor.set(0.5);
+  tempo.position.set(
+    areaRight - doneWidth - buttonGap - tempoWidth / 2,
+    transportY,
+  );
+  done.view.position.set(areaRight - doneWidth, transportY - buttonHeight / 2);
+  viewButtons.reduce((x: number, button: Button, index: number) => {
+    button.view.position.set(x, toolbarY - buttonHeight / 2);
 
-  for (let beat = 0; beat < beatsPerBar; beat++) {
-    const width: number =
-      (gridRight - gridLeft - labelWidth) / beatsPerBar - chipGap;
-    const chip: Chip = createChip("Aah", width, () => nextVowel(beat));
+    return x + viewNames[index]![2] + buttonGap;
+  }, areaLeft);
+  (
+    [
+      [previous, arrowWidth],
+      [patternButton, patternWidth],
+      [next, arrowWidth],
+      [newButton, newWidth],
+      [cloneButton, cloneWidth],
+      [deleteButton, deleteWidth],
+    ] as Array<[Button, number]>
+  ).reduce((x: number, [button, width]: [Button, number]) => {
+    button.view.x = x;
+    patternBar.addChild(button.view);
 
-    chip.view.x =
-      gridLeft + labelWidth + beat * (width + chipGap) + chipGap / 2;
-    vowelRow.addChild(chip.view);
-    vowelChips.push(chip);
-  }
-  hint.anchor.set(0.5, 0);
-  hint.x = hudWidth / 2;
-  grid.position.set(gridLeft, gridTop);
-  grid.eventMode = "static";
-  grid.cursor = "pointer";
-  grid.addChild(cells, playhead, hover, labels);
-  grid.on("pointerdown", begin);
-  grid.on("globalpointermove", move);
-  grid.on("pointerup", end);
-  grid.on("pointerupoutside", end);
-  grid.on("pointerleave", () => hover.clear());
+    return x + width + buttonGap;
+  }, areaLeft);
+  patternBar.y = patternY - buttonHeight / 2;
+  hint.position.set(areaLeft, hintY);
+  keys.position.set(areaLeft, hintY + hintGap);
+  keys.text = keysHint;
   board.addChild(
     title,
-    ...partChips.map((chip: Chip) => chip.view),
-    play.view,
-    done.view,
-    barChips,
     info,
-    grid,
-    vowelRow,
-    tools,
+    tempo,
+    ...viewButtons.map((button: Button) => button.view),
+    patternMode.view,
+    songMode.view,
+    play.view,
+    stop.view,
+    done.view,
+    patternBar,
+    panels.playlist.view,
+    panels.rack.view,
+    panels.roll.view,
+    panels.mixer.view,
     hint,
+    keys,
+    overlay,
   );
   backdrop.eventMode = "static";
   view.addChild(backdrop, board);
@@ -700,25 +622,53 @@ function createComposer(
 
   app.ticker.add(() => {
     if (sound !== null) {
-      drawPlayhead();
+      panels[current].tick();
+    }
+  });
+
+  app.canvas.addEventListener("contextmenu", (event: MouseEvent) => {
+    if (sound !== null) {
+      event.preventDefault();
     }
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (sound === null || event.altKey || event.ctrlKey || event.metaKey) {
+    if (
+      sound === null ||
+      event.altKey ||
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement
+    ) {
       return;
     }
 
-    if (event.code === "Space") {
-      togglePlaying();
-      event.preventDefault();
-    } else if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
-      chooseBar(
-        (bar + (event.code === "ArrowLeft" ? -1 : 1) + score().bars) %
-          score().bars,
+    const command: boolean = event.ctrlKey || event.metaKey;
+    const found: [View, string, number, string] | undefined = viewNames.find(
+      (entry: [View, string, number, string]) => entry[3] === event.code,
+    );
+
+    if (command && event.code === "KeyZ") {
+      travel(
+        event.shiftKey ? redoList : undoList,
+        event.shiftKey ? undoList : redoList,
       );
-      event.preventDefault();
+    } else if (command && event.code === "KeyY") {
+      travel(redoList, undoList);
+    } else if (panels[current].key(event)) {
+      paintButtons();
+    } else if (command) {
+      return;
+    } else if (event.code === "Space") {
+      togglePlaying();
+    } else if (event.code === "KeyL") {
+      chooseMode(mode === "song" ? "pattern" : "song");
+    } else if (found !== undefined) {
+      show(found[0]);
+    } else {
+      return;
     }
+
+    event.preventDefault();
   });
 
   return {

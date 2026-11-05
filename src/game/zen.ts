@@ -305,6 +305,7 @@ function createZen(onLook: LookListener, onTrack: TrackListener): Zen {
         play(trackIndex);
       },
       offset,
+      true,
     );
     announce();
   }

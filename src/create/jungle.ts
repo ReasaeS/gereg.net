@@ -1,16 +1,43 @@
-import type { Bassline, Score, Singer } from "./types";
+import type {
+  Bassline,
+  Channel,
+  Clip,
+  Insert,
+  Note,
+  Score,
+  Sequence,
+  Singer,
+  Tone,
+} from "./types";
 
 type Voice = (time: number) => number;
-
-type Run = {
-  start: number;
-  length: number;
-  degree: number;
-};
 
 type Phrase = {
   start: number;
   notes: Array<number>;
+  vowels: Array<number>;
+};
+
+type Family = "drum" | "bass" | "pad" | "tone" | "vocal" | "effect" | "sample";
+
+type Patch = {
+  key: string;
+  name: string;
+  family: Family;
+  lane: number;
+};
+
+type Placed = {
+  note: Note;
+  step: number;
+  pattern: string;
+  index: number;
+};
+
+type Line = {
+  pitches: Array<number>;
+  vowels: Array<number>;
+  words: Array<string | null>;
 };
 
 type Vowel = {
@@ -29,12 +56,38 @@ type Style = {
   delays: Array<number>; // s
 };
 
+type Word = {
+  at: number; // s
+  start: number; // s
+  bank: Bank | null;
+  sustain: number;
+  last: number;
+};
+
 type Bank = {
   samples: Float32Array;
+  onset: number; // samples
   marks: Array<number>;
   period: number; // samples
   pitch: number; // Hz
   level: number;
+};
+
+type Instrument = {
+  tone: Tone;
+  name: string;
+  level: number;
+  release: number; // s
+};
+
+type Swarm = {
+  detunes: Array<number>; // semitones
+  cutoff: number; // Hz
+  attack: number; // s
+  scoop: number; // semitones
+  vibrato: number; // semitones
+  drive: number;
+  pulse: boolean;
 };
 
 type Kit = {
@@ -52,8 +105,63 @@ const stepsPerBar: number = 16;
 const beatsPerBar: number = 4;
 const stepsPerBeat: number = stepsPerBar / beatsPerBar;
 const drumLanes: Array<string> = ["Kick", "Snare", "Ghost", "Hat", "Ride"];
-const noteRows: number = 8;
-const partCount: number = 4;
+const effectLanes: Array<string> = [
+  "Riser",
+  "Reverse",
+  "Impact",
+  "Fall",
+  "Zap",
+];
+const rollSpeeds: Array<number> = [2, 3, 4, 6, 8];
+const instruments: Array<Instrument> = [
+  { tone: "saw", name: "Saw", level: 0.22, release: 0.08 },
+  { tone: "square", name: "Square", level: 0.16, release: 0.08 },
+  { tone: "piano", name: "Piano", level: 0.2, release: 0.18 },
+  { tone: "guitar", name: "Guitar", level: 0.55, release: 0.1 },
+  { tone: "bell", name: "Bell", level: 0.25, release: 0.6 },
+  { tone: "organ", name: "Organ", level: 0.11, release: 0.06 },
+  { tone: "strings", name: "Strings", level: 0.22, release: 0.4 },
+  { tone: "flute", name: "Flute", level: 0.3, release: 0.15 },
+  { tone: "hoover", name: "Hoover", level: 0.2, release: 0.15 },
+];
+const swarms: Partial<Record<Tone, Swarm>> = {
+  saw: {
+    detunes: [-0.1, 0.1],
+    cutoff: 2600,
+    attack: 0.005,
+    scoop: 0,
+    vibrato: 0.15,
+    drive: 1,
+    pulse: false,
+  },
+  square: {
+    detunes: [-0.05, 0.05],
+    cutoff: 3200,
+    attack: 0.005,
+    scoop: 0,
+    vibrato: 0.15,
+    drive: 1,
+    pulse: true,
+  },
+  strings: {
+    detunes: [-0.12, 0, 0.12],
+    cutoff: 2000,
+    attack: 0.15,
+    scoop: 0,
+    vibrato: 0.12,
+    drive: 1,
+    pulse: false,
+  },
+  hoover: {
+    detunes: [-0.3, -12, 0, 0.3],
+    cutoff: 4000,
+    attack: 0.01,
+    scoop: 7,
+    vibrato: 0,
+    drive: 2.5,
+    pulse: false,
+  },
+};
 const vowels: Array<Vowel> = [
   {
     name: "Aah",
@@ -106,7 +214,6 @@ const vowels: Array<Vowel> = [
     ],
   },
 ];
-const vocalRange: number = 8;
 const vocalAttack: number = 0.12; // s
 const vocalRelease: number = 0.3; // s
 const vocalGlide: number = 0.07; // s
@@ -121,8 +228,6 @@ const shimmerDepth: number = 0.08;
 const wanderTime: number = 0.06; // s
 const formantLift: number = 1.1;
 const filterEvery: number = 16; // samples
-const vocalEcho: number = 6;
-const vocalMix: number = 1;
 const bankEdge: number = 0.15;
 const bankMinimum: number = 0.2; // s
 const pitchLow: number = 70; // Hz
@@ -135,6 +240,108 @@ const bankLevel: number = 0.25;
 const blendTime: number = 0.06; // s
 const octaveMost: number = 32;
 const analysed: WeakMap<Float32Array, Bank | null> = new WeakMap();
+const clipped: WeakMap<Float32Array, Bank | null> = new WeakMap();
+const lyricLead: number = 0.16; // s
+const lyricHold: number = 0.06; // s
+const lyricAttack: number = 0.02; // s
+const lyricTail: number = 0.03; // s
+const vowelOrder: string = "auione";
+const syllableNames: Array<string> = (
+  "ka ki ku ke ko kya kyu kyo ga gi gu ge go gya gyu gyo " +
+  "sa shi su se so si sha shu sho she za ji zu ze zo zi ja ju jo je " +
+  "ta chi tsu te to ti tu cha chu cho che da de do di du " +
+  "na ni nu ne no nya nyu nyo ha hi fu he ho hya hyu hyo fa fi fe fo " +
+  "ba bi bu be bo bya byu byo pa pi pu pe po pya pyu pyo " +
+  "ma mi mu me mo mya myu myo ya yu yo ye ra ri ru re ro rya ryu ryo " +
+  "wa wi we wo va vi vu ve vo tsa tsi tse tso"
+).split(" ");
+const spokenWords: Record<string, string> = {
+  i: "a i",
+  you: "y u",
+  your: "y o a",
+  my: "m a i",
+  me: "m i",
+  we: "w i",
+  he: "h i",
+  she: "sh i",
+  be: "b i",
+  the: "z a",
+  to: "t u",
+  do: "d u",
+  one: "w a n",
+  are: "a",
+  eye: "a i",
+  by: "b a i",
+  love: "r a b",
+  heart: "h a t",
+  oh: "o",
+  ah: "a",
+  la: "r a",
+  of: "o b",
+  what: "w o t",
+  was: "w o z",
+  come: "k a m",
+  some: "s a m",
+  done: "d a n",
+  none: "n a n",
+};
+const spellings: Array<[string, string]> = [
+  ["tch", "ch"],
+  ["igh", "a i"],
+  ["ght", "t"],
+  ["ough", "o"],
+  ["sh", "sh"],
+  ["ch", "ch"],
+  ["ph", "f"],
+  ["ck", "k"],
+  ["wh", "w"],
+  ["qu", "k w"],
+  ["ts", "ts"],
+  ["ee", "i"],
+  ["ea", "i"],
+  ["oo", "u"],
+  ["ou", "a u"],
+  ["ow", "a u"],
+  ["ai", "e i"],
+  ["ay", "e i"],
+  ["ei", "e i"],
+  ["ey", "e i"],
+  ["oa", "o"],
+  ["oi", "o i"],
+  ["oy", "o i"],
+  ["au", "o"],
+  ["aw", "o"],
+  ["ew", "y u"],
+  ["ue", "u"],
+  ["ie", "i"],
+  ["x", "k s"],
+  ["q", "k"],
+  ["l", "r"],
+];
+const romajiSpellings: Array<[string, string]> = [
+  ["sh", "sh"],
+  ["ch", "ch"],
+  ["ts", "ts"],
+  ["l", "r"],
+  ["c", "k"],
+  ["q", "k"],
+  ["x", "k s"],
+];
+const longVowels: Record<string, string> = {
+  a: "EI",
+  e: "I",
+  i: "AI",
+  o: "O",
+  u: "YU",
+};
+const spokenEndings: Array<string> = ["the", "she", "there", "where", "were"];
+const softVowels: Record<string, string> = {
+  t: "o",
+  d: "o",
+  ch: "i",
+  j: "i",
+  sh: "u",
+};
 const ringCenter: number = 3000; // Hz
 const ringWidth: number = 300; // Hz
 const styles: Record<Singer, Style> = {
@@ -236,9 +443,8 @@ const keyNames: Array<string> = [
   "G",
   "G#",
 ];
-const barOptions: Array<number> = [1, 2, 4, 8, 16];
-const tempoMin: number = 160; // bpm
-const tempoMax: number = 180; // bpm
+const tempoMin: number = 80; // bpm
+const tempoMax: number = 300; // bpm
 const swingMax: number = 0.6;
 const noiseSeed: number = 90210;
 const bassBase: number = 55; // Hz
@@ -266,253 +472,229 @@ const padRelease: number = 0.8; // s
 const padDetune: number = 0.08; // semitones
 const padCutoff: number = 1400; // Hz
 const padLevel: number = 0.08;
-const echoSteps: number = 3;
-const drumMix: number = 0.8;
-const bassMix: number = 0.75;
-const padMix: number = 0.6;
+const scoopBend: number = 25; // 1/s
+const pianoPartials: number = 6;
+const pianoStretch: number = 0.0004;
+const pianoFade: number = 1.2; // 1/s
+const pianoDamp: number = 0.8; // 1/s
+const pianoChorus: number = 1.0009;
+const hammerFade: number = 300; // 1/s
+const hammerLevel: number = 0.15;
+const guitarPick: number = 0.5;
+const guitarSustain: number = 0.996;
+const guitarMute: number = 0.9;
+const bellRatio: number = 3.5;
+const bellDepth: number = 4;
+const bellBend: number = 3; // 1/s
+const bellFade: number = 2.5; // 1/s
+const organBars: Array<Array<number>> = [
+  [0.5, 0.5],
+  [1, 1],
+  [2, 0.6],
+  [3, 0.4],
+  [4, 0.3],
+  [6, 0.15],
+];
+const organSwirl: number = 0.15;
+const organSpin: number = 6.5; // Hz
+const organAttack: number = 0.004; // s
+const fluteAttack: number = 0.06; // s
+const fluteVibrato: number = 0.2; // semitones
+const fluteAir: number = 0.15;
+const fluteBreath: number = 0.25;
+const rollFloor: number = 0.45;
+const sweepDamp: number = 0.3;
+const riserLow: number = 300; // Hz
+const riserHigh: number = 6000; // Hz
+const riserToneLow: number = 200; // Hz
+const riserToneHigh: number = 1600; // Hz
+const fallLow: number = 150; // Hz
+const impactLength: number = 1.5; // s
+const impactLow: number = 45; // Hz
+const impactSweep: number = 110; // Hz
+const impactBend: number = 6; // 1/s
+const impactFade: number = 2.5; // 1/s
+const impactNoise: number = 10; // 1/s
+const zapLength: number = 0.3; // s
+const zapLow: number = 100; // Hz
+const zapHigh: number = 3000; // Hz
+const zapBend: number = 18; // 1/s
+const zapFade: number = 9; // 1/s
 const masterDrive: number = 1.1;
 const masterLevel: number = 0.9;
-const defaultBeat: Array<Array<string>> = [
-  [
-    "x.........x.....",
-    "x.x.......xx....",
-    "x.........x.....",
-    "x.x.......x.....",
-  ],
-  [
-    "....x.......x...",
-    "....x.......x...",
-    "....x.......x...",
-    "....x.....x.x.xx",
-  ],
-  [
-    ".......x.x....x.",
-    ".......x.......x",
-    ".......x.x....x.",
-    ".......x.x......",
-  ],
-  [
-    "x.x.x.x.x.x.x.xx",
-    "x.x.x.x.x.x.x.x.",
-    "x.x.x.x.x.x.x.xx",
-    "x.x.x.x.x.x.....",
-  ],
-  [
-    "................",
-    "................",
-    "................",
-    "................",
-  ],
+const tuning: number = 440; // Hz
+const tuningPitch: number = 69;
+const filterLow: number = 120; // Hz
+const filterRange: number = 160;
+const kitPitch: number = 60;
+const samplePitch: number = 60;
+const sampleFade: number = 0.01; // s
+const patches: Array<Patch> = [
+  { key: "drums", name: "Drum kit", family: "drum", lane: 0 },
+  { key: "sub", name: "Sub bass", family: "bass", lane: 0 },
+  { key: "reese", name: "Reese bass", family: "bass", lane: 1 },
+  { key: "pad", name: "Pad", family: "pad", lane: 0 },
+  ...instruments.map((instrument: Instrument, lane: number) => ({
+    key: instrument.tone as string,
+    name: instrument.name,
+    family: "tone" as Family,
+    lane: lane,
+  })),
+  { key: "vocals", name: "Vocals", family: "vocal", lane: 0 },
+  { key: "fx", name: "FX kit", family: "effect", lane: 0 },
+  { key: "sampler", name: "Sampler", family: "sample", lane: 0 },
 ];
-const defaultBass: Array<string> = [
-  "111111....666666",
-  "444444....555555",
-  "111111....666666",
-  "666666....777777",
-];
-const defaultPads: Array<string> = [
-  "1111111111111111",
-  "1111111111111111",
-  "6666666666666666",
-  "7777777777777777",
-];
-const defaultVocals: Array<string> = [
-  "8888888877776666",
-  "5555555555555...",
-  "3333444455556666",
-  "5555555555555555",
-];
-const defaultVowels: Array<number> = [0, 1];
 
-function defaultScore(): Score {
-  const bars: number = defaultBass.length;
-  const drums: Array<Array<number>> = defaultBeat.map((lane: Array<string>) => {
-    const steps: Array<number> = new Array();
+function isVowel(letter: string | undefined): boolean {
+  return letter !== undefined && "aeiou".includes(letter);
+}
 
-    for (let bar = 0; bar < bars; bar++) {
-      for (const mark of lane[bar % lane.length]!) {
-        steps.push(mark === "x" ? 1 : 0);
-      }
-    }
-
-    return steps;
-  });
-
-  function notes(rows: Array<string>): Array<number> {
-    const steps: Array<number> = new Array();
-
-    for (const row of rows) {
-      for (const mark of row) {
-        steps.push(mark === "." ? -1 : Number(mark) - 1);
-      }
-    }
-
-    return steps;
+function soundsOf(word: string, english: boolean): Array<string> {
+  if (english && spokenWords[word] !== undefined) {
+    return spokenWords[word]!.split(" ");
   }
 
-  return {
-    tempo: 172,
-    key: 0,
-    bars: bars,
-    swing: 0.1,
-    grit: 0.4,
-    space: 0.5,
-    bass: "sub",
-    drums: drums,
-    bassline: notes(defaultBass),
-    pads: notes(defaultPads),
-    kits: repeated([0], bars),
-    mutes: repeated([0], partCount),
-    vocals: notes(defaultVocals),
-    vowels: repeated(defaultVowels, bars * beatsPerBar),
-    voice: 0.6,
-    singer: "ritsu",
-    voicebank: vowels.map(() => null),
-  };
-}
+  let text: string = word;
 
-function stepCount(score: Score): number {
-  return score.bars * stepsPerBar;
-}
-
-function repeated(list: Array<number>, length: number): Array<number> {
-  const steps: Array<number> = new Array();
-
-  for (let index = 0; index < length; index++) {
-    steps.push(list.length === 0 ? 0 : list[index % list.length]!);
-  }
-
-  return steps;
-}
-
-function resizeScore(score: Score, bars: number): void {
-  const length: number = bars * stepsPerBar;
-
-  score.bars = bars;
-  score.drums = score.drums.map((lane: Array<number>) =>
-    repeated(lane, length),
-  );
-  score.bassline = repeated(score.bassline, length);
-  score.pads = repeated(score.pads, length);
-  score.kits = repeated(score.kits, bars);
-  score.vocals = repeated(score.vocals, length);
-  score.vowels = repeated(score.vowels, bars * beatsPerBar);
-}
-
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.min(Math.max(value, min), max)
-    : fallback;
-}
-
-function cleanSteps(
-  value: unknown,
-  length: number,
-  min: number,
-  max: number,
-  fallback: number,
-): Array<number> {
-  const list: Array<unknown> = Array.isArray(value) ? value : new Array();
-  const steps: Array<number> = new Array();
-
-  for (let index = 0; index < length; index++) {
-    steps.push(Math.round(clampNumber(list[index], min, max, fallback)));
-  }
-
-  return steps;
-}
-
-function cleanVowels(value: unknown, bars: number): Array<number> {
-  const list: Array<unknown> = Array.isArray(value) ? value : new Array();
-  const beats: number = bars * beatsPerBar;
-
-  if (list.length === 0) {
-    return repeated(defaultVowels, beats);
-  }
-
-  if (list.length === bars) {
-    return cleanSteps(
-      list.flatMap((entry: unknown) => {
-        const first: number = Math.round(
-          clampNumber(entry, 0, vowels.length - 1, 0),
-        );
-        const second: number = (first + 1) % vowels.length;
-
-        return [first, second, first, second];
-      }),
-      beats,
-      0,
-      vowels.length - 1,
-      0,
+  if (english) {
+    text = text.replace(
+      /th/g,
+      ["the", "this", "that", "they", "them", "then", "there", "these"].some(
+        (spoken: string) => spoken === word,
+      )
+        ? "Z"
+        : "S",
     );
+
+    const last: number = text.length - 1;
+
+    if (
+      text.length > 2 &&
+      text[last] === "e" &&
+      !isVowel(text[last - 1]) &&
+      !spokenEndings.includes(word)
+    ) {
+      const vowel: string = text[last - 2]!;
+      const consonant: string = text[last - 1]!;
+
+      text = text.slice(0, last);
+
+      if (isVowel(vowel) && !isVowel(text[last - 3]) && consonant !== "r") {
+        text = text.slice(0, last - 2) + longVowels[vowel] + consonant;
+      }
+    }
   }
 
-  return cleanSteps(list, beats, 0, vowels.length - 1, 0);
+  const sounds: Array<string> = new Array();
+  const rules: Array<[string, string]> = english ? spellings : romajiSpellings;
+  let index: number = 0;
+
+  while (index < text.length) {
+    const letter: string = text[index]!;
+    const next: string | undefined = text[index + 1];
+    const rule: [string, string] | undefined = rules.find(
+      ([spelling]: [string, string]) => text.startsWith(spelling, index),
+    );
+
+    if (letter !== letter.toLowerCase()) {
+      sounds.push(letter.toLowerCase());
+      index++;
+    } else if (letter === next && !isVowel(letter)) {
+      index++;
+    } else if (rule !== undefined) {
+      sounds.push(...rule[1].split(" "));
+      index += rule[0].length;
+    } else if (
+      english &&
+      letter === "r" &&
+      isVowel(text[index - 1]) &&
+      !isVowel(next)
+    ) {
+      index++;
+    } else if (english && letter === "c") {
+      sounds.push(next === "e" || next === "i" || next === "y" ? "s" : "k");
+      index++;
+    } else if (letter === "y") {
+      sounds.push(
+        isVowel(next) ? "y" : english && !/[aeiou]/.test(text) ? "a i" : "i",
+      );
+      index++;
+    } else if (
+      english &&
+      letter === "u" &&
+      next !== undefined &&
+      !isVowel(next) &&
+      next !== "r" &&
+      !isVowel(text[index + 2])
+    ) {
+      sounds.push("a");
+      index++;
+    } else {
+      sounds.push(letter);
+      index++;
+    }
+  }
+
+  return sounds.flatMap((sound: string) => sound.split(" "));
 }
 
-function repairScore(value: unknown): Score {
-  const fallback: Score = defaultScore();
-
-  if (typeof value !== "object" || value === null) {
-    return fallback;
+function joinSyllable(consonant: string, vowel: string): string {
+  if (consonant === "y" && (vowel === "i" || vowel === "e")) {
+    return vowel === "i" ? "i" : "ye";
   }
 
-  const stale: Partial<Record<keyof Score, unknown>> = value;
-  const bars: number = barOptions.includes(stale.bars as number)
-    ? (stale.bars as number)
-    : fallback.bars;
-  const length: number = bars * stepsPerBar;
-  const drums: Array<unknown> = Array.isArray(stale.drums)
-    ? stale.drums
-    : new Array();
+  if (consonant === "w" && vowel === "u") {
+    return "u";
+  }
 
-  return {
-    tempo: Math.round(
-      clampNumber(stale.tempo, tempoMin, tempoMax, fallback.tempo),
-    ),
-    key: Math.round(clampNumber(stale.key, 0, keyNames.length - 1, 0)),
-    bars: bars,
-    swing: clampNumber(stale.swing, 0, swingMax, fallback.swing),
-    grit: clampNumber(stale.grit, 0, 1, fallback.grit),
-    space: clampNumber(stale.space, 0, 1, fallback.space),
-    bass: stale.bass === "reese" ? "reese" : "sub",
-    drums: drumLanes.map((_: string, lane: number) =>
-      cleanSteps(drums[lane], length, 0, 1, 0),
-    ),
-    bassline: cleanSteps(stale.bassline, length, -1, noteRows - 1, -1),
-    pads: cleanSteps(stale.pads, length, -1, noteRows - 1, -1),
-    kits: cleanSteps(stale.kits, bars, 0, kits.length - 1, 0),
-    mutes: cleanSteps(stale.mutes, partCount, 0, 1, 0),
-    vocals: cleanSteps(stale.vocals, length, -1, noteRows - 1, -1),
-    vowels: cleanVowels(stale.vowels, bars),
-    voice: clampNumber(stale.voice, 0, 1, fallback.voice),
-    singer:
-      stale.singer === "choir" ||
-      stale.singer === "bank" ||
-      stale.singer === "ritsu"
-        ? stale.singer
-        : "lead",
-    voicebank: vowels.map((_: Vowel, index: number) => {
-      const entry: unknown = Array.isArray(stale.voicebank)
-        ? stale.voicebank[index]
-        : null;
+  if (consonant === "h" && vowel === "u") {
+    return "fu";
+  }
 
-      return typeof entry === "string" ? entry : null;
-    }),
-  };
+  const syllable: string = consonant + vowel;
+
+  return syllableNames.includes(syllable) ? syllable : vowel;
+}
+
+function syllablesOf(lyrics: string): Array<string> {
+  const syllables: Array<string> = new Array();
+
+  for (const word of lyrics.toLowerCase().split(/[^a-z-]+/)) {
+    const english: boolean = !word.includes("-");
+    const sounds: Array<string> = word
+      .split("-")
+      .filter((part: string) => part.length > 0)
+      .flatMap((part: string) => soundsOf(part, english));
+
+    for (let index = 0; index < sounds.length; index++) {
+      const sound: string = sounds[index]!;
+      const next: string | undefined = sounds[index + 1];
+
+      if (isVowel(sound)) {
+        syllables.push(sound);
+      } else if (
+        next === "y" &&
+        isVowel(sounds[index + 2]) &&
+        syllableNames.includes(sound + "y" + sounds[index + 2])
+      ) {
+        syllables.push(sound + "y" + sounds[index + 2]);
+        index += 2;
+      } else if (isVowel(next)) {
+        syllables.push(joinSyllable(sound, next!));
+        index++;
+      } else if (sound === "n") {
+        syllables.push("n");
+      } else if (sound !== "y" && sound !== "w" && sound !== "h") {
+        syllables.push(joinSyllable(sound, softVowels[sound] ?? "u"));
+      }
+    }
+  }
+
+  return syllables;
 }
 
 function degreeSemitones(degree: number): number {
   return scaleSteps[degree % scaleSteps.length]! + 12 * Math.floor(degree / 7);
-}
-
-function noteName(score: Score, degree: number): string {
-  return keyNames[(score.key + degreeSemitones(degree)) % keyNames.length]!;
 }
 
 function rootFrequency(key: number): number {
@@ -523,54 +705,158 @@ function stepLength(score: Score): number {
   return 60 / score.tempo / 4;
 }
 
+function songSteps(score: Score): number {
+  const end: number = score.clips.reduce(
+    (last: number, clip: Clip) => Math.max(last, clip.step + clip.length),
+    0,
+  );
+
+  return Math.max(Math.ceil(end / stepsPerBar), 1) * stepsPerBar;
+}
+
+function songBars(score: Score): number {
+  return songSteps(score) / stepsPerBar;
+}
+
 function scoreLength(score: Score): number {
-  return stepCount(score) * stepLength(score);
+  return songSteps(score) * stepLength(score);
 }
 
-function stepTime(score: Score, step: number): number {
-  return (step + (step % 2 === 1 ? score.swing * 0.5 : 0)) * stepLength(score);
+function patchOf(key: string): Patch {
+  return patches.find((patch: Patch) => patch.key === key) ?? patches[0]!;
 }
 
-function runsOf(line: Array<number>): Array<Run> {
-  const runs: Array<Run> = new Array();
+function kitLanes(family: Family): Array<string> {
+  return family === "drum"
+    ? drumLanes
+    : family === "effect"
+      ? effectLanes
+      : new Array();
+}
 
-  for (let step = 0; step < line.length; step++) {
-    const degree: number = line[step]!;
+function kitLane(family: Family, pitch: number): number {
+  return Math.min(
+    Math.max(kitPitch - pitch, 0),
+    Math.max(kitLanes(family).length - 1, 0),
+  );
+}
 
-    if (degree < 0) {
+function midiFrequency(pitch: number): number {
+  return tuning * 2 ** ((pitch - tuningPitch) / 12);
+}
+
+function arrangedNotes(score: Score, channel: string): Array<Placed> {
+  const placed: Array<Placed> = new Array();
+
+  for (const clip of score.clips) {
+    const pattern: Sequence | undefined = score.patterns.find(
+      (entry: Sequence) => entry.id === clip.pattern,
+    );
+
+    if (pattern === undefined) {
       continue;
     }
 
-    const last: Run | undefined = runs[runs.length - 1];
+    const notes: Array<Note> = pattern.notes[channel] ?? new Array();
+    const span: number = pattern.bars * stepsPerBar;
 
-    if (
-      last !== undefined &&
-      last.degree === degree &&
-      last.start + last.length === step
-    ) {
-      last.length++;
-    } else {
-      runs.push({ start: step, length: 1, degree: degree });
+    for (let offset = 0; offset < clip.length; offset += span) {
+      notes.forEach((note: Note, index: number) => {
+        const step: number = offset + note.step;
+
+        if (note.step < span && step < clip.length) {
+          placed.push({
+            note: {
+              ...note,
+              length: Math.min(note.length, clip.length - step),
+            },
+            step: clip.step + step,
+            pattern: pattern.id,
+            index: index,
+          });
+        }
+      });
     }
   }
 
-  return runs;
+  return placed.sort(
+    (first: Placed, second: Placed) =>
+      first.step - second.step || second.note.pitch - first.note.pitch,
+  );
 }
 
-function phrasesOf(line: Array<number>): Array<Phrase> {
+function lyricsOf(score: Score, placed: Array<Placed>): Array<string | null> {
+  const syllables: Array<string> =
+    score.singer === "ritsu" ? syllablesOf(score.lyrics) : new Array();
+  let next: number = 0;
+
+  return placed.map((entry: Placed, index: number) =>
+    index > 0 && placed[index - 1]!.step === entry.step
+      ? null
+      : (syllables[next++] ?? null),
+  );
+}
+
+function lineOf(
+  placed: Array<Placed>,
+  sung: Array<string | null>,
+  steps: number,
+): Line {
+  const line: Line = {
+    pitches: new Array(steps).fill(-1),
+    vowels: new Array(steps).fill(0),
+    words: sung.some((word: string | null) => word !== null)
+      ? new Array(steps).fill(null)
+      : new Array(),
+  };
+
+  placed.forEach((entry: Placed, index: number) => {
+    const start: number = Math.floor(entry.step);
+    const end: number = Math.min(
+      Math.ceil(entry.step + entry.note.length),
+      steps,
+    );
+
+    for (let step = start; step < end; step++) {
+      line.pitches[step] = entry.note.pitch;
+      line.vowels[step] = entry.note.vowel;
+    }
+
+    if (line.words.length > 0 && start < steps && sung[index] !== null) {
+      line.words[start] = sung[index]!;
+    }
+  });
+
+  return line;
+}
+
+function stepTime(score: Score, step: number): number {
+  return (
+    (step + (Math.floor(step) % 2 === 1 ? score.swing * 0.5 : 0)) *
+    stepLength(score)
+  );
+}
+
+function phrasesOf(line: Line): Array<Phrase> {
   const phrases: Array<Phrase> = new Array();
 
-  for (let step = 0; step < line.length; step++) {
+  for (let step = 0; step < line.pitches.length; step++) {
     const last: Phrase | undefined = phrases[phrases.length - 1];
+    const pitch: number = line.pitches[step]!;
 
-    if (line[step]! < 0) {
+    if (pitch < 0) {
       continue;
     }
 
     if (last !== undefined && last.start + last.notes.length === step) {
-      last.notes.push(line[step]!);
+      last.notes.push(pitch);
+      last.vowels.push(line.vowels[step]!);
     } else {
-      phrases.push({ start: step, notes: [line[step]!] });
+      phrases.push({
+        start: step,
+        notes: [pitch],
+        vowels: [line.vowels[step]!],
+      });
     }
   }
 
@@ -674,6 +960,34 @@ function ride(random: () => number): Voice {
   };
 }
 
+function hit(
+  kit: Kit,
+  lane: number,
+  rate: number,
+  random: () => number,
+): [number, Voice] {
+  if (lane === 0) {
+    return [kickLength, kick(kit, rate, random)];
+  }
+
+  if (lane === 1) {
+    return [snareLength, snare(kit, random, kit.snareFade, 1)];
+  }
+
+  if (lane === 2) {
+    return [
+      snareLength,
+      snare(kit, random, kit.snareFade * ghostFade, ghostLevel),
+    ];
+  }
+
+  if (lane === 3) {
+    return [hatLength, hat(kit, random)];
+  }
+
+  return [rideLength, ride(random)];
+}
+
 function envelope(
   time: number,
   length: number,
@@ -742,6 +1056,349 @@ function padVoice(frequency: number, length: number, rate: number): Voice {
   };
 }
 
+function scaled(voice: Voice, level: number): Voice {
+  return (time: number) => voice(time) * level;
+}
+
+function vibratoAt(time: number, depth: number): number {
+  return (
+    depth *
+    Math.min(Math.max((time - vibratoDelay) / vibratoRamp, 0), 1) *
+    Math.sin(Math.PI * 2 * vibratoRate * time)
+  );
+}
+
+function swarmVoice(
+  swarm: Swarm,
+  frequency: number,
+  length: number,
+  release: number,
+  rate: number,
+): Voice {
+  const smoothing: number = 1 - Math.exp((-Math.PI * 2 * swarm.cutoff) / rate);
+  const phases: Array<number> = swarm.detunes.map(() => 0);
+  let filtered: number = 0;
+
+  return (time: number) => {
+    const bend: number =
+      -swarm.scoop * Math.exp(-time * scoopBend) +
+      vibratoAt(time, swarm.vibrato);
+    let sum: number = 0;
+
+    for (let voice = 0; voice < phases.length; voice++) {
+      const phase: number =
+        (phases[voice]! +
+          (frequency * 2 ** ((swarm.detunes[voice]! + bend) / 12)) / rate) %
+        1;
+
+      phases[voice] = phase;
+      sum += swarm.pulse ? saw(phase) - saw(phase + 0.5) : saw(phase);
+    }
+
+    filtered += smoothing * (sum / phases.length - filtered);
+
+    return (
+      (Math.tanh(filtered * swarm.drive) / Math.tanh(swarm.drive)) *
+      envelope(time, length, swarm.attack, release)
+    );
+  };
+}
+
+function pianoVoice(
+  frequency: number,
+  length: number,
+  release: number,
+  rate: number,
+  random: () => number,
+): Voice {
+  const tones: Array<number> = new Array();
+
+  for (let partial = 1; partial <= pianoPartials; partial++) {
+    const tone: number =
+      frequency * partial * Math.sqrt(1 + pianoStretch * partial * partial);
+
+    if (tone < rate / 2) {
+      tones.push(tone);
+    }
+  }
+
+  return (time: number) => {
+    let sum: number =
+      Math.sin(Math.PI * 2 * frequency * pianoChorus * time) *
+      Math.exp(-time * (pianoFade + pianoDamp));
+
+    for (let partial = 0; partial < tones.length; partial++) {
+      sum +=
+        (Math.sin(Math.PI * 2 * tones[partial]! * time) *
+          Math.exp(-time * (pianoFade + (partial + 1) * pianoDamp))) /
+        (partial + 1);
+    }
+
+    return (
+      (sum + random() * Math.exp(-time * hammerFade) * hammerLevel) *
+      envelope(time, length, noteAttack, release)
+    );
+  };
+}
+
+function guitarVoice(
+  frequency: number,
+  length: number,
+  rate: number,
+  random: () => number,
+): Voice {
+  const total: number = Math.max(rate / frequency, 3);
+  let size: number = Math.floor(total - 0.5);
+  let fraction: number = total - 0.5 - size;
+
+  if (fraction < 0.1) {
+    size--;
+    fraction++;
+  }
+
+  const coefficient: number = (1 - fraction) / (1 + fraction);
+  const string: Float32Array = new Float32Array(size);
+  let position: number = 0;
+  let previous: number = 0;
+  let passIn: number = 0;
+  let passOut: number = 0;
+  let pick: number = 0;
+
+  for (let index = 0; index < size; index++) {
+    pick += (random() - pick) * guitarPick;
+    string[index] = pick;
+  }
+
+  return (time: number) => {
+    const sample: number = string[position]!;
+    const averaged: number =
+      (sample + previous) * 0.5 * (time < length ? guitarSustain : guitarMute);
+    const passed: number =
+      coefficient * averaged + passIn - coefficient * passOut;
+
+    previous = sample;
+    passIn = averaged;
+    passOut = passed;
+    string[position] = passed;
+    position = (position + 1) % size;
+
+    return sample;
+  };
+}
+
+function bellVoice(frequency: number, length: number, release: number): Voice {
+  return (time: number) =>
+    Math.sin(
+      Math.PI * 2 * frequency * time +
+        bellDepth *
+          Math.exp(-time * bellBend) *
+          Math.sin(Math.PI * 2 * frequency * bellRatio * time),
+    ) *
+    Math.exp(-time * bellFade) *
+    envelope(time, length, noteAttack, release);
+}
+
+function organVoice(
+  frequency: number,
+  length: number,
+  release: number,
+  random: () => number,
+): Voice {
+  return (time: number) => {
+    let sum: number = 0;
+
+    for (const [ratio, level] of organBars as Array<[number, number]>) {
+      sum += Math.sin(Math.PI * 2 * frequency * ratio * time) * level;
+    }
+
+    return (
+      (sum * (1 + organSwirl * Math.sin(Math.PI * 2 * organSpin * time)) +
+        random() * Math.exp(-time * clickFade) * 0.3) *
+      envelope(time, length, organAttack, release)
+    );
+  };
+}
+
+function fluteVoice(
+  frequency: number,
+  length: number,
+  release: number,
+  rate: number,
+  random: () => number,
+): Voice {
+  let phase: number = 0;
+  let air: number = 0;
+
+  return (time: number) => {
+    phase =
+      (phase + (frequency * 2 ** (vibratoAt(time, fluteVibrato) / 12)) / rate) %
+      1;
+    air += (random() - air) * fluteAir;
+
+    return (
+      (Math.sin(Math.PI * 2 * phase) +
+        Math.sin(Math.PI * 4 * phase) * 0.12 +
+        air * fluteBreath) *
+      envelope(time, length, fluteAttack, release)
+    );
+  };
+}
+
+function instrumentOf(tone: Tone): Instrument {
+  return instruments.find(
+    (instrument: Instrument) => instrument.tone === tone,
+  )!;
+}
+
+function toneVoice(
+  tone: Tone,
+  frequency: number,
+  length: number,
+  rate: number,
+  random: () => number,
+): Voice {
+  const { level, release } = instrumentOf(tone);
+  const swarm: Swarm | undefined = swarms[tone];
+
+  if (swarm !== undefined) {
+    return scaled(swarmVoice(swarm, frequency, length, release, rate), level);
+  }
+
+  if (tone === "piano") {
+    return scaled(pianoVoice(frequency, length, release, rate, random), level);
+  }
+
+  if (tone === "guitar") {
+    return scaled(guitarVoice(frequency, length, rate, random), level);
+  }
+
+  if (tone === "bell") {
+    return scaled(bellVoice(frequency, length, release), level);
+  }
+
+  if (tone === "organ") {
+    return scaled(organVoice(frequency, length, release, random), level);
+  }
+
+  return scaled(fluteVoice(frequency, length, release, rate, random), level);
+}
+
+function sweep(
+  from: number,
+  to: number,
+  length: number,
+  rate: number,
+  random: () => number,
+): Voice {
+  let low: number = 0;
+  let band: number = 0;
+
+  return (time: number) => {
+    const cutoff: number = Math.min(
+      from * (to / from) ** Math.min(time / length, 1),
+      rate / 6,
+    );
+    const tune: number = 2 * Math.sin((Math.PI * cutoff) / rate);
+    const high: number = random() - low - sweepDamp * band;
+
+    band += tune * high;
+    low += tune * band;
+
+    return band;
+  };
+}
+
+function riser(length: number, rate: number, random: () => number): Voice {
+  const noise: Voice = sweep(riserLow, riserHigh, length, rate, random);
+  let phase: number = 0;
+
+  return (time: number) => {
+    const progress: number = Math.min(time / length, 1);
+
+    phase =
+      (phase +
+        (riserToneLow * (riserToneHigh / riserToneLow) ** progress) / rate) %
+      1;
+
+    return (
+      (noise(time) * 0.6 + Math.sin(Math.PI * 2 * phase) * 0.25) * progress ** 2
+    );
+  };
+}
+
+function reverse(length: number, random: () => number): Voice {
+  let last: number = 0;
+
+  return (time: number) => {
+    const sample: number = random();
+    const bright: number = sample - last;
+
+    last = sample;
+
+    return bright * 0.35 * Math.min(time / length, 1) ** 3;
+  };
+}
+
+function impact(rate: number, random: () => number): Voice {
+  let phase: number = 0;
+  let rumble: number = 0;
+
+  return (time: number) => {
+    phase =
+      (phase +
+        (impactLow + impactSweep * Math.exp(-time * impactBend)) / rate) %
+      1;
+    rumble += (random() - rumble) * 0.05;
+
+    return (
+      Math.sin(Math.PI * 2 * phase) * Math.exp(-time * impactFade) +
+      rumble * Math.exp(-time * impactNoise) * 2
+    );
+  };
+}
+
+function fall(length: number, rate: number, random: () => number): Voice {
+  const noise: Voice = sweep(riserHigh, fallLow, length, rate, random);
+
+  return (time: number) =>
+    noise(time) * 0.6 * (1 - Math.min(time / length, 1)) ** 2;
+}
+
+function zap(rate: number): Voice {
+  let phase: number = 0;
+
+  return (time: number) => {
+    phase = (phase + (zapLow + zapHigh * Math.exp(-time * zapBend)) / rate) % 1;
+
+    return (saw(phase) - saw(phase + 0.5)) * 0.2 * Math.exp(-time * zapFade);
+  };
+}
+
+function effect(
+  lane: number,
+  bar: number,
+  rate: number,
+  random: () => number,
+): [number, boolean, Voice] {
+  if (lane === 0) {
+    return [bar, true, riser(bar, rate, random)];
+  }
+
+  if (lane === 1) {
+    return [bar / 2, true, reverse(bar / 2, random)];
+  }
+
+  if (lane === 2) {
+    return [impactLength, false, impact(rate, random)];
+  }
+
+  if (lane === 3) {
+    return [bar, false, fall(bar, rate, random)];
+  }
+
+  return [zapLength, false, zap(rate)];
+}
+
 function glottalFlow(phase: number, style: Style): number {
   if (phase < style.open) {
     return 0.5 * (1 - Math.cos((Math.PI * phase) / style.open));
@@ -780,7 +1437,7 @@ function vocalVoice(
   const shape: Array<Array<number>> = targetsOf(first).map(
     (formant: Array<number>) => formant.slice(),
   );
-  let pitch: number = degreeSemitones(phrase.notes[0]!) - vocalScoop;
+  let pitch: number = phrase.notes[0]! - vocalScoop;
   let held: number = phrase.notes[0]!;
   let noteStart: number = 0;
   let phase: number = 0;
@@ -796,9 +1453,7 @@ function vocalVoice(
   }
 
   function vowelAt(index: number): Vowel {
-    return vowels[
-      score.vowels[Math.floor((phrase.start + index) / stepsPerBeat)] ?? 0
-    ]!;
+    return vowels[phrase.vowels[index] ?? 0] ?? vowels[0]!;
   }
 
   return (time: number) => {
@@ -813,7 +1468,7 @@ function vocalVoice(
       noteStart = time;
     }
 
-    pitch += (degreeSemitones(degree) - pitch) * glide;
+    pitch += (degree - pitch) * glide;
     jitter += (jitterGoal - jitter) * wander;
     shimmer += (shimmerGoal - shimmer) * wander;
 
@@ -825,7 +1480,7 @@ function vocalVoice(
       ) *
       Math.sin(Math.PI * 2 * vibratoRate * sway * time + offset);
     const frequency: number =
-      root * vocalRange * 2 ** ((pitch + vibrato + jitter + detune) / 12);
+      root * 2 ** ((pitch + vibrato + jitter + detune) / 12);
 
     phase += frequency / rate;
 
@@ -940,14 +1595,6 @@ function echo(pads: Float32Array, delay: number, space: number): void {
   }
 }
 
-function audible(
-  score: Score,
-  line: Array<number>,
-  part: number,
-): Array<number> {
-  return score.mutes[part] === 1 ? new Array() : line;
-}
-
 function detectPeriod(samples: Float32Array, rate: number): number | null {
   const size: number = Math.round(pitchWindow * rate);
   const from: number = Math.max(Math.floor(samples.length / 2 - size / 2), 0);
@@ -1047,6 +1694,7 @@ function analyseBank(samples: Float32Array, rate: number): Bank | null {
         ? null
         : {
             samples: samples,
+            onset: 0,
             marks: marks,
             period: period,
             pitch: rate / period,
@@ -1059,13 +1707,71 @@ function analyseBank(samples: Float32Array, rate: number): Bank | null {
   return bank;
 }
 
+function analyseClip(samples: Float32Array, rate: number): Bank | null {
+  const cached: Bank | null | undefined = clipped.get(samples);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const vowelStart: number = Math.round(lyricLead * rate);
+  const period: number | null =
+    samples.length < vowelStart + bankMinimum * rate * 0.5
+      ? null
+      : detectPeriod(samples.subarray(vowelStart), rate);
+  let bank: Bank | null = null;
+
+  if (period !== null) {
+    const end: number = samples.length - period;
+    const marks: Array<number> = new Array();
+    let onset: number = 0;
+    let mark: number = peakAt(samples, period, period * 2);
+    let energy: number = 0;
+
+    while (onset < vowelStart && samples[onset] === 0) {
+      onset++;
+    }
+
+    while (mark + period * (1 + markReach) < end) {
+      marks.push(mark);
+      mark = peakAt(
+        samples,
+        mark + Math.round(period * (1 - markReach)),
+        mark + Math.round(period * (1 + markReach)),
+      );
+    }
+
+    for (let index = vowelStart; index < end; index++) {
+      energy += samples[index]! ** 2;
+    }
+
+    const loudness: number = Math.sqrt(energy / Math.max(end - vowelStart, 1));
+
+    bank =
+      marks.length < 4 || loudness === 0
+        ? null
+        : {
+            samples: samples,
+            onset: onset,
+            marks: marks,
+            period: period,
+            pitch: rate / period,
+            level: bankLevel / loudness,
+          };
+  }
+
+  clipped.set(samples, bank);
+
+  return bank;
+}
+
 function bounce(count: number, span: number): number {
   if (span <= 1) {
     return 0;
   }
 
   const cycle: number = (span - 1) * 2;
-  const position: number = count % cycle;
+  const position: number = ((count % cycle) + cycle) % cycle;
 
   return position < span ? position : cycle - position;
 }
@@ -1091,66 +1797,143 @@ function addGrain(
   }
 }
 
-function bankOctave(score: Score, root: number, set: Array<Bank>): number {
-  const notes: Array<number> = score.vocals.filter(
-    (degree: number) => degree >= 0,
-  );
+function wordMark(word: Word, position: number): number {
+  const bank: Bank = word.bank!;
+  const first: number = bank.marks[word.sustain]!;
+  let found: number = 0;
+
+  if (position >= first) {
+    return (
+      word.sustain +
+      bounce(
+        Math.round((position - first) / bank.period),
+        word.last - word.sustain + 1,
+      )
+    );
+  }
+
+  while (found + 1 < word.sustain && bank.marks[found + 1]! <= position) {
+    found++;
+  }
+
+  return found;
+}
+
+function speakerAt(words: Array<Word>, time: number): Word | null {
+  let found: Word | null = null;
+
+  for (const word of words) {
+    if (time >= word.start) {
+      found = word;
+    }
+  }
+
+  return found;
+}
+
+function bankOctave(pitches: Array<number>, set: Array<Bank>): number {
+  const notes: Array<number> = pitches.filter((pitch: number) => pitch >= 0);
   const middle: number =
-    notes.reduce(
-      (total: number, degree: number) => total + degreeSemitones(degree),
-      0,
-    ) / Math.max(notes.length, 1);
+    notes.reduce((total: number, pitch: number) => total + pitch, 0) /
+    Math.max(notes.length, 1);
   const pitch: number =
     set.reduce((total: number, bank: Bank) => total + bank.pitch, 0) /
-    set.length;
+    Math.max(set.length, 1);
   const octave: number =
-    2 ** Math.round(Math.log2(pitch / (root * 2 ** (middle / 12))));
+    2 ** Math.round(Math.log2(pitch / midiFrequency(middle)));
 
-  return Math.min(Math.max(octave, 1), octaveMost);
+  return Math.min(Math.max(octave, 1 / octaveMost), octaveMost);
 }
 
 function singPhrase(
   target: Float32Array,
   score: Score,
   phrase: Phrase,
-  root: number,
+  base: number,
   set: Array<Bank | null>,
+  sung: Array<string | null>,
+  clips: Map<string, Bank | null>,
   random: () => number,
   rate: number,
 ): void {
   const style: Style = styles.bank;
   const step: number = stepLength(score);
   const length: number = phrase.notes.length * step;
-  const total: number = Math.round((length + vocalRelease) * rate);
-  const begin: number = Math.round(stepTime(score, phrase.start) * rate);
+  const lead: number = sung.length > 0 ? lyricLead : 0;
+  const attack: number = sung.length > 0 ? lyricAttack : vocalAttack;
+  const total: number = Math.round((lead + length + vocalRelease) * rate);
+  const begin: number = Math.round(
+    (stepTime(score, phrase.start) - lead) * rate,
+  );
   const glide: number = 1 - Math.exp(-1 / (vocalGlide * rate));
   const wander: number = 1 - Math.exp(-1 / (wanderTime * rate));
   const wanderEvery: number = Math.max(Math.round(wanderTime * rate), 1);
-  const ready: Array<Bank> = set.filter(
-    (bank: Bank | null): bank is Bank => bank !== null,
-  );
-  const octave: number = bankOctave(score, root, ready);
   const frequencies: Float32Array = new Float32Array(total);
   const weights: Array<number> = set.map(() => 0);
-  let pitch: number = degreeSemitones(phrase.notes[0]!) - vocalScoop;
+  const words: Array<Word> = new Array();
+  let sungVowel: number = -1;
+  const sungVowels: Array<number> = phrase.notes.map(
+    (_: number, index: number) => {
+      const syllable: string | null = sung[phrase.start + index] ?? null;
+
+      if (syllable !== null) {
+        const bank: Bank | null = clips.get(syllable) ?? null;
+
+        const settled: number = (lyricLead + lyricHold) * rate;
+        const tail: number =
+          bank === null ? 0 : bank.samples.length - lyricTail * rate;
+        const sustain: number =
+          bank === null
+            ? 0
+            : bank.marks.findIndex((mark: number) => mark >= settled);
+        const last: number =
+          bank === null
+            ? 0
+            : bank.marks.filter((mark: number) => mark <= tail).length - 1;
+
+        sungVowel = vowelOrder.indexOf(syllable[syllable.length - 1]!);
+        words.push({
+          at: index * step,
+          start:
+            bank === null
+              ? index * step
+              : index * step - lyricLead + bank.onset / rate,
+          bank: bank,
+          sustain: sustain < 0 ? Math.max(last, 0) : sustain,
+          last: Math.max(last, sustain),
+        });
+      }
+
+      return sungVowel;
+    },
+  );
+  let pitch: number = phrase.notes[0]! - vocalScoop;
   let held: number = phrase.notes[0]!;
   let noteStart: number = 0;
   let jitter: number = 0;
   let jitterGoal: number = 0;
 
+  function noteAt(time: number): number {
+    return Math.min(
+      Math.max(Math.floor(time / step), 0),
+      phrase.notes.length - 1,
+    );
+  }
+
   function voiceAt(index: number): number {
     const wanted: number =
-      score.vowels[Math.floor((phrase.start + index) / stepsPerBeat)] ?? 0;
+      sungVowels[index]! >= 0
+        ? sungVowels[index]!
+        : (phrase.vowels[index] ?? 0);
 
-    return set[wanted] !== null
+    return set[wanted] !== null && set[wanted] !== undefined
       ? wanted
       : set.findIndex((bank: Bank | null) => bank !== null);
   }
 
   for (let count = 0; count < total; count++) {
-    const time: number = count / rate;
-    const degree: number =
-      phrase.notes[Math.min(Math.floor(time / step), phrase.notes.length - 1)]!;
+    const time: number = count / rate - lead;
+    const degree: number = phrase.notes[noteAt(time)]!;
 
     if (degree !== held) {
       held = degree;
@@ -1161,7 +1944,7 @@ function singPhrase(
       jitterGoal = random() * jitterDepth;
     }
 
-    pitch += (degreeSemitones(degree) - pitch) * glide;
+    pitch += (degree - pitch) * glide;
     jitter += (jitterGoal - jitter) * wander;
 
     const vibrato: number =
@@ -1172,26 +1955,30 @@ function singPhrase(
       ) *
       Math.sin(Math.PI * 2 * vibratoRate * time);
 
-    frequencies[count] = root * octave * 2 ** ((pitch + vibrato + jitter) / 12);
+    frequencies[count] = base * 2 ** ((pitch + vibrato + jitter) / 12);
   }
 
   weights[voiceAt(0)] = 1;
 
   for (let at = 0; at < total;) {
     const spacing: number = rate / frequencies[Math.floor(at)]!;
-    const time: number = at / rate;
-    const current: number = voiceAt(
-      Math.min(Math.floor(time / step), phrase.notes.length - 1),
-    );
+    const time: number = at / rate - lead;
+    const current: number = voiceAt(noteAt(time));
     const fade: number = 1 - Math.exp(-spacing / (blendTime * rate));
     const level: number =
-      envelope(time, length, vocalAttack, vocalRelease) *
+      envelope(time, length, attack, vocalRelease) *
       (1 + random() * shimmerDepth * 0.5);
+    const speaking: boolean = (speakerAt(words, time)?.bank ?? null) !== null;
+    const release: number = Math.max(
+      Math.min(1 + (length - time) / vocalRelease, 1),
+      0,
+    );
 
     for (let voice = 0; voice < set.length; voice++) {
       const bank: Bank | null = set[voice]!;
 
-      weights[voice]! += ((voice === current ? 1 : 0) - weights[voice]!) * fade;
+      weights[voice]! +=
+        ((voice === current && !speaking ? 1 : 0) - weights[voice]!) * fade;
 
       if (bank === null || weights[voice]! < 0.001) {
         continue;
@@ -1206,102 +1993,222 @@ function singPhrase(
       );
     }
 
+    for (let index = 0; index < words.length; index++) {
+      const word: Word = words[index]!;
+      const next: Word | undefined = words[index + 1];
+      const since: number = time - word.at + lyricLead;
+
+      if (word.bank === null || since < 0) {
+        continue;
+      }
+
+      const weight: number =
+        release *
+        (next === undefined || time < next.start
+          ? 1
+          : Math.exp(-(time - next.start) / blendTime));
+
+      if (weight < 0.001) {
+        continue;
+      }
+
+      addGrain(
+        target,
+        begin + Math.round(at),
+        word.bank,
+        word.bank.marks[wordMark(word, since * rate)]!,
+        weight * word.bank.level * (spacing / word.bank.period),
+      );
+    }
+
     at += spacing;
   }
 }
 
-function renderScore(
-  score: Score,
-  rate: number,
-  voices: Array<Float32Array | null> = new Array(),
-): Float32Array<ArrayBuffer> {
-  const total: number = Math.max(Math.round(scoreLength(score) * rate), 1);
-  const drums: Float32Array = new Float32Array(total);
-  const bass: Float32Array = new Float32Array(total);
-  const pads: Float32Array = new Float32Array(total);
-  const vocals: Float32Array = new Float32Array(total);
-  const mix: Float32Array<ArrayBuffer> = new Float32Array(total);
-  const random: () => number = createNoise();
-  const step: number = stepLength(score);
-  const root: number = rootFrequency(score.key);
+function balance(pan: number): [number, number] {
+  return [Math.min(1 - pan, 1), Math.min(1 + pan, 1)];
+}
 
-  for (let index = 0; index < stepCount(score); index++) {
-    const bar: number = Math.floor(index / stepsPerBar);
+function smooth(samples: Float32Array, filter: number, rate: number): void {
+  const amount: number =
+    1 - Math.exp((-Math.PI * 2 * filterLow * filterRange ** filter) / rate);
+  let first: number = 0;
+  let second: number = 0;
 
-    if (score.mutes[0] === 1) {
-      break;
-    }
-
-    const kit: Kit = kits[score.kits[bar]!]!;
-    const time: number = stepTime(score, index);
-    const hits: Array<[number, Voice]> = [
-      [kickLength, kick(kit, rate, random)],
-      [snareLength, snare(kit, random, kit.snareFade, 1)],
-      [snareLength, snare(kit, random, kit.snareFade * ghostFade, ghostLevel)],
-      [hatLength, hat(kit, random)],
-      [rideLength, ride(random)],
-    ];
-
-    for (let lane = 0; lane < hits.length; lane++) {
-      if (score.drums[lane]?.[index] === 1) {
-        place(drums, time, hits[lane]![0], rate, hits[lane]![1]);
-      }
-    }
+  for (let index = 0; index < samples.length; index++) {
+    first += (samples[index]! - first) * amount;
+    second += (first - second) * amount;
+    samples[index] = second;
   }
+}
 
-  for (const run of runsOf(audible(score, score.bassline, 1))) {
-    const length: number = run.length * step;
+function playChannel(
+  target: Float32Array,
+  score: Score,
+  family: Family,
+  lane: number,
+  kit: Kit,
+  placed: Array<Placed>,
+  rate: number,
+  random: () => number,
+): void {
+  const step: number = stepLength(score);
 
-    place(
-      bass,
-      stepTime(score, run.start),
-      length,
-      rate,
-      bassVoice(
-        score.bass,
-        root * 2 ** (degreeSemitones(run.degree) / 12),
+  for (const { note, step: at } of placed) {
+    const time: number = stepTime(score, at);
+    const length: number = note.length * step;
+
+    if (family === "drum") {
+      const hits: number =
+        note.roll > 1 ? Math.max(Math.round(note.roll * note.length), 1) : 1;
+      const gap: number = step / Math.max(note.roll, 1);
+
+      for (let repeat = 0; repeat < hits; repeat++) {
+        const [span, voice] = hit(
+          kit,
+          kitLane(family, note.pitch),
+          rate,
+          random,
+        );
+        const ramp: number =
+          hits > 1 ? rollFloor + ((1 - rollFloor) * (repeat + 1)) / hits : 1;
+
+        place(
+          target,
+          time + repeat * gap,
+          repeat < hits - 1 ? Math.min(gap, span) : span,
+          rate,
+          scaled(voice, note.velocity * ramp),
+        );
+      }
+    } else if (family === "effect") {
+      const [span, before, voice] = effect(
+        kitLane(family, note.pitch),
+        step * stepsPerBar,
+        rate,
+        random,
+      );
+
+      place(
+        target,
+        time - (before ? span : 0) + scoreLength(score),
+        span,
+        rate,
+        scaled(voice, note.velocity),
+      );
+    } else if (family === "bass") {
+      place(
+        target,
+        time,
         length,
         rate,
-      ),
-    );
-  }
-
-  for (const run of runsOf(audible(score, score.pads, 2))) {
-    const length: number = run.length * step;
-
-    for (const offset of [0, 2, 4]) {
+        scaled(
+          bassVoice(
+            lane === 1 ? "reese" : "sub",
+            midiFrequency(note.pitch),
+            length,
+            rate,
+          ),
+          note.velocity,
+        ),
+      );
+    } else if (family === "pad") {
       place(
-        pads,
-        stepTime(score, run.start),
+        target,
+        time,
         length + padRelease,
         rate,
-        padVoice(
-          root * 4 * 2 ** (degreeSemitones(run.degree + offset) / 12),
-          length,
-          rate,
+        scaled(
+          padVoice(midiFrequency(note.pitch), length, rate),
+          note.velocity,
+        ),
+      );
+    } else {
+      const tone: Tone = instruments[lane]?.tone ?? "saw";
+
+      place(
+        target,
+        time,
+        length + instrumentOf(tone).release,
+        rate,
+        scaled(
+          toneVoice(tone, midiFrequency(note.pitch), length, rate, random),
+          note.velocity,
         ),
       );
     }
   }
+}
 
-  crush(
-    drums,
-    score.kits.map((kit: number) => Math.min(score.grit + kits[kit]!.grit, 1)),
-  );
-  echo(pads, Math.round(echoSteps * step * rate), score.space);
+function sampleChannel(
+  target: Float32Array,
+  score: Score,
+  placed: Array<Placed>,
+  source: Float32Array,
+  cut: boolean,
+  rate: number,
+): void {
+  for (const { note, step } of placed) {
+    const speed: number = 2 ** ((note.pitch - samplePitch) / 12);
+    const whole: number = source.length / rate / speed;
+    const span: number = cut
+      ? Math.min(whole, note.length * stepLength(score))
+      : whole;
 
-  const set: Array<Bank | null> = vowels.map((_: Vowel, index: number) => {
-    const samples: Float32Array | null = voices[index] ?? null;
+    place(target, stepTime(score, step), span, rate, (time: number) => {
+      const position: number = time * rate * speed;
+      const before: number = Math.floor(position);
+      const first: number = source[before] ?? 0;
+      const second: number = source[before + 1] ?? first;
+      const fade: number = cut
+        ? Math.min(Math.max((span - time) / sampleFade, 0), 1)
+        : 1;
 
-    return samples === null ? null : analyseBank(samples, rate);
-  });
+      return (
+        (first + (second - first) * (position - before)) * note.velocity * fade
+      );
+    });
+  }
+}
+
+function singChannel(
+  target: Float32Array,
+  score: Score,
+  placed: Array<Placed>,
+  set: Array<Bank | null>,
+  clips: Map<string, Bank | null>,
+  rate: number,
+  random: () => number,
+): void {
   const sampled: boolean =
     (score.singer === "bank" || score.singer === "ritsu") &&
     set.some((bank: Bank | null) => bank !== null);
+  const line: Line = lineOf(
+    placed,
+    sampled ? lyricsOf(score, placed) : new Array(),
+    songSteps(score),
+  );
+  const base: number = sampled
+    ? midiFrequency(0) *
+      bankOctave(
+        line.pitches,
+        set.filter((bank: Bank | null): bank is Bank => bank !== null),
+      )
+    : midiFrequency(0);
 
-  for (const phrase of phrasesOf(audible(score, score.vocals, 3))) {
+  for (const phrase of phrasesOf(line)) {
     if (sampled) {
-      singPhrase(vocals, score, phrase, root, set, random, rate);
+      singPhrase(
+        target,
+        score,
+        phrase,
+        base,
+        set,
+        line.words,
+        clips,
+        random,
+        rate,
+      );
       continue;
     }
 
@@ -1311,26 +2218,165 @@ function renderScore(
       singer++
     ) {
       place(
-        vocals,
+        target,
         stepTime(score, phrase.start) + styles[score.singer].delays[singer]!,
-        phrase.notes.length * step + vocalRelease,
+        phrase.notes.length * stepLength(score) + vocalRelease,
         rate,
-        vocalVoice(score, phrase, root, singer, random, rate),
+        vocalVoice(score, phrase, base, singer, random, rate),
       );
     }
   }
+}
 
-  echo(vocals, Math.round(vocalEcho * step * rate), score.space);
+function finishBus(
+  bus: Array<Float32Array>,
+  insert: Insert,
+  delay: number,
+  rate: number,
+): void {
+  for (const side of bus) {
+    if (insert.grit > 0) {
+      crush(side, [insert.grit]);
+    }
+
+    if (insert.space > 0) {
+      echo(side, delay, insert.space);
+    }
+
+    if (insert.filter < 1) {
+      smooth(side, insert.filter, rate);
+    }
+  }
+}
+
+function renderScore(
+  score: Score,
+  rate: number,
+  voices: Array<Float32Array | null> = new Array(),
+  clips: Map<string, Float32Array> = new Map(),
+  samples: Map<string, Float32Array> = new Map(),
+): Array<Float32Array<ArrayBuffer>> {
+  const total: number = Math.max(Math.round(scoreLength(score) * rate), 1);
+  const buses: Array<Array<Float32Array>> = score.inserts.map(() => [
+    new Float32Array(total),
+    new Float32Array(total),
+  ]);
+  const channel: Float32Array = new Float32Array(total);
+  const random: () => number = createNoise();
+  const step: number = stepLength(score);
+  const singing: boolean = score.channels.some(
+    (entry: Channel) => patchOf(entry.instrument).family === "vocal",
+  );
+  const set: Array<Bank | null> = vowels.map((_: Vowel, index: number) => {
+    const samples: Float32Array | null = singing
+      ? (voices[index] ?? null)
+      : null;
+
+    return samples === null ? null : analyseBank(samples, rate);
+  });
+  const clipBanks: Map<string, Bank | null> = new Map(
+    [...(singing ? clips : new Map<string, Float32Array>())].map(
+      ([syllable, samples]: [string, Float32Array]) => [
+        syllable,
+        analyseClip(samples, rate),
+      ],
+    ),
+  );
+
+  for (const entry of score.channels) {
+    const insert: Insert | undefined = score.inserts[entry.insert];
+    const patch: Patch = patchOf(entry.instrument);
+    const placed: Array<Placed> = arrangedNotes(score, entry.id);
+    const kit: Kit = kits[entry.kit] ?? kits[0]!;
+
+    if (entry.mute || insert === undefined || placed.length === 0) {
+      continue;
+    }
+
+    channel.fill(0);
+
+    if (patch.family === "vocal") {
+      singChannel(channel, score, placed, set, clipBanks, rate, random);
+    } else if (patch.family === "sample") {
+      const source: Float32Array | undefined =
+        entry.sample === null ? undefined : samples.get(entry.sample);
+
+      if (source !== undefined) {
+        sampleChannel(channel, score, placed, source, entry.cut, rate);
+      }
+    } else {
+      playChannel(
+        channel,
+        score,
+        patch.family,
+        patch.lane,
+        kit,
+        placed,
+        rate,
+        random,
+      );
+    }
+
+    if (patch.family === "drum") {
+      crush(channel, [kit.grit]);
+    }
+
+    const [left, right] = balance(entry.pan);
+    const [busLeft, busRight] = buses[entry.insert]! as [
+      Float32Array,
+      Float32Array,
+    ];
+
+    for (let index = 0; index < total; index++) {
+      busLeft[index]! += channel[index]! * entry.volume * left;
+      busRight[index]! += channel[index]! * entry.volume * right;
+    }
+  }
+
+  const master: Array<Float32Array> = buses[0]!;
+
+  score.inserts.forEach((insert: Insert, index: number) => {
+    if (index === 0 || insert.mute) {
+      return;
+    }
+
+    const bus: Array<Float32Array> = buses[index]!;
+    const [left, right] = balance(insert.pan);
+
+    finishBus(
+      bus,
+      insert,
+      Math.max(Math.round(insert.delay * step * rate), 1),
+      rate,
+    );
+
+    for (let sample = 0; sample < total; sample++) {
+      master[0]![sample]! += bus[0]![sample]! * insert.volume * left;
+      master[1]![sample]! += bus[1]![sample]! * insert.volume * right;
+    }
+  });
+
+  const main: Insert = score.inserts[0]!;
+  const [left, right] = balance(main.pan);
+  const mix: Array<Float32Array<ArrayBuffer>> = [
+    new Float32Array(total),
+    new Float32Array(total),
+  ];
+
+  finishBus(
+    master,
+    main,
+    Math.max(Math.round(main.delay * step * rate), 1),
+    rate,
+  );
 
   for (let index = 0; index < total; index++) {
-    mix[index] =
-      Math.tanh(
-        (drums[index]! * drumMix +
-          bass[index]! * bassMix +
-          pads[index]! * padMix +
-          vocals[index]! * vocalMix * score.voice) *
-          masterDrive,
-      ) * masterLevel;
+    const level: number = main.mute ? 0 : main.volume;
+
+    mix[0]![index] =
+      Math.tanh(master[0]![index]! * level * left * masterDrive) * masterLevel;
+    mix[1]![index] =
+      Math.tanh(master[1]![index]! * level * right * masterDrive) * masterLevel;
   }
 
   return mix;
@@ -1338,22 +2384,36 @@ function renderScore(
 
 export {
   stepsPerBar,
+  kitPitch,
+  samplePitch,
+  kitLanes,
+  kitLane,
   beatsPerBar,
+  stepsPerBeat,
   drumLanes,
-  noteRows,
+  effectLanes,
+  rollSpeeds,
+  instruments,
+  patches,
   kits,
   vowels,
   keyNames,
-  barOptions,
+  scaleSteps,
   tempoMin,
   tempoMax,
   swingMax,
-  defaultScore,
-  repairScore,
-  resizeScore,
-  stepCount,
-  noteName,
+  degreeSemitones,
+  rootFrequency,
+  patchOf,
+  arrangedNotes,
+  lyricsOf,
+  songSteps,
+  songBars,
   scoreLength,
+  stepLength,
   stepTime,
   renderScore,
+  syllablesOf,
+  syllableNames,
 };
+export type { Family, Patch, Placed };

@@ -27,7 +27,8 @@ import type {
 import { createPixels, encodePixels, type Pixels } from "../editor/pixels";
 import { spriteSize } from "../editor/drawings";
 import { drawBulletDefault, drawVesselDefault } from "../editor/default";
-import { defaultScore } from "./jungle";
+import { defaultScore } from "./arrange";
+import { defaultAmbience } from "./ambience";
 
 function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -332,6 +333,7 @@ function defaultSound(): Sound {
     vibratoRate: 8,
     volume: 0.5,
     score: defaultScore(),
+    ambience: defaultAmbience(),
   };
 }
 

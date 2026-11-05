@@ -8,6 +8,8 @@ type Cosmetic =
   | "palette"
   | "sigil"
   | "sound"
+  | "music"
+  | "ambience"
   | "ost"
   | "character"
   | "cutscene";
@@ -43,18 +45,28 @@ const forms: Array<Rarity<Form>> = [
   { value: "game", label: "Game", color: gameRarity.color, tier: 3 },
 ];
 
-const cosmetics: Array<Rarity<Cosmetic>> = [
+const visuals: Array<Rarity<Cosmetic>> = [
   { value: "background", label: "Background", color: "#7ad8ff", tier: 1 },
   { value: "wallpaper", label: "Wallpaper", color: "#3b82ff", tier: 2 },
   { value: "palette", label: "Palette", color: "#fff27a", tier: 3 },
   { value: "bullet", label: "Bullet", color: "#5ff0d0", tier: 4 },
   { value: "vessel", label: "Vessel", color: "#c8d2e6", tier: 5 },
   { value: "sigil", label: "Sigil", color: "#ff3b3b", tier: 6 },
-  { value: "sound", label: "SFX", color: "#b48cff", tier: 7 },
-  { value: "ost", label: "OST", color: "#ff8fb1", tier: 8 },
-  { value: "cutscene", label: "Cutscene", color: "#7ae38f", tier: 9 },
-  { value: "character", label: "Character", color: "#ffb347", tier: 10 },
 ];
+
+const audio: Array<Rarity<Cosmetic>> = [
+  { value: "sound", label: "SFX", color: "#b48cff", tier: 1 },
+  { value: "music", label: "Music", color: "#ffd36f", tier: 2 },
+  { value: "ambience", label: "Ambience", color: "#7ae3c8", tier: 3 },
+  { value: "ost", label: "OST", color: "#ff8fb1", tier: 4 },
+];
+
+const story: Array<Rarity<Cosmetic>> = [
+  { value: "cutscene", label: "Cutscene", color: "#7ae38f", tier: 1 },
+  { value: "character", label: "Character", color: "#ffb347", tier: 2 },
+];
+
+const cosmetics: Array<Rarity<Cosmetic>> = [...visuals, ...audio, ...story];
 
 const ranks: Array<Rarity<Rank>> = [
   { value: "regular", label: "Regular", color: "#7ae38f", tier: 1 },
@@ -79,6 +91,9 @@ export {
   difficulties,
   gameRarity,
   forms,
+  visuals,
+  audio,
+  story,
   cosmetics,
   ranks,
   attacks,

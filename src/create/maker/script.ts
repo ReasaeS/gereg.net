@@ -10,6 +10,7 @@ import {
 } from "pixi.js";
 import { createGlide, mix, type Glide } from "../../ui/motion";
 import { createRetype, type Retype } from "../../ui/retype";
+import { screenResolution, sharpen } from "../../ui/text";
 import {
   countTranscript,
   focusMark,
@@ -19,6 +20,7 @@ import {
   type Count,
 } from "../transcript";
 import { getAutosave } from "../../settings/settings";
+import { syllablesOf } from "../jungle";
 import {
   blinkOn,
   blinkPeriod,
@@ -37,12 +39,15 @@ import {
   textColor,
 } from "../../menu/terminal";
 
+type Page = "transcript" | "lyrics";
+
 type Script = {
   view: Container;
   open: (
     initial: string,
     apply: (text: string) => string | null,
     sounds: Array<string>,
+    page?: Page,
   ) => void;
   close: () => void;
   shown: () => boolean;
@@ -71,13 +76,16 @@ type Block = {
   rows: Array<string>;
 };
 
-const scriptShare: number = 0.7; // of screen size
+const scriptShare: number = 0.9; // of screen size
+const scriptZoom: number = 1.35;
 const shadeColor: string = "#000000";
 const shadeAlpha: number = 0.8;
 const openSmoothing: number = 0.2; // s
 const hoverSmoothing: number = 0.08; // s
 const headerText: string =
   "GEREG.NET // [>] Name (Emotion): text {40:paced} " + soundMark + " Sound";
+const lyricsHeader: string =
+  "GEREG.NET // LYRICS: english words, or romaji with hyphens (ki-mi)";
 const focusCode: string = "KeyF";
 const soundCode: string = "KeyS";
 const speedCode: string = "KeyT";
@@ -138,6 +146,12 @@ function fileText(count: Count | null): string {
         (count.speakers === 1 ? " speaker" : " speakers");
 }
 
+function lyricsText(text: string): string {
+  const count: number = syllablesOf(text).length;
+
+  return count + (count === 1 ? " syllable" : " syllables");
+}
+
 function createScript(app: Application): Script {
   const view: Container = new Container();
   const shade: Graphics = new Graphics();
@@ -177,6 +191,7 @@ function createScript(app: Application): Script {
   const holder: HTMLDivElement = document.createElement("div");
   const area: HTMLTextAreaElement = document.createElement("textarea");
   let apply: (text: string) => string | null = () => null;
+  let page: Page = "transcript";
   let open: boolean = false;
   let failed: boolean = false;
   let written: boolean = false;
@@ -227,6 +242,17 @@ function createScript(app: Application): Script {
       Math.round((app.screen.height * (1 - share)) / 2),
       Math.round(app.screen.width * share),
       Math.round(app.screen.height * share),
+    );
+  }
+
+  function inner(): Rectangle {
+    const frame: Rectangle = bounds();
+
+    return new Rectangle(
+      0,
+      0,
+      frame.width / scriptZoom,
+      frame.height / scriptZoom,
     );
   }
 
@@ -306,7 +332,9 @@ function createScript(app: Application): Script {
     return (
       (area.selectionStart === area.selectionEnd ? insertText : visualText) +
       "  " +
-      fileText(countTranscript(area.value)) +
+      (page === "lyrics"
+        ? lyricsText(area.value)
+        : fileText(countTranscript(area.value))) +
       (written ? writtenText : "")
     );
   }
@@ -617,7 +645,7 @@ function createScript(app: Application): Script {
       return;
     }
 
-    const frame: Rectangle = bounds();
+    const frame: Rectangle = inner();
     const spot: Spot = spotOf(caretIndex());
     const count: number = Math.max(Math.min(choices.length, pickRowsMax), 1);
     const columns: number =
@@ -707,9 +735,16 @@ function createScript(app: Application): Script {
     initial: string,
     applied: (text: string) => string | null,
     names: Array<string>,
+    kind: Page = "transcript",
   ): void {
     apply = applied;
     sounds = names;
+    page = kind;
+    title.text = kind === "lyrics" ? lyricsHeader : headerText;
+    commands.forEach((command: Command, index: number) => {
+      command.text.visible = kind === "transcript" || index < 2;
+      command.back.visible = command.text.visible;
+    });
     open = true;
     failed = false;
     written = false;
@@ -743,7 +778,8 @@ function createScript(app: Application): Script {
   }
 
   function layout(): void {
-    const frame: Rectangle = bounds();
+    const outer: Rectangle = bounds();
+    const frame: Rectangle = inner();
     const barHeight: number = lineHeight + headerPadding * 2;
     const dividerY: number = frame.height - lineHeight * 2;
     const noteY: number = dividerY + lineHeight;
@@ -754,12 +790,14 @@ function createScript(app: Application): Script {
     );
 
     gutter = Math.max(String(textLines().length).length, gutterDigits) + 1;
-    screen.position.set(frame.x, frame.y);
+    screen.position.set(outer.x, outer.y);
+    screen.scale.set(scriptZoom);
+    sharpen(screen, screenResolution(scriptZoom));
     shade
       .clear()
       .rect(0, 0, app.screen.width, app.screen.height)
       .fill({ color: shadeColor, alpha: shadeAlpha })
-      .rect(frame.x, frame.y, frame.width, frame.height)
+      .rect(outer.x, outer.y, outer.width, outer.height)
       .cut();
     shade.hitArea = app.screen;
     screen.hitArea = new Rectangle(0, 0, frame.width, frame.height);
@@ -804,6 +842,10 @@ function createScript(app: Application): Script {
     let x: number = screenMargin;
 
     for (const command of commands) {
+      if (!command.text.visible) {
+        continue;
+      }
+
       command.text.position.set(x, noteY);
       command.back
         .clear()
@@ -1056,7 +1098,9 @@ function createScript(app: Application): Script {
     event.stopPropagation();
 
     const command: string =
-      event.altKey && !event.ctrlKey && !event.metaKey ? event.code : "";
+      event.altKey && !event.ctrlKey && !event.metaKey && page === "transcript"
+        ? event.code
+        : "";
 
     if (picking) {
       event.preventDefault();
@@ -1194,4 +1238,4 @@ function createScript(app: Application): Script {
 }
 
 export { createScript };
-export type { Script };
+export type { Page, Script };

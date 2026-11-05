@@ -690,6 +690,7 @@ export {
   headerSlant,
   createRow,
   createChip,
+  createTrack,
   createSlider,
   createVector,
   createChoice,
@@ -698,4 +699,4 @@ export {
   drawField,
   createSpriteRow,
 };
-export type { Control, Chip, Option, Name };
+export type { Control, Chip, Option, Name, Track };

@@ -19,7 +19,8 @@ import {
   repairBullet,
   repairWallpaper,
 } from "./defaults";
-import { repairScore } from "./jungle";
+import { repairScore } from "./arrange";
+import { repairAmbience } from "./ambience";
 import { isBuiltin, readBlob, storeBlob } from "./images";
 import { usedFiles } from "./storage";
 import type { Creation, Kind } from "./gallery/kinds";
@@ -180,6 +181,10 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
     } else if (target === "sound") {
       for (const voice of (value as Sound).score.voicebank) {
         add("sound", voice);
+      }
+
+      for (const channel of (value as Sound).score.channels) {
+        add("sound", channel.sample);
       }
     } else if (target === "pattern") {
       add("bullet", (value as Pattern).bullet);
@@ -362,6 +367,8 @@ async function importCard(
 
   for (const sound of incoming.sounds) {
     sound.score = repairScore(sound.score);
+    sound.score.shared = true;
+    sound.ambience = repairAmbience(sound.ambience);
   }
 
   for (const kind of kindList) {
