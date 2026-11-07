@@ -33,6 +33,7 @@ import { bulletSide, vesselSide } from "../defaults";
 import { drawBulletDefault } from "../../editor/default";
 import type { Pixels } from "../../editor/pixels";
 import {
+  isLocked,
   loadCreations,
   onSave,
   saveCreations,
@@ -606,7 +607,16 @@ async function createMaker(app: Application): Promise<PageContent> {
   function deleteItem(kind: Kind, index: number): void {
     const item: Item | undefined = listOf(creations, kind)[index];
 
-    if (item === undefined || !window.confirm('Delete "' + item.name + '"?')) {
+    if (item === undefined) {
+      return;
+    }
+
+    if (kind === "sound" && isLocked(item.id)) {
+      toast.show(item.name + " is locked");
+      return;
+    }
+
+    if (!window.confirm('Delete "' + item.name + '"?')) {
       return;
     }
 

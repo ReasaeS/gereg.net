@@ -48,8 +48,8 @@ type Kit = {
   actionRow: (
     first: string,
     firstAction: () => void,
-    second: string,
-    secondAction: () => void,
+    second?: string,
+    secondAction?: () => void,
   ) => Control;
   vector: (
     name: string,
@@ -186,16 +186,21 @@ function createKit(
   function actionRow(
     first: string,
     firstAction: () => void,
-    second: string,
-    secondAction: () => void,
+    second?: string,
+    secondAction?: () => void,
   ): Control {
     const row: Container = new Container();
     const left: Chip = createChip(first, actionWidth, firstAction);
-    const right: Chip = createChip(second, actionWidth, secondAction);
 
     left.view.y = (rowHeight - chipHeight) / 2;
-    right.view.position.set(actionWidth + actionGap, left.view.y);
-    row.addChild(left.view, right.view);
+    row.addChild(left.view);
+
+    if (second !== undefined && secondAction !== undefined) {
+      const right: Chip = createChip(second, actionWidth, secondAction);
+
+      right.view.position.set(actionWidth + actionGap, left.view.y);
+      row.addChild(right.view);
+    }
 
     return { view: row, refresh: () => undefined };
   }

@@ -50,7 +50,7 @@ type Bullets = {
     y: number,
     facing: number,
     delta: number,
-  ) => void;
+  ) => boolean;
   move: (delta: number) => void;
   clear: () => void;
   collide: (x: number, y: number, bomb: Bomb, vulnerable: boolean) => boolean;
@@ -248,13 +248,15 @@ async function createBullets(
     y: number,
     facing: number,
     delta: number,
-  ): void {
+  ): boolean {
     state.time += delta;
     state.timer += delta;
 
     const interval: number = 1 / Math.max(source.rate, 0.01);
+    let fired: boolean = false;
 
     while (state.timer >= interval) {
+      fired = true;
       state.timer -= interval;
 
       const lag: number = state.timer;
@@ -267,6 +269,8 @@ async function createBullets(
         render(bullets[index]!);
       }
     }
+
+    return fired;
   }
 
   function volley(

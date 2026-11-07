@@ -1,0 +1,1083 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "menu-theme",
+  "creations": {
+    "sounds": [
+      {
+        "id": "menu-theme",
+        "name": "After the Rain",
+        "source": "song",
+        "file": null,
+        "fileName": "",
+        "wave": "sine",
+        "pitch": 440,
+        "slide": 440,
+        "attack": 0.01,
+        "sustain": 0.05,
+        "decay": 0.25,
+        "vibratoDepth": 0,
+        "vibratoRate": 8,
+        "volume": 0.6,
+        "score": {
+          "tempo": 80,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "lyrics": "",
+          "shared": false,
+          "channels": [
+            {
+              "id": "mw6f42la23uspt",
+              "name": "Pad",
+              "instrument": "pad",
+              "kit": 0,
+              "volume": 0.45,
+              "pan": 0,
+              "insert": 1,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw6f42la1o51tp",
+              "name": "Piano",
+              "instrument": "piano",
+              "kit": 0,
+              "volume": 0.5,
+              "pan": 0,
+              "insert": 2,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw6f42lafpsxqg",
+              "name": "Sub bass",
+              "instrument": "sub",
+              "kit": 0,
+              "volume": 0.4,
+              "pan": 0,
+              "insert": 3,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw6f42laotdg19",
+              "name": "Flute",
+              "instrument": "flute",
+              "kit": 0,
+              "volume": 0.45,
+              "pan": 0,
+              "insert": 5,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw6f42lawi6wjo",
+              "name": "Bells",
+              "instrument": "bell",
+              "kit": 0,
+              "volume": 0.3,
+              "pan": 0,
+              "insert": 6,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            }
+          ],
+          "patterns": [
+            {
+              "id": "mw6f42lbk7vzy0",
+              "name": "Pads",
+              "bars": 8,
+              "notes": {
+                "mw6f42la23uspt": [
+                  {
+                    "step": 0,
+                    "length": 16,
+                    "pitch": 50,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 0,
+                    "length": 16,
+                    "pitch": 53,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 0,
+                    "length": 16,
+                    "pitch": 57,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 16,
+                    "pitch": 46,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 16,
+                    "pitch": 50,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 16,
+                    "pitch": 53,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 53,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 57,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 60,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 48,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 52,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 55,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 16,
+                    "pitch": 43,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 16,
+                    "pitch": 46,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 16,
+                    "pitch": 50,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 80,
+                    "length": 16,
+                    "pitch": 46,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 80,
+                    "length": 16,
+                    "pitch": 50,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 80,
+                    "length": 16,
+                    "pitch": 53,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 16,
+                    "pitch": 53,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 16,
+                    "pitch": 57,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 16,
+                    "pitch": 60,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 112,
+                    "length": 16,
+                    "pitch": 45,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 112,
+                    "length": 16,
+                    "pitch": 49,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 112,
+                    "length": 16,
+                    "pitch": 52,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw6f42lbq2raz1",
+              "name": "Piano",
+              "bars": 8,
+              "notes": {
+                "mw6f42la1o51tp": [
+                  {
+                    "step": 0,
+                    "length": 4,
+                    "pitch": 62,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 4,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 8,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 12,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 4,
+                    "pitch": 58,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 20,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 24,
+                    "length": 4,
+                    "pitch": 62,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 28,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 36,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 40,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 44,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 4,
+                    "pitch": 60,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 52,
+                    "length": 4,
+                    "pitch": 67,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 56,
+                    "length": 4,
+                    "pitch": 64,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 60,
+                    "length": 4,
+                    "pitch": 67,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 4,
+                    "pitch": 55,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 68,
+                    "length": 4,
+                    "pitch": 62,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 72,
+                    "length": 4,
+                    "pitch": 58,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 76,
+                    "length": 4,
+                    "pitch": 62,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 80,
+                    "length": 4,
+                    "pitch": 58,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 84,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 88,
+                    "length": 4,
+                    "pitch": 62,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 92,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 100,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 104,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 108,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 112,
+                    "length": 4,
+                    "pitch": 57,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 116,
+                    "length": 4,
+                    "pitch": 64,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 120,
+                    "length": 4,
+                    "pitch": 61,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 124,
+                    "length": 4,
+                    "pitch": 64,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw6f42lbv293yr",
+              "name": "Sub",
+              "bars": 8,
+              "notes": {
+                "mw6f42lafpsxqg": [
+                  {
+                    "step": 0,
+                    "length": 16,
+                    "pitch": 38,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 16,
+                    "pitch": 34,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 29,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 36,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 16,
+                    "pitch": 31,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 80,
+                    "length": 16,
+                    "pitch": 34,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 16,
+                    "pitch": 29,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 112,
+                    "length": 16,
+                    "pitch": 33,
+                    "velocity": 0.7,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw6f42lbvyl7yd",
+              "name": "Melody",
+              "bars": 8,
+              "notes": {
+                "mw6f42laotdg19": [
+                  {
+                    "step": 0,
+                    "length": 6,
+                    "pitch": 74,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 6,
+                    "length": 2,
+                    "pitch": 72,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 8,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 12,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 6,
+                    "pitch": 67,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 22,
+                    "length": 2,
+                    "pitch": 65,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 24,
+                    "length": 4,
+                    "pitch": 62,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 28,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 6,
+                    "pitch": 69,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 38,
+                    "length": 2,
+                    "pitch": 72,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 40,
+                    "length": 4,
+                    "pitch": 77,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 44,
+                    "length": 4,
+                    "pitch": 76,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 8,
+                    "pitch": 76,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 56,
+                    "length": 4,
+                    "pitch": 74,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 60,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 6,
+                    "pitch": 74,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 70,
+                    "length": 2,
+                    "pitch": 70,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 72,
+                    "length": 4,
+                    "pitch": 67,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 76,
+                    "length": 4,
+                    "pitch": 70,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 80,
+                    "length": 6,
+                    "pitch": 74,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 86,
+                    "length": 2,
+                    "pitch": 77,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 88,
+                    "length": 4,
+                    "pitch": 74,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 92,
+                    "length": 4,
+                    "pitch": 70,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 100,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 104,
+                    "length": 4,
+                    "pitch": 65,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 108,
+                    "length": 4,
+                    "pitch": 69,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 112,
+                    "length": 8,
+                    "pitch": 76,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 120,
+                    "length": 4,
+                    "pitch": 73,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 124,
+                    "length": 4,
+                    "pitch": 76,
+                    "velocity": 0.6,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw6f42lb0iqz1x",
+              "name": "Bells",
+              "bars": 8,
+              "notes": {
+                "mw6f42lawi6wjo": [
+                  {
+                    "step": 0,
+                    "length": 16,
+                    "pitch": 74,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 77,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 64,
+                    "length": 16,
+                    "pitch": 74,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 96,
+                    "length": 16,
+                    "pitch": 72,
+                    "velocity": 0.5,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            }
+          ],
+          "clips": [
+            {
+              "pattern": "mw6f42lbk7vzy0",
+              "track": 0,
+              "step": 0,
+              "length": 512
+            },
+            {
+              "pattern": "mw6f42lbq2raz1",
+              "track": 1,
+              "step": 0,
+              "length": 512
+            },
+            {
+              "pattern": "mw6f42lbv293yr",
+              "track": 2,
+              "step": 128,
+              "length": 384
+            },
+            {
+              "pattern": "mw6f42lbvyl7yd",
+              "track": 4,
+              "step": 128,
+              "length": 128
+            },
+            {
+              "pattern": "mw6f42lbvyl7yd",
+              "track": 4,
+              "step": 384,
+              "length": 128
+            },
+            {
+              "pattern": "mw6f42lb0iqz1x",
+              "track": 5,
+              "step": 256,
+              "length": 256
+            }
+          ],
+          "tracks": 8,
+          "inserts": [
+            {
+              "name": "Master",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Pads",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0.7,
+              "delay": 3,
+              "filter": 0.4
+            },
+            {
+              "name": "Piano",
+              "volume": 1,
+              "pan": -0.15,
+              "mute": false,
+              "grit": 0,
+              "space": 0.65,
+              "delay": 8,
+              "filter": 0.5
+            },
+            {
+              "name": "Sub",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 0.6
+            },
+            {
+              "name": "Chords",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Flute",
+              "volume": 1,
+              "pan": 0.15,
+              "mute": false,
+              "grit": 0,
+              "space": 0.7,
+              "delay": 8,
+              "filter": 0.5
+            },
+            {
+              "name": "Bells",
+              "volume": 1,
+              "pan": 0.25,
+              "mute": false,
+              "grit": 0,
+              "space": 0.8,
+              "delay": 6,
+              "filter": 0.55
+            },
+            {
+              "name": "FX",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Insert 8",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            }
+          ]
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

@@ -1,4 +1,4 @@
-import type { Container, Texture } from "pixi.js";
+import { Container, type Texture } from "pixi.js";
 import { createPreview, type Preview } from "../create/preview/preview";
 import { onDim } from "../settings/settings";
 import { loadCreations, usedSprites } from "../create/storage";
@@ -12,6 +12,8 @@ import type {
   Bullet,
   Vessel,
   Creations,
+  Cutscene,
+  Line,
   Difficulty,
   Game as GameCard,
   Enemy,
@@ -27,7 +29,16 @@ import type {
 } from "../create/types";
 import type { Choice } from "./selector";
 import { bestScore } from "./records";
-import { playTrack, type Track } from "../create/sound";
+import { createScene, type Scene } from "../create/cutscene";
+import { useEffects } from "./sfx";
+import { createGlide, type Glide } from "../ui/motion";
+import {
+  playSound,
+  playTrack,
+  prepareTrack,
+  trackReady,
+  type Track,
+} from "../create/sound";
 
 type Outcome = "clear" | "over" | "next";
 
@@ -74,8 +85,14 @@ type Controls = {
   bombing: boolean;
 };
 
+type Loader = (work: () => Promise<void>, name: string) => Promise<void>;
+
 type Custom = {
   view: Container;
+  setLoader: (loader: Loader) => void;
+  upcoming: () => Stage | null;
+  upcomingReady: () => boolean;
+  prepareUpcoming: () => Promise<void>;
   choices: () => Array<Choice>;
   count: () => number;
   gameChoices: (index: number) => Array<Choice>;
@@ -102,6 +119,7 @@ type Custom = {
 };
 
 const startLives: number = 2;
+const sceneSmoothing: number = 0.12; // s
 const favouriteStorageKey: string = "geregnet.favourites";
 
 function loadFavourites(): Set<string> {
@@ -172,6 +190,8 @@ async function createCustom(
   let track: Track | null = null;
   let playing: Sound | null = null;
   let resumeAt: number = 0;
+  let queued: Plan | null = null;
+  let loader: Loader = (work: () => Promise<void>) => work();
   const preview: Preview = await createPreview(
     playerTexture,
     droneTexture,
@@ -183,8 +203,107 @@ async function createCustom(
     (id: string | null) => byId<Vessel>(creations.vessels, id),
   );
 
+  const scene: Scene = createScene(
+    speak,
+    say,
+    () => creations.characters,
+    false,
+    false,
+  );
+  const view: Container = new Container();
+  const sceneShown: Glide = createGlide(
+    0,
+    (value: number) => {
+      scene.view.alpha = value;
+      scene.view.visible = value > 0;
+    },
+    sceneSmoothing,
+  );
+  let showing: Cutscene | null = null;
+  let held: boolean = true;
+  let stopLine: () => void = () => undefined;
+
   preview.view.visible = false;
+  scene.view.visible = false;
+  view.addChild(preview.view, scene.view);
   onDim(preview.setDim);
+
+  function speak(value: Cutscene): void {
+    const voice: Sound | null = byId<Sound>(creations.sounds, value.voice);
+
+    if (voice !== null) {
+      playSound(voice);
+    }
+  }
+
+  function say(line: Line): void {
+    const sound: Sound | null = byId<Sound>(
+      creations.sounds,
+      line.sound ?? null,
+    );
+
+    stopLine();
+    stopLine = sound === null ? () => undefined : playSound(sound);
+  }
+
+  function stageBackground(): Background | null {
+    return byId<Background>(
+      creations.backgrounds,
+      plan?.stages[leg]?.background ?? null,
+    );
+  }
+
+  function startCutscene(id: string): void {
+    const found: Cutscene | null = byId<Cutscene>(creations.cutscenes, id);
+
+    if (found === null || found.lines.length === 0 || mode === "attract") {
+      return;
+    }
+
+    showing = found;
+    held = true;
+    scene.setAuto(mode !== "play");
+    scene.setPalette(
+      byId<Palette>(creations.palettes, plan?.stages[leg]?.palette ?? null),
+    );
+    scene.play(found, 0);
+    sceneShown.set(1);
+
+    if (found.background !== null) {
+      preview.setBackground(
+        byId<Background>(creations.backgrounds, found.background),
+      );
+    }
+  }
+
+  function endCutscene(): void {
+    if (showing === null) {
+      return;
+    }
+
+    if (showing.background !== null) {
+      preview.setBackground(stageBackground());
+    }
+
+    showing = null;
+    stopLine();
+    stopLine = () => undefined;
+    sceneShown.set(0);
+  }
+
+  function playCutscene(delta: number, shooting: boolean): void {
+    scene.update(delta);
+
+    if (shooting && !held) {
+      scene.advance();
+    }
+
+    held = shooting;
+
+    if (scene.finished()) {
+      endCutscene();
+    }
+  }
 
   function gameDifficulties(game: GameCard): Array<Rarity<Difficulty>> {
     return difficulties.filter((entry: Rarity<Difficulty>) => {
@@ -361,6 +480,7 @@ async function createCustom(
       return null;
     }
 
+    endCutscene();
     leg = index;
     outro = 0;
     preview.clear();
@@ -411,6 +531,12 @@ async function createCustom(
     mode = next;
     fresh = null;
     plan = chosen;
+    useEffects(
+      next === "attract" ? null : creations.sounds,
+      creations.games.find((entry: GameCard) =>
+        chosen.id.startsWith(entry.id + ":"),
+      ) ?? null,
+    );
     carriedScore = 0;
     carriedHits = 0;
     carriedGrazes = 0;
@@ -419,6 +545,17 @@ async function createCustom(
     carriedBombs = 0;
     misses = 0;
     countedHits = 0;
+    queued = null;
+
+    const first: Stage | undefined = chosen.stages[0];
+
+    if (first !== undefined && !stageReady(first)) {
+      await loader(() => prepareStage(first), first.name);
+
+      if (owner !== token) {
+        return null;
+      }
+    }
 
     return load(0, null, minPower, false);
   }
@@ -474,9 +611,18 @@ async function createCustom(
       return;
     }
 
+    if (mode === "watch" && leg + 1 >= plan.stages.length && queued === null) {
+      queued = { ...watchPlan(), stages: shuffled() };
+    }
+
+    if (!upcomingReady()) {
+      return;
+    }
+
     if (leg + 1 >= plan.stages.length) {
-      if (mode === "watch") {
-        plan = { ...watchPlan(), stages: shuffled() };
+      if (queued !== null) {
+        plan = queued;
+        queued = null;
       }
 
       carriedScore += preview.score();
@@ -487,6 +633,60 @@ async function createCustom(
     }
 
     fresh = advance();
+  }
+
+  function stageSounds(stage: Stage): Array<Sound> {
+    if (mode === "attract") {
+      return new Array();
+    }
+
+    const ids: Set<string | null> = new Set([stage.music]);
+
+    for (const keyframe of stage.keyframes) {
+      if (keyframe.cutscene !== null) {
+        continue;
+      }
+
+      for (const spawn of keyframe.spawns) {
+        ids.add(byId<Enemy>(creations.enemies, spawn.enemy)?.theme ?? null);
+      }
+    }
+
+    return [...ids]
+      .map((id: string | null) => byId<Sound>(creations.sounds, id))
+      .filter((sound: Sound | null): sound is Sound => sound !== null);
+  }
+
+  function stageReady(stage: Stage): boolean {
+    return stageSounds(stage).every((sound: Sound) => trackReady(sound, true));
+  }
+
+  async function prepareStage(stage: Stage): Promise<void> {
+    for (const sound of stageSounds(stage)) {
+      await prepareTrack(sound, true);
+    }
+  }
+
+  function upcoming(): Stage | null {
+    if (plan === null) {
+      return null;
+    }
+
+    return leg + 1 < plan.stages.length
+      ? (plan.stages[leg + 1] ?? null)
+      : ((queued ?? plan).stages[0] ?? null);
+  }
+
+  function upcomingReady(): boolean {
+    const next: Stage | null = upcoming();
+
+    return next === null || stageReady(next);
+  }
+
+  function prepareUpcoming(): Promise<void> {
+    const next: Stage | null = upcoming();
+
+    return next === null ? Promise.resolve() : prepareStage(next);
   }
 
   function advance(): Leg | null {
@@ -524,7 +724,10 @@ async function createCustom(
 
   function stop(): void {
     token++;
+    endCutscene();
+    useEffects(null, null);
     plan = null;
+    queued = null;
     mode = "play";
     fresh = null;
     preview.setAutopilot(false);
@@ -557,6 +760,11 @@ async function createCustom(
       return;
     }
 
+    if (showing !== null) {
+      playCutscene(delta, controls.shooting);
+      return;
+    }
+
     preview.steer(
       controls.x,
       controls.y,
@@ -565,6 +773,12 @@ async function createCustom(
       controls.bombing,
     );
     preview.update(delta);
+
+    const cue: string | null = preview.takeCue();
+
+    if (cue !== null) {
+      startCutscene(cue);
+    }
 
     for (const id of preview.themes()) {
       if (mode !== "attract") {
@@ -582,7 +796,13 @@ async function createCustom(
   }
 
   return {
-    view: preview.view,
+    view: view,
+    setLoader: (next: Loader) => {
+      loader = next;
+    },
+    upcoming: upcoming,
+    upcomingReady: upcomingReady,
+    prepareUpcoming: prepareUpcoming,
     choices: choices,
     count: () => entries.length,
     gameChoices: gameChoices,
@@ -615,4 +835,4 @@ async function createCustom(
 }
 
 export { createCustom, formatLength, startLives };
-export type { Custom, Outcome, Leg, Plan, Tally };
+export type { Custom, Outcome, Leg, Plan, Tally, Loader };

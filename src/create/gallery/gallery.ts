@@ -42,9 +42,11 @@ import {
   applyTransform,
   createTile,
   paintTile,
+  setDeletable,
   stepTile,
   type Tile,
 } from "./tile";
+import { isLocked } from "../storage";
 import { createTabs, headerY, type Tabs } from "./tabs";
 import { createSearchBar, type SearchBar } from "./search";
 import { createDealer, type Dealer } from "./deal";
@@ -469,13 +471,12 @@ function createGallery(
     fit(tile.name);
     tile.coverName.text = tile.name.text;
     fit(tile.coverName);
-    tile.detail.text = drawEntry(
-      tile.art,
-      entry,
-      creations(),
-      width,
-      artHeight,
-    );
+    const locked: boolean = entry.kind === "sound" && isLocked(entry.item.id);
+
+    setDeletable(tile, !locked);
+    tile.detail.text =
+      (locked ? "Locked  ·  " : "") +
+      drawEntry(tile.art, entry, creations(), width, artHeight);
     fit(tile.detail);
   }
 

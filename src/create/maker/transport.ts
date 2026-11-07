@@ -30,6 +30,7 @@ import {
 } from "../../ui/widgets";
 import { transportWidth } from "./timeline";
 import type { Studio } from "./studio";
+import { useEffects } from "../../game/sfx";
 
 type Transport = {
   playChip: Container;
@@ -243,6 +244,13 @@ function createTransport(
       if (legs.length === 0) {
         return;
       }
+    }
+
+    if (value || playtesting) {
+      useEffects(
+        value ? studio.creations.sounds : null,
+        value && tab().name === "game" ? game() : null,
+      );
     }
 
     playtesting = value;

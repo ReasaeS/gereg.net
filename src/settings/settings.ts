@@ -539,6 +539,77 @@ function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
 
+type MenuSlot = "intro" | "portal" | "music";
+
+type MenuSoundListener = (slot: MenuSlot, id: string | null) => void;
+
+const menuSlots: Array<MenuSlot> = ["intro", "portal", "music"];
+const menuSoundStorageKey: string = "geregnet.menusounds";
+const defaultMenuSounds: Record<MenuSlot, string> = {
+  intro: "menu-storm",
+  portal: "menu-shore",
+  music: "menu-theme",
+};
+const menuSoundListeners: Array<MenuSoundListener> = new Array();
+const menuSounds: Map<MenuSlot, string | null> = loadMenuSounds();
+
+function loadMenuSounds(): Map<MenuSlot, string | null> {
+  const loaded: Map<MenuSlot, string | null> = new Map();
+  let saved: Partial<Record<MenuSlot, unknown>> = {};
+
+  try {
+    saved = JSON.parse(localStorage.getItem(menuSoundStorageKey) ?? "{}");
+  } catch {
+    saved = {};
+  }
+
+  for (const slot of menuSlots) {
+    const value: unknown = saved[slot];
+
+    loaded.set(
+      slot,
+      typeof value === "string" || value === null
+        ? value
+        : defaultMenuSounds[slot],
+    );
+  }
+
+  return loaded;
+}
+
+function getMenuSound(slot: MenuSlot): string | null {
+  return menuSounds.get(slot) ?? null;
+}
+
+function defaultMenuSound(slot: MenuSlot): string {
+  return defaultMenuSounds[slot];
+}
+
+function setMenuSound(slot: MenuSlot, id: string | null): void {
+  if (getMenuSound(slot) === id) {
+    return;
+  }
+
+  menuSounds.set(slot, id);
+
+  try {
+    localStorage.setItem(
+      menuSoundStorageKey,
+      JSON.stringify(Object.fromEntries(menuSounds)),
+    );
+  } catch {
+    console.warn("Could not save the menu sounds");
+  }
+
+  for (const listener of menuSoundListeners) {
+    listener(slot, id);
+  }
+}
+
+function onMenuSound(listener: MenuSoundListener): void {
+  menuSoundListeners.push(listener);
+}
+
 export {
   channels,
   getVolume,
@@ -580,5 +651,10 @@ export {
   getDim,
   setDim,
   onDim,
+  menuSlots,
+  getMenuSound,
+  defaultMenuSound,
+  setMenuSound,
+  onMenuSound,
 };
-export type { Channel, Tuning };
+export type { Channel, Tuning, MenuSlot };

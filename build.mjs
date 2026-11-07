@@ -9,6 +9,7 @@ const outdir = "dist";
 const options = {
   entryPoints: [
     { in: "src/app.ts", out: "app" },
+    { in: "src/create/render.worker.ts", out: "render" },
     // Built with the copy loader so edits to it trigger a live reload.
     { in: "public/index.html", out: "index" },
   ],
@@ -23,7 +24,7 @@ const options = {
   // Reload the page whenever the dev server rebuilds.
   banner: dev
     ? {
-        js: 'new EventSource("/esbuild").addEventListener("change", () => location.reload());',
+        js: 'typeof document !== "undefined" && new EventSource("/esbuild").addEventListener("change", () => location.reload());',
       }
     : {},
 };

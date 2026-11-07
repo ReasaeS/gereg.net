@@ -3,7 +3,7 @@ import { derivativeNames } from "../../defaults";
 import { attacks, type Attack, type Rarity } from "../../rarity";
 import { wallAngle } from "../../geometry";
 import type { Option } from "../../../ui/widgets";
-import { brightColors, curveOptions } from "../swatches";
+import { brightColors, curveOptions, soundOptions } from "../swatches";
 import { phaseLimit, waveAmplitude } from "../kit";
 import type { Studio } from "../studio";
 
@@ -282,6 +282,15 @@ function addPatternTab(studio: Studio): void {
         ),
       ]),
       ...section("Fire", [
+        choice(
+          "Fire sound",
+          () => soundOptions(creations),
+          () => pattern().fireSound,
+          (value: string | null) => {
+            pattern().fireSound = value;
+          },
+          "sound",
+        ),
         slider(
           "Rate",
           0.5,

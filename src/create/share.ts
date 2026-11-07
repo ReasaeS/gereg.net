@@ -140,6 +140,11 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       add("sound", stage.music);
 
       for (const keyframe of stage.keyframes) {
+        if (keyframe.cutscene !== null) {
+          add("cutscene", keyframe.cutscene);
+          continue;
+        }
+
         for (const spawn of keyframe.spawns) {
           add("enemy", spawn.enemy);
         }
@@ -156,6 +161,10 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       }
 
       add("ost", game.ost);
+
+      for (const sound of Object.values(game.sounds ?? {})) {
+        add("sound", sound);
+      }
     } else if (target === "ost") {
       for (const track of (value as Ost).tracks) {
         add("sound", track.sound);
@@ -168,6 +177,7 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       add("pattern", enemy.pattern);
       add("vessel", enemy.vessel);
       add("sound", enemy.theme);
+      add("sound", enemy.defeatSound ?? null);
 
       for (const bar of enemy.bars) {
         add("spell", bar.spell);
@@ -178,6 +188,7 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       add("sigil", spell.sigil);
       add("background", spell.background);
       add("pattern", spell.pattern);
+      add("sound", spell.declareSound ?? null);
     } else if (target === "sound") {
       for (const voice of (value as Sound).score.voicebank) {
         add("sound", voice);
@@ -188,6 +199,7 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
       }
     } else if (target === "pattern") {
       add("bullet", (value as Pattern).bullet);
+      add("sound", (value as Pattern).fireSound ?? null);
     } else if (target === "cutscene") {
       const cutscene: Cutscene = value as Cutscene;
 

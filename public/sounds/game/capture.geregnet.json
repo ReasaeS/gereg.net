@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-capture",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-capture",
+        "name": "Spell Capture",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "triangle",
+        "pitch": 520,
+        "slide": 1040,
+        "attack": 0.01,
+        "sustain": 0.3,
+        "decay": 0.8,
+        "vibratoDepth": 0.3,
+        "vibratoRate": 6,
+        "volume": 0.35,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

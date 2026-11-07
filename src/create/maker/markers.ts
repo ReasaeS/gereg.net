@@ -34,6 +34,10 @@ function createMarkers(studio: Studio): Markers {
   const ghosts: Array<Container> = new Array();
   let dragging: boolean = false;
 
+  function shownSpawns(): Array<Spawn> {
+    return keyframe().cutscene === null ? keyframe().spawns : new Array();
+  }
+
   function buildMarkers(): void {
     for (const ghost of ghosts) {
       ghost.destroy({ children: true });
@@ -41,7 +45,7 @@ function createMarkers(studio: Studio): Markers {
 
     ghosts.length = 0;
 
-    for (const value of keyframe().spawns) {
+    for (const value of shownSpawns()) {
       const ghost: Container = new Container();
       const found: Enemy | null = enemyById(value.enemy);
       const body: Graphics = new Graphics();
@@ -58,7 +62,7 @@ function createMarkers(studio: Studio): Markers {
   }
 
   function placeMarkers(): void {
-    const spawns: Array<Spawn> = keyframe().spawns;
+    const spawns: Array<Spawn> = shownSpawns();
 
     guides.clear();
 
@@ -108,7 +112,7 @@ function createMarkers(studio: Studio): Markers {
   }
 
   function markerAt(x: number, y: number): number {
-    const spawns: Array<Spawn> = keyframe().spawns;
+    const spawns: Array<Spawn> = shownSpawns();
     let best: number = -1;
     let bestDistance: number = Infinity;
 

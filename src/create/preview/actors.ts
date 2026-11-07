@@ -8,6 +8,7 @@ import type { Bomb } from "../../game/bomb";
 import { previewHeight, previewWidth } from "./bounds";
 import type { Bullets, Emitter } from "./bullets";
 import type { Defeat } from "./items";
+import { cue } from "../../game/sfx";
 
 type Actor = {
   enemy: Enemy;
@@ -82,6 +83,7 @@ const defeatPoints: Map<Rank, number> = new Map([
 ]);
 const spellBonus: number = 200000;
 const spellDecay: number = 0.5;
+const countdown: number = 10; // s
 
 function barCount(enemy: Enemy): number {
   return enemy.rank === "boss" ? enemy.bars.length : 1;
@@ -123,6 +125,7 @@ function createActors(
 
     if (actor.enemy.rank !== "regular") {
       bullets.clear();
+      cue("cancel");
     }
 
     arm(actor, next < barCount(actor.enemy) ? next : 0);
@@ -165,8 +168,10 @@ function createActors(
 
       points += bonus;
       captured.push({ name: actor.spell.name, bonus: bonus });
+      cue("capture");
     }
 
+    cue("defeat", actor.enemy.defeatSound);
     defeated.push({ x: actor.x, y: actor.y, rank: actor.enemy.rank });
     finishBar(actor);
   }
@@ -206,6 +211,7 @@ function createActors(
         }
 
         shot.spent = true;
+        cue("hit");
         damage(actor, shot.damage);
         break;
       }
@@ -242,6 +248,7 @@ function createActors(
 
     if (actor.capture) {
       declared.push(actor.spell!.name);
+      cue("declare", actor.spell!.declareSound);
     }
     dress(actor);
   }
@@ -323,8 +330,22 @@ function createActors(
       }
 
       const limit: number = actor.enemy.bars[actor.bar]?.time ?? 0;
+      const before: number = limit - actor.barTime;
 
       actor.barTime += delta;
+
+      const left: number = limit - actor.barTime;
+
+      if (
+        actor.capture &&
+        actor.staged &&
+        limit > 0 &&
+        left > 0 &&
+        left <= countdown &&
+        Math.ceil(left) < Math.ceil(before)
+      ) {
+        cue("timeout");
+      }
 
       if (
         actor.enemy.rank !== "regular" &&
@@ -364,7 +385,11 @@ function createActors(
         x < previewWidth &&
         y < previewHeight
       ) {
-        bullets.fire(actor.pattern, actor.emitter, x, y, actor.facing, delta);
+        if (
+          bullets.fire(actor.pattern, actor.emitter, x, y, actor.facing, delta)
+        ) {
+          cue("fire", actor.pattern.fireSound);
+        }
       }
 
       actors[write++] = actor;

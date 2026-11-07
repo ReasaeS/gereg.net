@@ -4,16 +4,28 @@ import { effectiveVolume, getSafe, type Channel } from "../settings/settings";
 import { readBlob, storeBlob } from "./images";
 import {
   patchOf,
-  renderScore,
   scoreLength,
   stepsPerBar,
   syllableNames,
   syllablesOf,
 } from "./jungle";
-import { renderAmbience } from "./ambience";
+import {
+  renderJob,
+  type RenderJob,
+  type RenderRequest,
+  type RenderResult,
+} from "./render";
 
 const drawRate: number = 11025; // Hz
 const drawDetail: number = 256;
+const outlineBuckets: number = 1024;
+const outlineCache: number = 64;
+const outlines: Map<string, Outline> = new Map();
+const effectCache: number = 64;
+const effects: Map<string, AudioBuffer> = new Map();
+const loadingEffects: Set<string> = new Set();
+const plots: WeakMap<Graphics, Plot> = new WeakMap();
+const plotting: WeakSet<Graphics> = new WeakSet();
 const noiseSeed: number = 12345;
 const buffers: Map<string, AudioBuffer> = new Map();
 const loading: Map<string, Promise<AudioBuffer | null>> = new Map();
@@ -41,6 +53,33 @@ const ritsuVoices: Array<string> = [
 const lyricFolder: string = "voices/ritsu/lyrics/";
 let library: Array<Sound> = new Array();
 let context: AudioContext | null = null;
+
+const workerFile: string = "./render.js";
+const waiting: Map<number, Waiting> = new Map();
+const rendering: Map<
+  string,
+  Promise<Array<Float32Array<ArrayBuffer>>>
+> = new Map();
+let worker: Worker | null | undefined = undefined;
+let renders: number = 0;
+
+type Outline = {
+  lows: Float32Array;
+  highs: Float32Array;
+};
+
+type Plot = {
+  key: string;
+  prepared: Prepared;
+  width: number; // px
+  height: number; // px
+  color: string;
+  scale: number;
+};
+
+type Waiting = {
+  finish: (sides: Array<Float32Array<ArrayBuffer>> | null) => void;
+};
 
 type Track = {
   stop: () => void;
@@ -322,11 +361,12 @@ function voiceSamples(file: string | null, rate: number): Float32Array | null {
   return found;
 }
 
-function scoreSamples(
-  score: Score,
-  rate: number,
-  cache: Map<string, Array<Float32Array<ArrayBuffer>>> = scores,
-): Array<Float32Array<ArrayBuffer>> {
+type Prepared = {
+  key: string;
+  job: RenderJob;
+};
+
+function prepareScore(score: Score, rate: number): Prepared {
   const files: Array<string | null> = voiceFiles(score);
   const voices: Array<Float32Array | null> = files.map((file: string | null) =>
     voiceSamples(file, rate),
@@ -364,43 +404,83 @@ function scoreSamples(
     }
   }
 
-  const key: string =
-    rate +
-    ":" +
-    JSON.stringify(score) +
-    ":" +
-    used.join(",") +
-    ":" +
-    files
-      .map((file: string | null, index: number) =>
-        voices[index] === null ? "" : file,
-      )
-      .join(",") +
-    ":" +
-    [...clips.keys()].join(",");
-  const cached: Array<Float32Array<ArrayBuffer>> | undefined = cache.get(key);
+  return {
+    key:
+      rate +
+      ":" +
+      JSON.stringify(score) +
+      ":" +
+      used.join(",") +
+      ":" +
+      files
+        .map((file: string | null, index: number) =>
+          voices[index] === null ? "" : file,
+        )
+        .join(",") +
+      ":" +
+      [...clips.keys()].join(","),
+    job: {
+      kind: "score",
+      score: score,
+      rate: rate,
+      voices: voices,
+      clips: clips,
+      samples: samples,
+    },
+  };
+}
+
+function prepareAmbience(sound: Sound, rate: number): Prepared {
+  return {
+    key: rate + ":ambience:" + JSON.stringify(sound.ambience),
+    job: { kind: "ambience", ambience: sound.ambience, rate: rate },
+  };
+}
+
+function synthesizeSamples(job: RenderJob): void {
+  if (job.kind !== "score") {
+    return;
+  }
+
+  for (const sound of sampleSounds(job.score)) {
+    if (sound.source === "synth") {
+      job.samples.set(sound.id, synthesize(sound, job.rate));
+    }
+  }
+}
+
+function renderNow(
+  prepared: Prepared,
+  cache: Map<string, Array<Float32Array<ArrayBuffer>>> = scores,
+): Array<Float32Array<ArrayBuffer>> {
+  const cached: Array<Float32Array<ArrayBuffer>> | undefined = cache.get(
+    prepared.key,
+  );
 
   if (cached !== undefined) {
     return cached;
   }
 
-  for (const sound of sampleSounds(score)) {
-    if (sound.source === "synth") {
-      samples.set(sound.id, synthesize(sound, rate));
-    }
-  }
+  synthesizeSamples(prepared.job);
 
-  const rendered: Array<Float32Array<ArrayBuffer>> = renderScore(
-    score,
-    rate,
-    voices,
-    clips,
-    samples,
+  const rendered: Array<Float32Array<ArrayBuffer>> = renderJob(prepared.job);
+
+  remember(
+    prepared.key,
+    rendered,
+    cache,
+    cache === scores ? scoreCache : previewCache,
   );
 
-  remember(key, rendered, cache, cache === scores ? scoreCache : previewCache);
-
   return rendered;
+}
+
+function scoreSamples(
+  score: Score,
+  rate: number,
+  cache: Map<string, Array<Float32Array<ArrayBuffer>>> = scores,
+): Array<Float32Array<ArrayBuffer>> {
+  return renderNow(prepareScore(score, rate), cache);
 }
 
 function remember(
@@ -416,28 +496,143 @@ function remember(
   }
 }
 
-function ambientSamples(
-  sound: Sound,
-  rate: number,
-): Array<Float32Array<ArrayBuffer>> {
-  const key: string = rate + ":ambience:" + JSON.stringify(sound.ambience);
-  const cached: Array<Float32Array<ArrayBuffer>> | undefined = scores.get(key);
-
-  if (cached !== undefined) {
-    return cached;
+function renderer(): Worker | null {
+  if (worker !== undefined) {
+    return worker;
   }
 
-  const samples: Array<Float32Array<ArrayBuffer>> = [
-    renderAmbience(sound.ambience, rate),
-  ];
+  try {
+    worker = new Worker(workerFile, { type: "module" });
+    worker.addEventListener("message", (event: MessageEvent<RenderResult>) => {
+      const found: Waiting | undefined = waiting.get(event.data.id);
 
-  remember(key, samples);
+      waiting.delete(event.data.id);
+      found?.finish(event.data.sides);
+    });
+    worker.addEventListener("error", () => {
+      worker?.terminate();
+      worker = null;
 
-  return samples;
+      for (const found of waiting.values()) {
+        found.finish(null);
+      }
+
+      waiting.clear();
+    });
+  } catch {
+    worker = null;
+  }
+
+  return worker;
 }
 
-function scoreBuffer(score: Score): AudioBuffer {
-  return samplesBuffer(scoreSamples(score, audio().sampleRate));
+function renderLater(
+  prepared: Prepared,
+  cache: Map<string, Array<Float32Array<ArrayBuffer>>> | null = scores,
+): Promise<Array<Float32Array<ArrayBuffer>>> {
+  const cached: Array<Float32Array<ArrayBuffer>> | undefined = cache?.get(
+    prepared.key,
+  );
+
+  if (cached !== undefined) {
+    return Promise.resolve(cached);
+  }
+
+  const running: Promise<Array<Float32Array<ArrayBuffer>>> | undefined =
+    rendering.get(prepared.key);
+
+  if (running !== undefined) {
+    return running;
+  }
+
+  const thread: Worker | null = renderer();
+
+  if (thread === null) {
+    return Promise.resolve(renderNow(prepared, cache ?? new Map()));
+  }
+
+  synthesizeSamples(prepared.job);
+
+  const id: number = ++renders;
+  const request: RenderRequest = { id: id, job: prepared.job };
+  const promise: Promise<Array<Float32Array<ArrayBuffer>>> = new Promise(
+    (resolve: (sides: Array<Float32Array<ArrayBuffer>>) => void) => {
+      waiting.set(id, {
+        finish: (sides: Array<Float32Array<ArrayBuffer>> | null) => {
+          rendering.delete(prepared.key);
+
+          if (sides === null) {
+            resolve(renderNow(prepared, cache ?? new Map()));
+            return;
+          }
+
+          if (cache !== null) {
+            remember(prepared.key, sides, cache);
+          }
+
+          resolve(sides);
+        },
+      });
+    },
+  );
+
+  rendering.set(prepared.key, promise);
+  thread.postMessage(request);
+
+  return promise;
+}
+
+function prepareTrackJob(sound: Sound, guarded: boolean): Prepared | null {
+  return sound.source === "song"
+    ? prepareScore(heard(sound.score, guarded), audio().sampleRate)
+    : sound.source === "ambient"
+      ? prepareAmbience(sound, audio().sampleRate)
+      : null;
+}
+
+function trackReady(sound: Sound | null, guarded: boolean = false): boolean {
+  const prepared: Prepared | null =
+    sound === null ? null : prepareTrackJob(sound, guarded);
+
+  return prepared === null || scores.has(prepared.key);
+}
+
+async function trackSamples(
+  sound: Sound,
+  guarded: boolean = false,
+): Promise<Array<Float32Array<ArrayBuffer>> | null> {
+  if (sound.source === "song") {
+    await loadVoices(heard(sound.score, guarded));
+  }
+
+  const prepared: Prepared | null = prepareTrackJob(sound, guarded);
+
+  return prepared === null ? null : renderLater(prepared);
+}
+
+async function soundBuffer(
+  sound: Sound,
+  guarded: boolean = false,
+): Promise<AudioBuffer | null> {
+  if (sound.source === "file") {
+    return loadAudio(sound.file);
+  }
+
+  const sides: Array<Float32Array<ArrayBuffer>> | null = await trackSamples(
+    sound,
+    guarded,
+  );
+
+  return sides === null ? null : samplesBuffer(sides);
+}
+
+async function prepareTrack(
+  sound: Sound | null,
+  guarded: boolean = false,
+): Promise<void> {
+  if (sound !== null) {
+    await trackSamples(sound, guarded);
+  }
 }
 
 function samplesBuffer(sides: Array<Float32Array<ArrayBuffer>>): AudioBuffer {
@@ -548,21 +743,25 @@ function playSound(sound: Sound): () => void {
     if (sound.source === "song") {
       stopPreview();
       songPreview = stop;
-      void loadVoices(sound.score).then(() => {
-        if (!stopped) {
-          source = start(scoreBuffer(sound.score), sound.volume, "soundtrack");
-        }
-      });
+      void trackSamples(sound).then(
+        (sides: Array<Float32Array<ArrayBuffer>> | null) => {
+          if (sides !== null && !stopped) {
+            source = start(samplesBuffer(sides), sound.volume, "soundtrack");
+          }
+        },
+      );
       return stop;
     }
 
     if (sound.source === "ambient") {
       stopPreview();
       songPreview = stop;
-      source = start(
-        samplesBuffer(ambientSamples(sound, audio().sampleRate)),
-        sound.volume,
-        "soundtrack",
+      void trackSamples(sound).then(
+        (sides: Array<Float32Array<ArrayBuffer>> | null) => {
+          if (sides !== null && !stopped) {
+            source = start(samplesBuffer(sides), sound.volume, "soundtrack");
+          }
+        },
       );
       return stop;
     }
@@ -586,13 +785,86 @@ function playSound(sound: Sound): () => void {
   return stop;
 }
 
+function effectKey(sound: Sound): string {
+  return sound.source === "synth"
+    ? [
+        sound.id,
+        sound.wave,
+        sound.pitch,
+        sound.slide,
+        sound.attack,
+        sound.sustain,
+        sound.decay,
+        sound.vibratoDepth,
+        sound.vibratoRate,
+        sound.volume,
+      ].join(":")
+    : sound.id + ":" + sound.source + ":" + (sound.file ?? "");
+}
+
+function rememberEffect(key: string, buffer: AudioBuffer): void {
+  effects.set(key, buffer);
+
+  if (effects.size > effectCache) {
+    effects.delete(effects.keys().next().value!);
+  }
+}
+
+function playEffect(sound: Sound): void {
+  try {
+    if (audio().state !== "running") {
+      return;
+    }
+
+    const key: string = effectKey(sound);
+    const found: AudioBuffer | undefined = effects.get(key);
+    const level: number = sound.source === "synth" ? 1 : sound.volume;
+
+    if (found !== undefined) {
+      start(found, level);
+      return;
+    }
+
+    if (sound.source === "synth") {
+      const samples: Float32Array<ArrayBuffer> = synthesize(
+        sound,
+        audio().sampleRate,
+      );
+      const buffer: AudioBuffer = audio().createBuffer(
+        1,
+        samples.length,
+        audio().sampleRate,
+      );
+
+      buffer.copyToChannel(samples, 0);
+      rememberEffect(key, buffer);
+      start(buffer, level);
+      return;
+    }
+
+    if (loadingEffects.has(key)) {
+      return;
+    }
+
+    loadingEffects.add(key);
+    void soundBuffer(sound).then((buffer: AudioBuffer | null) => {
+      loadingEffects.delete(key);
+
+      if (buffer !== null) {
+        rememberEffect(key, buffer);
+      }
+    });
+  } catch {
+    console.warn("Could not play the effect");
+  }
+}
+
 function playTrack(
   sound: Sound,
   ended: (played: boolean) => void,
   offset: number = 0,
   guarded: boolean = false,
 ): Track {
-  const score: Score = heard(sound.score, guarded);
   let source: AudioBufferSourceNode | null = null;
   let stopped: boolean = false;
   let startedAt: number = 0;
@@ -602,13 +874,12 @@ function playTrack(
   }
 
   const ready: Promise<AudioBuffer | null> =
-    sound.source === "song"
-      ? loadVoices(score).then(() => scoreBuffer(score))
-      : sound.source === "ambient"
-        ? Promise.resolve(
-            samplesBuffer(ambientSamples(sound, audio().sampleRate)),
-          )
-        : loadAudio(sound.file);
+    sound.source === "song" || sound.source === "ambient"
+      ? trackSamples(sound, guarded).then(
+          (sides: Array<Float32Array<ArrayBuffer>> | null) =>
+            sides === null ? null : samplesBuffer(sides),
+        )
+      : loadAudio(sound.file);
 
   void ready.then((buffer: AudioBuffer | null) => {
     if (stopped) {
@@ -659,28 +930,51 @@ function playTrack(
   };
 }
 
-function drawSound(
-  graphics: Graphics,
-  sound: Sound,
-  width: number,
-  height: number,
-  color: string,
-): void {
-  const buffer: AudioBuffer | null = bufferOf(sound);
-  const samples: Float32Array =
-    sound.source === "synth"
-      ? synthesize(sound, drawRate)
-      : sound.source === "song"
-        ? scoreSamples(sound.score, drawRate)[0]!
-        : sound.source === "ambient"
-          ? ambientSamples(sound, drawRate)[0]!
-          : (buffer?.getChannelData(0) ?? new Float32Array(1));
-  const scale: number = sound.source === "synth" ? 1 : sound.volume;
-  const columns: number = Math.max(Math.floor(width / 2), 1);
+function outlineOf(samples: Float32Array): Outline {
+  const lows: Float32Array = new Float32Array(outlineBuckets);
+  const highs: Float32Array = new Float32Array(outlineBuckets);
   const stride: number = Math.max(
-    Math.floor(samples.length / columns / drawDetail),
+    Math.floor(samples.length / outlineBuckets / drawDetail),
     1,
   );
+
+  for (let bucket = 0; bucket < outlineBuckets; bucket++) {
+    const start: number = Math.floor(
+      (bucket / outlineBuckets) * samples.length,
+    );
+    const end: number = Math.max(
+      Math.floor(((bucket + 1) / outlineBuckets) * samples.length),
+      start + 1,
+    );
+
+    for (
+      let index = start;
+      index < end && index < samples.length;
+      index += stride
+    ) {
+      lows[bucket] = Math.min(lows[bucket]!, samples[index]!);
+      highs[bucket] = Math.max(highs[bucket]!, samples[index]!);
+    }
+  }
+
+  return { lows: lows, highs: highs };
+}
+
+function rememberOutline(key: string, outline: Outline): void {
+  outlines.set(key, outline);
+
+  if (outlines.size > outlineCache) {
+    outlines.delete(outlines.keys().next().value!);
+  }
+}
+
+function drawOutline(
+  graphics: Graphics,
+  outline: Outline | null,
+  plot: Omit<Plot, "key" | "prepared">,
+): void {
+  const { width, height, color, scale } = plot;
+  const columns: number = Math.max(Math.floor(width / 2), 1);
 
   graphics.clear();
   graphics
@@ -688,22 +982,22 @@ function drawSound(
     .lineTo(width, height / 2)
     .stroke({ color: color, width: 1, alpha: 0.3 });
 
+  if (outline === null) {
+    return;
+  }
+
   for (let column = 0; column < columns; column++) {
-    const start: number = Math.floor((column / columns) * samples.length);
+    const start: number = Math.floor((column / columns) * outlineBuckets);
     const end: number = Math.max(
-      Math.floor(((column + 1) / columns) * samples.length),
+      Math.floor(((column + 1) / columns) * outlineBuckets),
       start + 1,
     );
     let low: number = 0;
     let high: number = 0;
 
-    for (
-      let index = start;
-      index < end && index < samples.length;
-      index += stride
-    ) {
-      low = Math.min(low, samples[index]! * scale);
-      high = Math.max(high, samples[index]! * scale);
+    for (let bucket = start; bucket < end; bucket++) {
+      low = Math.min(low, outline.lows[bucket]! * scale);
+      high = Math.max(high, outline.highs[bucket]! * scale);
     }
 
     const x: number = (column + 0.5) * (width / columns);
@@ -716,16 +1010,103 @@ function drawSound(
   graphics.stroke({ color: color, width: 1 });
 }
 
+function plotLater(graphics: Graphics): void {
+  const wanted: Plot | undefined = plots.get(graphics);
+
+  if (wanted === undefined || plotting.has(graphics)) {
+    return;
+  }
+
+  plotting.add(graphics);
+  void renderLater(wanted.prepared, null).then(
+    (sides: Array<Float32Array<ArrayBuffer>>) => {
+      plotting.delete(graphics);
+      rememberOutline(wanted.key, outlineOf(sides[0]!));
+
+      const latest: Plot | undefined = plots.get(graphics);
+
+      if (graphics.destroyed || latest === undefined) {
+        return;
+      }
+
+      const found: Outline | undefined = outlines.get(latest.key);
+
+      if (found === undefined) {
+        plotLater(graphics);
+        return;
+      }
+
+      drawOutline(graphics, found, latest);
+    },
+  );
+}
+
+function drawSound(
+  graphics: Graphics,
+  sound: Sound,
+  width: number,
+  height: number,
+  color: string,
+): void {
+  const scale: number = sound.source === "synth" ? 1 : sound.volume;
+  const look: Omit<Plot, "key" | "prepared"> = {
+    width: width,
+    height: height,
+    color: color,
+    scale: scale,
+  };
+
+  if (sound.source === "synth" || sound.source === "file") {
+    const buffer: AudioBuffer | null = bufferOf(sound);
+
+    plots.delete(graphics);
+    drawOutline(
+      graphics,
+      outlineOf(
+        sound.source === "synth"
+          ? synthesize(sound, drawRate)
+          : (buffer?.getChannelData(0) ?? new Float32Array(1)),
+      ),
+      look,
+    );
+    return;
+  }
+
+  const prepared: Prepared =
+    sound.source === "song"
+      ? prepareScore(sound.score, drawRate)
+      : prepareAmbience(sound, drawRate);
+  const found: Outline | undefined = outlines.get(prepared.key);
+
+  if (found === undefined && !plots.has(graphics)) {
+    drawOutline(graphics, null, look);
+  }
+
+  plots.set(graphics, { ...look, key: prepared.key, prepared: prepared });
+
+  if (found !== undefined) {
+    drawOutline(graphics, found, look);
+    return;
+  }
+
+  plotLater(graphics);
+}
+
 export {
+  audio as audioContext,
   isMusic,
   canPlay,
   soundLength,
   loadAudio,
   importAudio,
   playSound,
+  playEffect,
   stopPreview,
   useSounds,
   playTrack,
+  prepareTrack,
+  trackReady,
+  soundBuffer,
   previewNote,
   sampleChoices,
   drawSound,

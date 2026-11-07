@@ -1,6 +1,7 @@
 import type {
   Background,
   Curve,
+  Cutscene,
   Difficulty,
   Enemy,
   Keyframe,
@@ -106,6 +107,7 @@ function addStageTab(studio: Studio): StageTab {
       id: createId(),
       time: time,
       spawns: clip.keyframe.spawns.map(cloneSpawn),
+      cutscene: clip.keyframe.cutscene,
     });
     saveCreations(creations);
     selectKeyframe(stage().keyframes.length - 1);
@@ -140,7 +142,26 @@ function addStageTab(studio: Studio): StageTab {
     return "Mirrored enemy";
   }
 
+  function cutsceneName(id: string | null): string {
+    return (
+      creations.cutscenes.find((value: Cutscene) => value.id === id)?.name ??
+      "Missing"
+    );
+  }
+
+  function enemyFrame(): boolean {
+    return keyframe().cutscene === null;
+  }
+
   function keyframeLabel(value: Keyframe): string {
+    if (value.cutscene !== null) {
+      return (
+        value.time.toFixed(1) +
+        "s  ·  cutscene  ·  " +
+        cutsceneName(value.cutscene)
+      );
+    }
+
     return (
       value.time.toFixed(1) +
       "s  ·  " +
@@ -247,17 +268,33 @@ function addStageTab(studio: Studio): StageTab {
             saveCreations(creations);
             selectKeyframe(stage().keyframes.length - 1);
           },
-          "Remove frame",
+          "Add cutscene",
           () => {
-            if (stage().keyframes.length <= 1) {
+            const first: Cutscene | undefined = creations.cutscenes[0];
+
+            if (first === undefined) {
               return;
             }
 
-            stage().keyframes.splice(cursor.keyframe, 1);
+            const time: number =
+              Math.round(Math.min(preview.stageTime(), stage().length) * 2) / 2;
+
+            stage().keyframes.push(
+              defaultKeyframe(time, [{ ...spawn(), id: createId() }], first.id),
+            );
             saveCreations(creations);
-            selectKeyframe(Math.max(cursor.keyframe - 1, 0));
+            selectKeyframe(stage().keyframes.length - 1);
           },
         ),
+        actionRow("Remove frame", () => {
+          if (stage().keyframes.length <= 1) {
+            return;
+          }
+
+          stage().keyframes.splice(cursor.keyframe, 1);
+          saveCreations(creations);
+          selectKeyframe(Math.max(cursor.keyframe - 1, 0));
+        }),
         choice(
           "Keyframe",
           () =>
@@ -282,140 +319,164 @@ function addStageTab(studio: Studio): StageTab {
             preview.seek(value);
           },
         ),
-      ]),
-      ...section("Enemy", [
-        actionRow(
-          "Add enemy",
-          () => {
-            const source: Spawn = spawn();
-
-            keyframe().spawns.push({
-              ...source,
-              derivatives: source.derivatives.map((value: Vector) => ({
-                ...value,
-              })),
-              waves: source.waves.map((value: Wave<Vector>) => ({
-                ...value,
-                amplitude: { ...value.amplitude },
-              })),
-              id: createId(),
-              x: Math.min(source.x + 0.15, 0.95),
-            });
-            cursor.spawn = keyframe().spawns.length - 1;
-            changed();
-            refresh();
-          },
-          "Remove enemy",
-          () => {
-            if (keyframe().spawns.length <= 1) {
-              return;
-            }
-
-            keyframe().spawns.splice(cursor.spawn, 1);
-            cursor.spawn = Math.max(cursor.spawn - 1, 0);
-            changed();
-            refresh();
-          },
-        ),
         choice(
-          "Enemy",
+          "Cutscene",
           () => [
-            { value: null, label: "None" },
-            ...creations.enemies.map((value: Enemy) => ({
+            { value: null, label: "None, enemies" },
+            ...creations.cutscenes.map((value: Cutscene) => ({
               value: value.id as string | null,
               label: value.name,
             })),
           ],
-          () => spawn().enemy,
+          () => keyframe().cutscene,
           (value: string | null) => {
-            spawn().enemy = value;
+            keyframe().cutscene = value;
             buildMarkers();
           },
-          "enemy",
-        ),
-        slider(
-          "Count",
-          1,
-          20,
-          1,
-          () => spawn().count,
-          (value: number) => {
-            spawn().count = value;
-          },
-        ),
-        slider(
-          "Gap",
-          0.1,
-          5,
-          0.1,
-          () => spawn().gap,
-          (value: number) => {
-            spawn().gap = value;
-          },
+          "cutscene",
         ),
       ]),
-      ...section("Movement", [
-        vector(
-          "Position",
-          positionMin,
-          positionMax,
-          0.01,
-          () => ({ x: spawn().x, y: spawn().y }),
-          (value: Vector) => {
-            spawn().x = value.x;
-            spawn().y = value.y;
-            placeMarkers();
-          },
-        ),
-        choice(
-          "Mode",
-          () => curveOptions,
-          () => spawn().curve,
-          (value: Curve) => {
-            spawn().curve = value;
-            placeMarkers();
-          },
-        ),
-        ...derivativeNames.map((name: string, order: number) => ({
-          ...vector(
-            name,
-            -derivativeLimit,
-            derivativeLimit,
-            derivativeStep,
-            () => spawn().derivatives[order] ?? { x: 0, y: 0 },
+      ...section(
+        "Enemy",
+        [
+          actionRow(
+            "Add enemy",
+            () => {
+              const source: Spawn = spawn();
+
+              keyframe().spawns.push({
+                ...source,
+                derivatives: source.derivatives.map((value: Vector) => ({
+                  ...value,
+                })),
+                waves: source.waves.map((value: Wave<Vector>) => ({
+                  ...value,
+                  amplitude: { ...value.amplitude },
+                })),
+                id: createId(),
+                x: Math.min(source.x + 0.15, 0.95),
+              });
+              cursor.spawn = keyframe().spawns.length - 1;
+              changed();
+              refresh();
+            },
+            "Remove enemy",
+            () => {
+              if (keyframe().spawns.length <= 1) {
+                return;
+              }
+
+              keyframe().spawns.splice(cursor.spawn, 1);
+              cursor.spawn = Math.max(cursor.spawn - 1, 0);
+              changed();
+              refresh();
+            },
+          ),
+          choice(
+            "Enemy",
+            () => [
+              { value: null, label: "None" },
+              ...creations.enemies.map((value: Enemy) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => spawn().enemy,
+            (value: string | null) => {
+              spawn().enemy = value;
+              buildMarkers();
+            },
+            "enemy",
+          ),
+          slider(
+            "Count",
+            1,
+            20,
+            1,
+            () => spawn().count,
+            (value: number) => {
+              spawn().count = value;
+            },
+          ),
+          slider(
+            "Gap",
+            0.1,
+            5,
+            0.1,
+            () => spawn().gap,
+            (value: number) => {
+              spawn().gap = value;
+            },
+          ),
+        ],
+        enemyFrame,
+      ),
+      ...section(
+        "Movement",
+        [
+          vector(
+            "Position",
+            positionMin,
+            positionMax,
+            0.01,
+            () => ({ x: spawn().x, y: spawn().y }),
             (value: Vector) => {
-              spawn().derivatives[order] = value;
+              spawn().x = value.x;
+              spawn().y = value.y;
               placeMarkers();
             },
           ),
-          shown: () =>
-            spawn().curve === "polynomial" &&
-            spawn().derivatives.length > order,
-        })),
-        {
-          ...derivativeActions(
-            () => spawn().derivatives,
-            derivativeNames,
-            () => ({ x: 0, y: 0 }),
+          choice(
+            "Mode",
+            () => curveOptions,
+            () => spawn().curve,
+            (value: Curve) => {
+              spawn().curve = value;
+              placeMarkers();
+            },
           ),
-          shown: () => spawn().curve === "polynomial",
-        },
-        ...waveRows(
-          () => spawn().waves,
-          (name: string, get: () => Vector, set: (value: Vector) => void) =>
-            vector(
+          ...derivativeNames.map((name: string, order: number) => ({
+            ...vector(
               name,
               -derivativeLimit,
               derivativeLimit,
               derivativeStep,
-              get,
-              set,
+              () => spawn().derivatives[order] ?? { x: 0, y: 0 },
+              (value: Vector) => {
+                spawn().derivatives[order] = value;
+                placeMarkers();
+              },
             ),
-          () => ({ x: waveAmplitude, y: 0 }),
-          () => spawn().curve === "sinusoidal",
-          placeMarkers,
-        ),
-      ]),
+            shown: () =>
+              spawn().curve === "polynomial" &&
+              spawn().derivatives.length > order,
+          })),
+          {
+            ...derivativeActions(
+              () => spawn().derivatives,
+              derivativeNames,
+              () => ({ x: 0, y: 0 }),
+            ),
+            shown: () => spawn().curve === "polynomial",
+          },
+          ...waveRows(
+            () => spawn().waves,
+            (name: string, get: () => Vector, set: (value: Vector) => void) =>
+              vector(
+                name,
+                -derivativeLimit,
+                derivativeLimit,
+                derivativeStep,
+                get,
+                set,
+              ),
+            () => ({ x: waveAmplitude, y: 0 }),
+            () => spawn().curve === "sinusoidal",
+            placeMarkers,
+          ),
+        ],
+        enemyFrame,
+      ),
     ],
     () => {
       preview.setBackground(backgroundById(stage().background));

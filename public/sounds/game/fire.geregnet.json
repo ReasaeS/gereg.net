@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-fire",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-fire",
+        "name": "Enemy Fire",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "sawtooth",
+        "pitch": 900,
+        "slide": 300,
+        "attack": 0.002,
+        "sustain": 0.02,
+        "decay": 0.08,
+        "vibratoDepth": 0,
+        "vibratoRate": 8,
+        "volume": 0.12,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

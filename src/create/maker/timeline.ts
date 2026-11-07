@@ -19,6 +19,7 @@ type Timeline = {
 
 const timelineColor: string = "#061a52";
 const markerColor: string = "#9fd8ff";
+const cutsceneColor: string = "#ffd27a";
 const timelineGap: number = 6; // units
 const timelineHeight: number = 10; // units
 const columnCenter: number = fieldX / 2; // units
@@ -75,8 +76,19 @@ function createTimeline(
     for (let index = 0; index < stage().keyframes.length; index++) {
       const value: Keyframe = stage().keyframes[index]!;
       const color: string =
-        index === cursor.keyframe ? getTheme().accent : markerColor;
+        index === cursor.keyframe
+          ? getTheme().accent
+          : value.cutscene === null
+            ? markerColor
+            : cutsceneColor;
       const y: number = timelineY(value.time);
+
+      if (value.cutscene !== null) {
+        track
+          .rect(0, y - keyframeSize, timelineHeight, keyframeSize * 2)
+          .fill(color);
+        continue;
+      }
 
       for (const entry of value.spawns) {
         for (let wave = 1; wave < entry.count; wave++) {

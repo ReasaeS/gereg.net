@@ -699,8 +699,8 @@ function drawEntry(
     const stage: Stage = item as Stage;
     const used: Set<string> = new Set();
 
-    for (const spawn of stage.keyframes.flatMap(
-      (keyframe: Keyframe) => keyframe.spawns,
+    for (const spawn of stage.keyframes.flatMap((keyframe: Keyframe) =>
+      keyframe.cutscene === null ? keyframe.spawns : new Array(),
     )) {
       const enemy: Enemy | null = byId(creations.enemies, spawn.enemy);
 

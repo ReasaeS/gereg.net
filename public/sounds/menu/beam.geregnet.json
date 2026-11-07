@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "menu-beam",
+  "creations": {
+    "sounds": [
+      {
+        "id": "menu-beam",
+        "name": "Beam sweep",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "sine",
+        "pitch": 440,
+        "slide": 880,
+        "attack": 0.04,
+        "sustain": 0.05,
+        "decay": 0.35,
+        "vibratoDepth": 0.3,
+        "vibratoRate": 14,
+        "volume": 0.06,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

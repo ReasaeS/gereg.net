@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-power",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-power",
+        "name": "Full Power",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "triangle",
+        "pitch": 600,
+        "slide": 1800,
+        "attack": 0.01,
+        "sustain": 0.15,
+        "decay": 0.3,
+        "vibratoDepth": 0.2,
+        "vibratoRate": 12,
+        "volume": 0.3,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

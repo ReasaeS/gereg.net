@@ -1,5 +1,6 @@
 import type { Background, Pattern, Sigil } from "../../types";
 import type { Studio } from "../studio";
+import { soundOptions } from "../swatches";
 
 function addSpellTab(studio: Studio): void {
   const { creations, preview, addTab } = studio;
@@ -53,6 +54,15 @@ function addSpellTab(studio: Studio): void {
             spell().pattern = value;
           },
           "pattern",
+        ),
+        choice(
+          "Declare sound",
+          () => soundOptions(creations),
+          () => spell().declareSound,
+          (value: string | null) => {
+            spell().declareSound = value;
+          },
+          "sound",
         ),
       ]),
     ],

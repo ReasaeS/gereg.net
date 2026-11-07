@@ -17,6 +17,7 @@ import {
   leaveButtons,
   setButtonsActive,
   selectedPoint,
+  onSelect,
   menuHovered,
   navigate,
 } from "./menu/options";
@@ -54,6 +55,13 @@ import {
 } from "./menu/landing";
 import { nativeRatio, setRenderRatio, viewScale } from "./ui/density";
 import { createTerminal, type Terminal } from "./menu/terminal";
+import {
+  createSoundscape,
+  loadMenuSound,
+  type Soundscape,
+} from "./menu/soundscape";
+import { playSound } from "./create/sound";
+import type { Sound } from "./create/types";
 import { formatPlaytime, playtime } from "./settings/playtime";
 import { createAscii, type Ascii } from "./effects/ascii/ascii";
 import { createCrt } from "./effects/crt/crt";
@@ -103,6 +111,9 @@ const resetWarning: string =
 const revealDuration: number = 500; // ms
 const revealEasing: Easing = cubicBezier(0.3, 0, 0.25, 1);
 const peekSmoothing: number = 0.12; // s
+const terminalStorm: number = 0.35;
+const beamCard: string = "beam.geregnet.json";
+const portalShore: number = 0.6;
 const diveDuration: number = 850; // ms
 const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
 const diveFlip: number = -Math.PI; // rad
@@ -313,7 +324,7 @@ async function load<T>(task: () => T | Promise<T>): Promise<T> {
   return result;
 }
 
-terminal.progress(rainEnabled ? 9 : 8);
+terminal.progress(rainEnabled ? 10 : 9);
 
 const city: Container = new Container();
 const vivid: Container = new Container();
@@ -339,6 +350,14 @@ const buttons: Container = await load(() => createButtons(app));
 menu.addChild(buttons);
 
 const landing: Container = await load(() => createLanding(app));
+const soundscape: Soundscape = await load(createSoundscape);
+const beamSound: Sound | null = await loadMenuSound(beamCard);
+
+onSelect(() => {
+  if (beamSound !== null) {
+    playSound(beamSound);
+  }
+});
 
 if (rainEnabled) {
   setBulletFloor(ocean.surface);
@@ -416,6 +435,9 @@ let routeStart: number = 0;
 let routeBacks: number = 0;
 let screen: Screen = "landing";
 let booting: boolean = true;
+let scape: "terminal" | "landing" | "menu" = "terminal";
+let underwater: boolean = false;
+let quiet: boolean = false;
 
 setLandingEnabled(landing, false);
 const peek: Spring = { value: 0, velocity: 0 };
@@ -448,6 +470,23 @@ app.ticker.add(
   UPDATE_PRIORITY.HIGH,
 );
 
+app.ticker.add(() => {
+  const opened: number = scape === "landing" ? peek.value : 0;
+
+  soundscape.set({
+    intro:
+      scape === "menu"
+        ? 0
+        : scape === "terminal"
+          ? terminalStorm
+          : 1 - opened / 2,
+    portal: scape === "menu" ? 0 : opened * portalShore,
+    music: scape === "menu" ? 1 : 0,
+    depth: underwater ? 1 : 0,
+    level: quiet ? 0 : 1,
+  });
+});
+
 function wait(duration: number): Promise<void> {
   return tween(app.ticker, Math.max(duration, 0), () => undefined);
 }
@@ -470,6 +509,8 @@ function dive(name: string, arrive: () => Promise<void>, end: Screen): void {
 
 function rise(leave: () => Promise<void>, leaveDuration: number): void {
   screen = "rising";
+  underwater = false;
+  quiet = false;
   Promise.all([
     leave(),
     wait(leaveDuration - transitionLead).then(() =>
@@ -492,12 +533,14 @@ function rise(leave: () => Promise<void>, leaveDuration: number): void {
 }
 
 function openPage(page: Page, name: string): void {
+  underwater = true;
   currentPage = page;
   pageName = name;
   dive(name, () => showPage(app.ticker, page), "page");
 }
 
 function play(): void {
+  quiet = true;
   setSurfacesActive(false);
   dive(
     "play",
@@ -726,6 +769,7 @@ function closeCredits(): void {
 
 function returnToLanding(): void {
   screen = "outro";
+  scape = "landing";
   menuOpen = false;
   setButtonsActive(false);
   menu.interactiveChildren = false;
@@ -791,10 +835,13 @@ function morphTerminal(terminalShown: boolean): void {
 }
 
 function enterTerminal(): void {
+  scape = "terminal";
   morphTerminal(true);
 }
 
 function leaveTerminal(): void {
+  soundscape.start();
+  scape = "landing";
   morphTerminal(false);
 }
 
@@ -843,6 +890,7 @@ document.addEventListener("navigate", (event: Event) => {
     };
 
     screen = "intro";
+    scape = "menu";
     menu.visible = true;
     buttons.visible = true;
     menu.interactiveChildren = true;

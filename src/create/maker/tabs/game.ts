@@ -1,7 +1,18 @@
-import type { Difficulty, Ost, Run, Stage } from "../../types";
+import type { Difficulty, GameEffect, Ost, Run, Stage } from "../../types";
+import { soundOptions } from "../swatches";
 import { difficulties, type Rarity } from "../../rarity";
 import { gameStages } from "../../packs";
 import type { Studio } from "../studio";
+
+const effectNames: Array<[GameEffect, string]> = [
+  ["graze", "Graze"],
+  ["item", "Item pickup"],
+  ["power", "Full power"],
+  ["miss", "Player hit"],
+  ["capture", "Spell capture"],
+  ["timeout", "Timer tick"],
+  ["cancel", "Bullet cancel"],
+];
 
 function addGameTab(studio: Studio): void {
   const { creations, preview, addTab } = studio;
@@ -51,6 +62,20 @@ function addGameTab(studio: Studio): void {
           "ost",
         ),
       ]),
+      ...section(
+        "Sounds",
+        effectNames.map(([effect, name]: [GameEffect, string]) =>
+          choice(
+            name,
+            () => soundOptions(creations),
+            () => game().sounds[effect],
+            (value: string | null) => {
+              game().sounds[effect] = value;
+            },
+            "sound",
+          ),
+        ),
+      ),
     ],
     () => {
       const first: Stage | null = gameStages(creations, game())[0] ?? null;

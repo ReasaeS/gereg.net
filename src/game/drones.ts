@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from "pixi.js";
 import { archetype, type Archetype } from "./archetype";
 import { droneShotTexture, shotTexture } from "../editor/drawings";
+import { cue } from "./sfx";
 
 type Offset = {
   x: number; // units
@@ -290,6 +291,7 @@ function createSquad(
 
     while (mainTimer >= mainInterval) {
       mainTimer -= mainInterval;
+      cue("shot");
 
       for (const side of [-1, 1]) {
         addShot(

@@ -35,6 +35,7 @@ import { getShake } from "../../settings/settings";
 import { rumble } from "../../game/gamepad";
 import { createAutopilot, type Autopilot, type Decision } from "./autopilot";
 import { maxPower, minPower } from "../../game/drones";
+import { cue, hush } from "../../game/sfx";
 
 type Resolve = (spawn: Spawn) => Enemy | null;
 
@@ -76,11 +77,17 @@ type Preview = {
   bombsUsed: () => number;
   setBombs: (value: number) => void;
   finished: () => boolean;
+  takeCue: () => string | null;
 };
 
 type Arrival = {
   time: number; // s
   spawn: Spawn;
+};
+
+type Cue = {
+  time: number; // s
+  cutscene: string;
 };
 
 const emitterX: number = previewWidth / 2; // units
@@ -216,6 +223,9 @@ async function createPreview(
   let resolve: Resolve = () => null;
   let arrivals: Array<Arrival> = new Array();
   let nextArrival: number = 0;
+  let cues: Array<Cue> = new Array();
+  let nextCue: number = 0;
+  let cued: string | null = null;
   let time: number = 0;
   let playtest: boolean = false;
   let focused: boolean = false;
@@ -306,12 +316,19 @@ async function createPreview(
 
   function schedule(): void {
     arrivals = new Array();
+    cues = new Array();
+    cued = null;
 
     if (stage === null) {
       return;
     }
 
     for (const keyframe of stage.keyframes) {
+      if (keyframe.cutscene !== null) {
+        cues.push({ time: keyframe.time, cutscene: keyframe.cutscene });
+        continue;
+      }
+
       for (const spawn of keyframe.spawns) {
         for (
           let wave = 0;
@@ -336,6 +353,24 @@ async function createPreview(
     if (nextArrival < 0) {
       nextArrival = arrivals.length;
     }
+
+    cues.sort((first: Cue, second: Cue) => first.time - second.time);
+    findCue();
+  }
+
+  function findCue(): void {
+    nextCue = cues.findIndex((cue: Cue) => cue.time >= time);
+
+    if (nextCue < 0) {
+      nextCue = cues.length;
+    }
+  }
+
+  function cleared(): boolean {
+    return !actors.list.some(
+      (actor: Actor) =>
+        actor.staged && !actor.dead && actor.enemy.rank !== "regular",
+    );
   }
 
   function seek(value: number): void {
@@ -349,10 +384,16 @@ async function createPreview(
     ended = false;
     time = Math.max(goal - seekLookback, 0);
     schedule();
+    hush(true);
 
     while (time < goal) {
       update(Math.min(seekStep, goal - time));
     }
+
+    hush(false);
+
+    cued = null;
+    findCue();
   }
 
   function seekPattern(value: number): void {
@@ -374,12 +415,30 @@ async function createPreview(
       return;
     }
 
+    const cue: Cue | undefined = cues[nextCue];
+
     if (ended) {
       actors.move(delta);
+
+      if (cue !== undefined && cleared()) {
+        cued = cue.cutscene;
+        nextCue++;
+      }
+
       return;
     }
 
-    time += delta;
+    if (
+      cue !== undefined &&
+      cue.time < stage.length &&
+      time + delta >= cue.time
+    ) {
+      time = Math.max(cue.time, time);
+      cued = cue.cutscene;
+      nextCue++;
+    } else {
+      time += delta;
+    }
 
     if (time >= stage.length && looping) {
       seek(0);
@@ -476,6 +535,7 @@ async function createPreview(
     }
 
     if (bomb.stock() < stock) {
+      cue("bomb");
       bombsUsed++;
       feel(bombRumble, bombRumbleTime);
       actors.spoil();
@@ -514,13 +574,20 @@ async function createPreview(
       )
     ) {
       if (!autopilot) {
+        cue("miss");
         dying = deathbombWindow;
         actors.spoil();
       }
     }
 
     if (dying <= 0) {
-      grazeCount += bullets.graze(player.x, player.y);
+      const grazed: number = bullets.graze(player.x, player.y);
+
+      if (grazed > 0) {
+        cue("graze");
+      }
+
+      grazeCount += grazed;
     }
   }
 
@@ -559,8 +626,18 @@ async function createPreview(
     itemPoints += haul.points;
     itemCount += haul.count;
 
+    if (haul.count > 0) {
+      cue("item");
+    }
+
     if (haul.power > 0) {
+      const before: number = power;
+
       setPower(power + haul.power);
+
+      if (before < maxPower && power >= maxPower) {
+        cue("power");
+      }
     }
   }
 
@@ -841,12 +918,13 @@ async function createPreview(
     setLoop: (loop: boolean) => {
       looping = loop;
     },
-    finished: () =>
-      ended &&
-      !actors.list.some(
-        (actor: Actor) =>
-          actor.staged && !actor.dead && actor.enemy.rank !== "regular",
-      ),
+    takeCue: () => {
+      const taken: string | null = cued;
+
+      cued = null;
+      return taken;
+    },
+    finished: () => ended && cleared() && nextCue >= cues.length,
   };
 }
 

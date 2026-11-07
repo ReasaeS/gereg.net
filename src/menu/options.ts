@@ -80,6 +80,7 @@ const highlight: Highlight = {
 
 let selected: number = 0;
 let active: boolean = false;
+const selectListeners: Array<() => void> = new Array();
 const hoverLocal: Point = new Point();
 
 function navigate(name: string): void {
@@ -117,7 +118,23 @@ function menuHovered(point: Point): boolean {
 }
 
 function select(index: number): void {
-  selected = (index + items.length) % items.length;
+  const next: number = (index + items.length) % items.length;
+
+  if (next === selected) {
+    return;
+  }
+
+  selected = next;
+
+  if (active) {
+    for (const listener of selectListeners) {
+      listener();
+    }
+  }
+}
+
+function onSelect(listener: () => void): void {
+  selectListeners.push(listener);
 }
 
 function confirm(): void {
@@ -386,4 +403,5 @@ export {
   leaveButtons,
   setButtonsActive,
   navigate,
+  onSelect,
 };

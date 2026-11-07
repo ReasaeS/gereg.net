@@ -1,7 +1,7 @@
 import type { Bar, Pattern, Rank, Vessel, Sound, Spell } from "../../types";
 import { defaultBar, limitBars } from "../../defaults";
 import { ranks } from "../../rarity";
-import { brightColors } from "../swatches";
+import { brightColors, soundOptions } from "../swatches";
 import type { Studio } from "../studio";
 import { isMusic } from "../../sound";
 
@@ -110,6 +110,15 @@ function addEnemyTab(studio: Studio): void {
           ),
           shown: () => enemy().rank !== "regular",
         },
+        choice(
+          "Defeat sound",
+          () => soundOptions(creations),
+          () => enemy().defeatSound,
+          (value: string | null) => {
+            enemy().defeatSound = value;
+          },
+          "sound",
+        ),
       ]),
       ...section("Stages", [
         {

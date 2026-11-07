@@ -14,10 +14,13 @@ import type {
   Creations,
   Side,
   OstTrack,
+  Sound,
 } from "./types";
 import {
   createId,
   defaultBar,
+  defaultGameSounds,
+  effectSound,
   repairSpells,
   limitBars,
   defaultEmotion,
@@ -40,7 +43,14 @@ import { useSounds } from "./sound";
 import { defaultCreations } from "./starter";
 
 const storageKey: string = "geregnet.creations";
-const saveListeners: Array<() => void> = new Array();
+const seedStorageKey: string = "geregnet.defaultgame";
+const seedVersion: string = "2";
+const revisionStorageKey: string = "geregnet.lockedrevisions";
+const lockedRevisions: Record<string, string> = {
+  "menu-theme": "2",
+};
+const saveListeners: Array<(creations: Creations) => void> = new Array();
+let lockedSounds: Array<Sound> = new Array();
 
 type OldLine = {
   id: string;
@@ -153,12 +163,125 @@ function upgradeCutscene(cutscene: OldCutscene, cast: Array<Character>): void {
   }
 }
 
+function useLockedSounds(sounds: Array<Sound>): void {
+  lockedSounds = sounds;
+}
+
+function isLocked(id: string): boolean {
+  return lockedSounds.some((sound: Sound) => sound.id === id);
+}
+
+function readRevisions(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(revisionStorageKey) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function addLocked(creations: Creations): boolean {
+  const revisions: Record<string, string> = readRevisions();
+  let added: boolean = false;
+
+  for (const sound of lockedSounds) {
+    const index: number = creations.sounds.findIndex(
+      (other: Sound) => other.id === sound.id,
+    );
+    const revision: string | undefined = lockedRevisions[sound.id];
+
+    if (index < 0) {
+      creations.sounds.push(structuredClone(sound));
+      added = true;
+    } else if (revision !== undefined && revisions[sound.id] !== revision) {
+      creations.sounds[index] = structuredClone(sound);
+      added = true;
+    }
+
+    if (revision !== undefined) {
+      revisions[sound.id] = revision;
+    }
+  }
+
+  if (added) {
+    try {
+      localStorage.setItem(revisionStorageKey, JSON.stringify(revisions));
+    } catch {
+      console.warn("Could not save the locked card revisions");
+    }
+  }
+
+  return added;
+}
+
 function loadCreations(): Creations {
   const creations: Creations = readCreations();
+
+  if (addLocked(creations)) {
+    saveCreations(creations);
+  }
 
   useSounds(creations.sounds);
 
   return creations;
+}
+
+function markSeeded(): void {
+  try {
+    localStorage.setItem(seedStorageKey, seedVersion);
+  } catch {
+    console.warn("Could not save the default game marker");
+  }
+}
+
+function seedCues(creations: Creations, fresh: Creations): void {
+  for (const stage of fresh.stages) {
+    const saved: Stage | undefined = creations.stages.find(
+      (other: Stage) => other.id === stage.id,
+    );
+
+    if (saved === undefined) {
+      continue;
+    }
+
+    for (const keyframe of stage.keyframes) {
+      if (
+        keyframe.cutscene !== null &&
+        creations.cutscenes.some(
+          (other: Cutscene) => other.id === keyframe.cutscene,
+        ) &&
+        !saved.keyframes.some((other: Keyframe) => other.id === keyframe.id)
+      ) {
+        saved.keyframes.push(keyframe);
+      }
+    }
+  }
+}
+
+function seedCreations(creations: Creations, fresh: Creations): boolean {
+  const marker: string | null = localStorage.getItem(seedStorageKey);
+
+  if (marker === seedVersion) {
+    return false;
+  }
+
+  if (marker !== null) {
+    seedCues(creations, fresh);
+    markSeeded();
+    return true;
+  }
+
+  for (const key of Object.keys(fresh) as Array<keyof Creations>) {
+    const list: Array<{ id: string }> = creations[key];
+
+    for (const item of fresh[key] as Array<{ id: string }>) {
+      if (!list.some((other: { id: string }) => other.id === item.id)) {
+        list.push(item);
+      }
+    }
+  }
+
+  markSeeded();
+  return true;
 }
 
 function readCreations(): Creations {
@@ -168,6 +291,7 @@ function readCreations(): Creations {
     if (saved === null) {
       const fresh: Creations = defaultCreations();
 
+      markSeeded();
       saveCreations(fresh);
       return fresh;
     }
@@ -201,8 +325,11 @@ function readCreations(): Creations {
       cutscenes: parsed.cutscenes ?? fallback.cutscenes,
     };
 
+    const seeded: boolean = seedCreations(creations, fallback);
+
     for (const game of creations.games) {
       game.ost = game.ost ?? null;
+      game.sounds = { ...defaultGameSounds(), ...game.sounds };
     }
 
     for (const ost of creations.osts) {
@@ -256,8 +383,18 @@ function readCreations(): Creations {
 
     repairSpells(creations);
 
+    for (const spell of creations.spells) {
+      if (spell.declareSound === undefined) {
+        spell.declareSound = effectSound("declare");
+      }
+    }
+
     for (const enemy of creations.enemies) {
       repairEnemy(enemy);
+
+      if (enemy.defeatSound === undefined) {
+        enemy.defeatSound = effectSound("defeat");
+      }
     }
 
     for (const vessel of creations.vessels) {
@@ -288,6 +425,11 @@ function readCreations(): Creations {
       }
     >) {
       pattern.bullet = pattern.bullet ?? null;
+
+      if (pattern.fireSound === undefined) {
+        pattern.fireSound = effectSound("fire");
+      }
+
       delete pattern.sprite;
       pattern.size = pattern.size ?? 18;
       pattern.frame = pattern.frame ?? "objective";
@@ -336,6 +478,10 @@ function readCreations(): Creations {
 
     repairPacks(creations);
 
+    if (seeded) {
+      saveCreations(creations);
+    }
+
     return creations;
   } catch {
     return defaultCreations();
@@ -366,6 +512,7 @@ function upgradeSigils(creations: Creations, old: Array<OldSigil>): void {
         sigil: sigil.id,
         background: item.background ?? null,
         pattern: null,
+        declareSound: effectSound("declare"),
       });
     }
   }
@@ -418,6 +565,8 @@ function upgradeStage(
   }
 
   for (const keyframe of stage.keyframes) {
+    keyframe.cutscene = keyframe.cutscene ?? null;
+
     if (keyframe.spawns.length === 0) {
       keyframe.spawns.push(defaultSpawn(null, 0.5));
     }
@@ -479,12 +628,20 @@ function saveCreations(creations: Creations): void {
   }
 
   for (const listener of saveListeners) {
-    listener();
+    listener(creations);
   }
 }
 
-function onSave(listener: () => void): void {
+function onSave(listener: (creations: Creations) => void): void {
   saveListeners.push(listener);
 }
 
-export { loadCreations, saveCreations, onSave, usedSprites, usedFiles };
+export {
+  loadCreations,
+  saveCreations,
+  onSave,
+  usedSprites,
+  usedFiles,
+  useLockedSounds,
+  isLocked,
+};

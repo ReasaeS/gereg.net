@@ -140,6 +140,15 @@ function paintAction(button: TileButton): void {
   button.view.alpha = button.enabled ? 1 : actionDisabled;
 }
 
+function setDeletable(tile: Tile, deletable: boolean): void {
+  const button: TileButton = tile.buttons[actions.indexOf("delete")]!;
+
+  if (button.enabled !== deletable) {
+    button.enabled = deletable;
+    paintAction(button);
+  }
+}
+
 function applyTransform(tile: Tile): void {
   const lift: number = 1 + tileLift * tile.lit;
   const progress: number = tile.turnProgress;
@@ -492,5 +501,5 @@ function createTile(
   };
 }
 
-export { createTile, paintTile, applyTransform, stepTile };
+export { createTile, paintTile, applyTransform, stepTile, setDeletable };
 export type { Tile };

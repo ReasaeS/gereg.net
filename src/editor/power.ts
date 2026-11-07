@@ -47,6 +47,16 @@ import { fieldHeight, fieldWidth, hudScale } from "../game/field";
 import { createPilot, type Pilot } from "../game/pilot";
 import { frameDelta } from "../effects/tween/tween";
 import { bombLook, resetLooks, saveLooks, type Look } from "../game/bomb";
+import {
+  playerEffects,
+  playerSound,
+  resetPlayerSounds,
+  setPlayerSound,
+  useEffects,
+  type PlayerEffect,
+} from "../game/sfx";
+import { loadCreations } from "../create/storage";
+import type { Sound } from "../create/types";
 
 type Power = {
   view: Container;
@@ -62,6 +72,11 @@ const panelGap: number = 30; // px
 const summarySize: number = 10; // units
 const hintColor: string = "#9fd8ff";
 const resetWidth: number = 60; // units
+const effectNames: Record<PlayerEffect, string> = {
+  shot: "Shot sound",
+  hit: "Hit sound",
+  bomb: "Bomb sound",
+};
 const tintColors: Array<string> = [
   "#000000",
   "#1a0a2e",
@@ -106,7 +121,18 @@ function createPower(
   let power: number = maxPower;
   let active: boolean = false;
   let laidOut: boolean = false;
+  let sounds: Array<Sound> = new Array();
   const keyboard: Keyboard = createKeyboard(() => active);
+
+  function soundChoices(): Array<Option<string | null>> {
+    return [
+      { value: null, label: "None" },
+      ...sounds.map((sound: Sound) => ({
+        value: sound.id as string | null,
+        label: sound.name,
+      })),
+    ];
+  }
 
   function changed(): void {
     saveDrones();
@@ -125,6 +151,7 @@ function createPower(
   const reset: Chip = createChip("reset", resetWidth, () => {
     resetDrones();
     resetLooks();
+    resetPlayerSounds();
     refresh();
   });
   const resetRow: Container = new Container();
@@ -287,6 +314,20 @@ function createPower(
         },
       ),
     ]),
+    ...section(
+      "Sounds",
+      playerEffects.map((effect: PlayerEffect) =>
+        createChoice(
+          effectNames[effect],
+          soundChoices,
+          () => playerSound(effect),
+          (value: string | null) => {
+            setPlayerSound(effect, value);
+            refresh();
+          },
+        ),
+      ),
+    ),
     {
       view: resetRow,
       refresh: () => reset.paint(),
@@ -331,11 +372,17 @@ function createPower(
   }
 
   function setActive(value: boolean): void {
+    const was: boolean = active;
+
     active = value;
     keyboard.clear();
 
     if (value) {
+      sounds = loadCreations().sounds;
+      useEffects(sounds, null);
       refresh();
+    } else if (was) {
+      useEffects(null, null);
     }
   }
 

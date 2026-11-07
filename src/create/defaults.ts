@@ -1,4 +1,5 @@
 import type {
+  GameSounds,
   Pattern,
   Enemy,
   Bar,
@@ -63,6 +64,7 @@ function defaultPattern(): Pattern {
     aimCurve: "polynomial",
     aimWaves: new Array(),
     swayWaves: new Array(),
+    fireSound: effectSound("fire"),
   };
 }
 
@@ -76,6 +78,7 @@ function defaultEnemy(pattern: string | null): Enemy {
     rank: "regular",
     pattern: pattern,
     theme: null,
+    defeatSound: effectSound("defeat"),
     bars: [defaultBar(20)],
   };
 }
@@ -258,6 +261,7 @@ function defaultSpell(sigil: string): Spell {
     sigil: sigil,
     background: null,
     pattern: null,
+    declareSound: effectSound("declare"),
   };
 }
 
@@ -437,8 +441,12 @@ function defaultSpawn(enemy: string | null, x: number): Spawn {
   };
 }
 
-function defaultKeyframe(time: number, spawns: Array<Spawn>): Keyframe {
-  return { id: createId(), time: time, spawns: spawns };
+function defaultKeyframe(
+  time: number,
+  spawns: Array<Spawn>,
+  cutscene: string | null = null,
+): Keyframe {
+  return { id: createId(), time: time, spawns: spawns, cutscene: cutscene };
 }
 
 function defaultStage(
@@ -493,6 +501,23 @@ function defaultGame(): Game {
     name: "Game",
     runs: { easy: null, normal: null, hard: null, lunatic: null },
     ost: null,
+    sounds: defaultGameSounds(),
+  };
+}
+
+function effectSound(name: string): string {
+  return "sfx-" + name;
+}
+
+function defaultGameSounds(): GameSounds {
+  return {
+    graze: effectSound("graze"),
+    item: effectSound("item"),
+    power: effectSound("power"),
+    miss: effectSound("miss"),
+    capture: effectSound("capture"),
+    timeout: effectSound("timeout"),
+    cancel: effectSound("cancel"),
   };
 }
 
@@ -511,6 +536,8 @@ function defaultOst(tracks: Array<string>): Ost {
 }
 
 export {
+  effectSound,
+  defaultGameSounds,
   bulletSide,
   repairBullet,
   vesselScales,

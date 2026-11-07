@@ -18,6 +18,8 @@ type Scene = {
   advance: () => void;
   update: (delta: number) => void;
   setPalette: (palette: Palette | null) => void;
+  setAuto: (on: boolean) => void;
+  finished: () => boolean;
 };
 
 const boxMargin: number = 12; // units
@@ -75,6 +77,7 @@ function createScene(
   say: (line: Line) => void,
   cast: () => Array<Character>,
   autoAdvance: boolean,
+  looping: boolean = true,
 ): Scene {
   const view: Container = new Container();
   const portrait: Sprite = new Sprite();
@@ -93,6 +96,8 @@ function createScene(
   let hold: number = 0;
   let colors: Palette | null = null;
   let bob: number = 0;
+  let auto: boolean = autoAdvance;
+  let done: boolean = false;
   const focus: Glide = createGlide(
     0,
     (value: number) => {
@@ -187,12 +192,18 @@ function createScene(
     index = Math.min(Math.max(start, 0), cutscene.lines.length - 1);
     typed = 0;
     hold = 0;
+    done = false;
     drawLine();
     say(cutscene.lines[index]!);
   }
 
   function next(): void {
     if (scene === null || scene.lines.length === 0) {
+      return;
+    }
+
+    if (!looping && index >= scene.lines.length - 1) {
+      done = true;
       return;
     }
 
@@ -264,7 +275,7 @@ function createScene(
     arrow.visible = typed >= current.text.length;
     arrow.y = Math.sin(bob) * arrowBob;
 
-    if (autoAdvance && typed >= current.text.length) {
+    if (auto && !done && typed >= current.text.length) {
       hold += delta;
 
       if (hold >= lineHold) {
@@ -314,6 +325,10 @@ function createScene(
     advance: advance,
     update: update,
     setPalette: setPalette,
+    setAuto: (on: boolean) => {
+      auto = on;
+    },
+    finished: () => done,
   };
 }
 

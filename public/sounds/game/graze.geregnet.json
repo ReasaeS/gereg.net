@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-graze",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-graze",
+        "name": "Graze",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "noise",
+        "pitch": 4000,
+        "slide": 3000,
+        "attack": 0.001,
+        "sustain": 0.005,
+        "decay": 0.03,
+        "vibratoDepth": 0,
+        "vibratoRate": 8,
+        "volume": 0.12,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

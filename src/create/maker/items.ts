@@ -1,4 +1,11 @@
-import type { Creations, Enemy, Pattern, Run, Stage } from "../types";
+import type {
+  Creations,
+  Enemy,
+  GameEffect,
+  Pattern,
+  Run,
+  Stage,
+} from "../types";
 import { createId, defaultSigil, repairSpells } from "../defaults";
 import { defaultName } from "../rarity";
 import { blankEntry } from "../blank";
@@ -106,6 +113,30 @@ function forgetStageLook(creations: Creations, id: string): void {
     if (enemyItem.theme === id) {
       enemyItem.theme = null;
     }
+
+    if (enemyItem.defeatSound === id) {
+      enemyItem.defeatSound = null;
+    }
+  }
+
+  for (const patternItem of creations.patterns) {
+    if (patternItem.fireSound === id) {
+      patternItem.fireSound = null;
+    }
+  }
+
+  for (const spellItem of creations.spells) {
+    if (spellItem.declareSound === id) {
+      spellItem.declareSound = null;
+    }
+  }
+
+  for (const gameItem of creations.games) {
+    for (const effect of Object.keys(gameItem.sounds) as Array<GameEffect>) {
+      if (gameItem.sounds[effect] === id) {
+        gameItem.sounds[effect] = null;
+      }
+    }
   }
 
   for (const ostItem of creations.osts) {
@@ -206,6 +237,10 @@ function forgetVessel(creations: Creations, id: string): void {
 function forgetSpawns(creations: Creations, id: string): void {
   for (const stageItem of creations.stages) {
     for (const keyframeItem of stageItem.keyframes) {
+      if (keyframeItem.cutscene === id) {
+        keyframeItem.cutscene = null;
+      }
+
       for (const spawnItem of keyframeItem.spawns) {
         if (spawnItem.enemy === id) {
           spawnItem.enemy = null;

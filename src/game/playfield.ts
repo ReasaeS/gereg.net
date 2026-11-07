@@ -48,6 +48,7 @@ import {
   type Tally,
 } from "./custom";
 import { createBanner, type Banner } from "./banner";
+import { createLoading, type Loading } from "./loading";
 import { createResults, type Results } from "./results";
 import { bestScore, recordScore } from "./records";
 import { addStats } from "./stats";
@@ -82,6 +83,7 @@ const titleTime: number = 2200; // ms
 const attractDelay: number = 350; // ms
 const emptyTime: number = 2200; // ms
 const favouriteTime: number = 1200; // ms
+const loadingFade: number = 300; // ms
 const previewDetail: string = "";
 const modesMenu: Menu = {
   heading: "PLAY",
@@ -155,6 +157,8 @@ async function createPlayfield(
   const zen: Zen = createZen(hud.setLook, hud.setTrack);
   const custom: Custom = await createCustom(texture, droneTexture);
   const banner: Banner = createBanner(fieldWidth, fieldHeight);
+  const loading: Loading = createLoading(fieldWidth, fieldHeight);
+  let watchLoading: boolean = false;
   const results: Results = createResults(fieldWidth, fieldHeight);
   let resultsReady: boolean = false;
   let attracting: boolean = false;
@@ -235,6 +239,7 @@ async function createPlayfield(
     hud.setScale(scale);
     selector.setScale(scale);
     banner.setScale(scale);
+    loading.setScale(scale);
     results.setScale(scale);
   }
 
@@ -247,6 +252,7 @@ async function createPlayfield(
     fieldMask,
     ...pilot.layers(),
     banner.view,
+    loading.view,
     results.view,
   );
   field.mask = fieldMask;
@@ -261,6 +267,23 @@ async function createPlayfield(
   reset();
 
   app.renderer.on("resize", layout);
+  custom.setLoader(withLoading);
+
+  async function withLoading(
+    work: () => Promise<void>,
+    name: string,
+  ): Promise<void> {
+    loading.show(name.toUpperCase());
+
+    try {
+      await Promise.all([
+        work(),
+        tween(app.ticker, loadingFade, () => undefined),
+      ]);
+    } finally {
+      loading.hide();
+    }
+  }
   window.addEventListener("blur", () => {
     if (active && !rolling) {
       pause();
@@ -460,6 +483,21 @@ async function createPlayfield(
       shooting: false,
       bombing: false,
     });
+
+    if (
+      watching &&
+      !watchLoading &&
+      custom.outcome() !== null &&
+      !custom.upcomingReady()
+    ) {
+      watchLoading = true;
+      void withLoading(
+        () => custom.prepareUpcoming(),
+        custom.upcoming()?.name ?? "",
+      ).then(() => {
+        watchLoading = false;
+      });
+    }
 
     const leg: Leg | null = custom.takeLeg();
 
@@ -701,7 +739,7 @@ async function createPlayfield(
     const outcome: Outcome | null = custom.outcome();
 
     if (outcome === "next") {
-      nextStage();
+      void nextStage();
     } else if (outcome === "over") {
       offerContinue();
     } else if (outcome !== null) {
@@ -744,7 +782,24 @@ async function createPlayfield(
     hud.setBadge(watching && watchSpeed > 1 ? watchSpeed + "X SPEED" : badge);
   }
 
-  function nextStage(): void {
+  async function nextStage(): Promise<void> {
+    if (!custom.upcomingReady()) {
+      active = false;
+      rolling = true;
+      keyboard.clear();
+      await withLoading(
+        () => custom.prepareUpcoming(),
+        custom.upcoming()?.name ?? "",
+      );
+      rolling = false;
+
+      if (!customing) {
+        return;
+      }
+
+      active = true;
+    }
+
     const leg: Leg | null = custom.advance();
 
     if (leg === null) {

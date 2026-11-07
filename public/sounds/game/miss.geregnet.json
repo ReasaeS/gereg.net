@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-miss",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-miss",
+        "name": "Player Hit",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "sine",
+        "pitch": 1800,
+        "slide": 200,
+        "attack": 0.002,
+        "sustain": 0.05,
+        "decay": 0.45,
+        "vibratoDepth": 0.5,
+        "vibratoRate": 30,
+        "volume": 0.4,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

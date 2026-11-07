@@ -48,6 +48,7 @@ type Pattern = {
   aimCurve: Curve;
   aimWaves: Array<Wave<number>>; // deg
   swayWaves: Array<Wave<Vector>>; // units
+  fireSound: string | null;
 };
 
 type Look = "energy" | "sprite";
@@ -83,6 +84,7 @@ type Enemy = {
   rank: Rank;
   pattern: string | null;
   theme: string | null;
+  defeatSound: string | null;
   bars: Array<Bar>;
 };
 
@@ -116,6 +118,7 @@ type Spell = {
   sigil: string;
   background: string | null;
   pattern: string | null;
+  declareSound: string | null;
 };
 
 type Waveform = "square" | "sine" | "sawtooth" | "triangle" | "noise";
@@ -314,6 +317,7 @@ type Keyframe = {
   id: string;
   time: number; // s
   spawns: Array<Spawn>;
+  cutscene: string | null;
 };
 
 type Stage = {
@@ -335,11 +339,17 @@ type Run = {
   stages: Array<string | null>;
 };
 
+type GameEffect =
+  "graze" | "item" | "power" | "miss" | "capture" | "timeout" | "cancel";
+
+type GameSounds = Record<GameEffect, string | null>;
+
 type Game = {
   id: string;
   name: string;
   runs: Record<Difficulty, string | null>;
   ost: string | null;
+  sounds: GameSounds;
 };
 
 type OstTrack = {
@@ -374,6 +384,8 @@ type Creations = {
 };
 
 export type {
+  GameEffect,
+  GameSounds,
   Frame,
   Wall,
   Curve,

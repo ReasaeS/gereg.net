@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "menu-shore",
+  "creations": {
+    "sounds": [
+      {
+        "id": "menu-shore",
+        "name": "Menu shore",
+        "source": "ambient",
+        "file": null,
+        "fileName": "",
+        "wave": "square",
+        "pitch": 880,
+        "slide": 440,
+        "attack": 0.01,
+        "sustain": 0.05,
+        "decay": 0.25,
+        "vibratoDepth": 0,
+        "vibratoRate": 8,
+        "volume": 0.5,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0.35,
+            0,
+            0.9,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0.35
+          ],
+          "brightness": 0.55,
+          "motion": 0.5,
+          "length": 30,
+          "seed": 5
+        }
+      }
+    ]
+  },
+  "files": {}
+}

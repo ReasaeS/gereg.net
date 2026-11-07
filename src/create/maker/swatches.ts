@@ -1,4 +1,4 @@
-import type { Curve } from "../types";
+import type { Creations, Curve, Sound } from "../types";
 import type { Option } from "../../ui/widgets";
 
 const brightColors: Array<string> = [
@@ -62,4 +62,21 @@ const curveOptions: Array<Option<Curve>> = [
   { value: "sinusoidal", label: "Sinusoidal" },
 ];
 
-export { brightColors, skyColors, wallColors, menuColors, curveOptions };
+function soundOptions(creations: Creations): Array<Option<string | null>> {
+  return [
+    { value: null, label: "None" },
+    ...creations.sounds.map((value: Sound) => ({
+      value: value.id as string | null,
+      label: value.name,
+    })),
+  ];
+}
+
+export {
+  brightColors,
+  skyColors,
+  wallColors,
+  menuColors,
+  curveOptions,
+  soundOptions,
+};
