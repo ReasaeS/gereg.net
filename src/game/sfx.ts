@@ -26,6 +26,8 @@ const gaps: Record<Effect, number> = {
   capture: 0.5,
   timeout: 0.2,
   cancel: 0.3,
+  extend: 0.5,
+  bombget: 0.5,
 }; // s
 const lastPlayed: Map<Effect, number> = new Map();
 const playerListeners: Array<PlayerListener> = new Array();

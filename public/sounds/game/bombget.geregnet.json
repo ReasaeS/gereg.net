@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-bombget",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-bombget",
+        "name": "Extra Bomb",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "triangle",
+        "pitch": 440,
+        "slide": 1320,
+        "attack": 0.005,
+        "sustain": 0.2,
+        "decay": 0.5,
+        "vibratoDepth": 0.4,
+        "vibratoRate": 16,
+        "volume": 0.3,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

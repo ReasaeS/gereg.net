@@ -32,6 +32,7 @@ import {
   type Drawing,
 } from "./drawings";
 import { createPower, type Power } from "./power";
+import { typing } from "../ui/typing";
 import { createText } from "../ui/text";
 import { createDrop, type Drop } from "../create/maker/drop";
 import { createGlide, mix, type Glide } from "../ui/motion";
@@ -61,6 +62,7 @@ type Editor = {
   enter?: () => void;
   topic?: () => Topic;
   bounds?: () => Rectangle;
+  back?: () => boolean;
 };
 
 const maxUndo: number = 100;
@@ -1967,7 +1969,7 @@ function createEditor(
     status,
     power.view,
   );
-  view.addChild(layer, drop.view);
+  view.addChild(layer, drop.view, power.browser);
 
   window.addEventListener("paste", (event: ClipboardEvent) => {
     const text: string | undefined = event.clipboardData?.getData("text");
@@ -2003,7 +2005,7 @@ function createEditor(
   });
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (!active) {
+    if (!active || typing()) {
       return;
     }
 
@@ -2130,6 +2132,7 @@ function createEditor(
     setActive: setActive,
     enter: enter,
     topic: () => "customise",
+    back: power.back,
     bounds: () =>
       new Rectangle(
         layer.x + extent.x,

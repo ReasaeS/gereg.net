@@ -181,6 +181,7 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
 
       for (const bar of enemy.bars) {
         add("spell", bar.spell);
+        add("pattern", bar.attack ?? null);
       }
     } else if (target === "spell") {
       const spell: Spell = value as Spell;
@@ -305,6 +306,10 @@ function remapFiles(creations: Creations, files: Map<string, string>): void {
 
   for (const background of creations.backgrounds) {
     background.sprite = swap(background.sprite);
+
+    for (const layer of background.layers ?? []) {
+      layer.sprite = swap(layer.sprite);
+    }
   }
 
   for (const character of creations.characters) {

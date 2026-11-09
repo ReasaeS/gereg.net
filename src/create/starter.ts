@@ -21,7 +21,13 @@ import type {
   Wallpaper,
   Wave,
 } from "./types";
-import { defaultGameSounds, defaultPattern, effectSound } from "./defaults";
+import {
+  defaultExtends,
+  defaultGameSounds,
+  defaultPattern,
+  effectSound,
+  rankDrops,
+} from "./defaults";
 import { soundIds, starterSounds } from "./startersongs";
 import { starterBullets, starterVessels } from "./starterart";
 
@@ -344,6 +350,7 @@ function starterBackgrounds(): Array<Background> {
       top: "#16284f",
       bottom: "#050a1c",
       scroll: 170,
+      layers: new Array(),
     },
     {
       id: "lamp-sky-breakwater",
@@ -352,6 +359,7 @@ function starterBackgrounds(): Array<Background> {
       top: "#0f3d57",
       bottom: "#03121d",
       scroll: 240,
+      layers: new Array(),
     },
     {
       id: "lamp-sky-stair",
@@ -360,6 +368,7 @@ function starterBackgrounds(): Array<Background> {
       top: "#04303f",
       bottom: "#010a12",
       scroll: 30,
+      layers: new Array(),
     },
     {
       id: "lamp-sky-lamp",
@@ -368,6 +377,7 @@ function starterBackgrounds(): Array<Background> {
       top: "#2b1b4d",
       bottom: "#120818",
       scroll: -35,
+      layers: new Array(),
     },
     {
       id: "lamp-sky-spell",
@@ -376,6 +386,7 @@ function starterBackgrounds(): Array<Background> {
       top: "#4a1d2e",
       bottom: "#10060f",
       scroll: 90,
+      layers: new Array(),
     },
   ];
 }
@@ -627,6 +638,7 @@ function starterSpells(): Array<Spell> {
       background: charm.background,
       pattern: "lamp-pattern-" + charm.pattern + suffix,
       declareSound: effectSound("declare"),
+      survival: false,
     })),
   );
 }
@@ -841,12 +853,16 @@ function foeCard(foe: Foe, wild: boolean): Enemy {
     pattern: "lamp-pattern-" + foe.pattern + suffix,
     theme: foe.theme,
     defeatSound: effectSound("defeat"),
+    drops: rankDrops(foe.rank),
     bars: foe.bars.map(
       ([health, time, spell]: BarPlan, index: number): Bar => ({
         id: "lamp-bar-" + foe.key + suffix + "-" + index,
         health: Math.round(health * scale),
         time: time,
         spell: spell === null ? null : "lamp-spell-" + spell + suffix,
+        attack: null,
+        move: null,
+        appears: "always",
       }),
     ),
   };
@@ -1132,6 +1148,7 @@ function starterStages(): Array<Stage> {
             cue("lamp-stage-" + craft.key + "-" + difficulty, time, cutscene),
           ),
         ],
+        titleCard: true,
       })),
   );
 }
@@ -1182,6 +1199,7 @@ function starterGame(): Game {
     },
     ost: "lamp-ost",
     sounds: defaultGameSounds(),
+    extends: defaultExtends(),
   };
 }
 

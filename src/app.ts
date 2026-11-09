@@ -481,11 +481,20 @@ app.ticker.add(() => {
           ? terminalStorm
           : 1 - opened / 2,
     portal: scape === "menu" ? 0 : opened * portalShore,
+    rain: scape === "menu" ? 1 : 0,
     music: scape === "menu" ? 1 : 0,
     depth: underwater ? 1 : 0,
-    level: quiet ? 0 : 1,
+    level: quiet || editingCreation() ? 0 : 1,
   });
 });
+
+function editingCreation(): boolean {
+  return (
+    screen === "page" &&
+    pageName === "create" &&
+    currentPage?.content?.topic?.() === "editor"
+  );
+}
 
 function wait(duration: number): Promise<void> {
   return tween(app.ticker, Math.max(duration, 0), () => undefined);

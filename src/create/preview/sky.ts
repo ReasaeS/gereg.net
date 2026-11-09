@@ -6,16 +6,23 @@ import {
   type Texture,
 } from "pixi.js";
 import { getTexture } from "../images";
-import type { Background } from "../types";
+import type { Background, Parallax } from "../types";
 import { previewHeight, previewWidth } from "./bounds";
+
+type Layer = {
+  tiles: TilingSprite;
+  parallax: Parallax;
+};
 
 type Sky = {
   view: Container;
   fill: Graphics;
   tiles: TilingSprite;
+  layers: Array<Layer>;
   gradient: FillGradient | null;
   background: Background | null;
   painted: string;
+  clock: number; // s
 };
 
 function createSky(): Sky {
@@ -23,9 +30,11 @@ function createSky(): Sky {
     view: new Container(),
     fill: new Graphics(),
     tiles: new TilingSprite({ width: previewWidth, height: previewHeight }),
+    layers: new Array(),
     gradient: null,
     background: null,
     painted: "",
+    clock: 0,
   };
 
   sky.tiles.visible = false;
@@ -34,12 +43,66 @@ function createSky(): Sky {
   return sky;
 }
 
+function spriteKey(sprite: string | null): string {
+  return getTexture(sprite) === null ? "" : (sprite ?? "");
+}
+
 function skyKey(background: Background | null): string {
   return background === null
     ? ""
-    : (getTexture(background.sprite) === null ? "" : background.sprite) +
+    : spriteKey(background.sprite) +
         background.top +
-        background.bottom;
+        background.bottom +
+        background.layers
+          .map(
+            (layer: Parallax) => spriteKey(layer.sprite) + ":" + layer.opacity,
+          )
+          .join(",");
+}
+
+function setSkyTime(sky: Sky, time: number): void {
+  sky.clock = time;
+  sky.tiles.tilePosition.y = (sky.background?.scroll ?? 0) * time;
+
+  for (const layer of sky.layers) {
+    layer.tiles.tilePosition.set(
+      layer.parallax.drift * time,
+      layer.parallax.scroll * time,
+    );
+  }
+}
+
+function advanceSky(sky: Sky, delta: number): void {
+  setSkyTime(sky, sky.clock + delta);
+}
+
+function paintLayers(sky: Sky): void {
+  for (const layer of sky.layers) {
+    layer.tiles.destroy();
+  }
+
+  sky.layers = new Array();
+
+  for (const parallax of sky.background?.layers ?? []) {
+    const texture: Texture | null = getTexture(parallax.sprite);
+
+    if (texture === null) {
+      continue;
+    }
+
+    const tiles: TilingSprite = new TilingSprite({
+      texture: texture,
+      width: previewWidth,
+      height: previewHeight,
+    });
+
+    tiles.tileScale.set(previewWidth / texture.width);
+    tiles.alpha = parallax.opacity;
+    sky.view.addChild(tiles);
+    sky.layers.push({ tiles: tiles, parallax: parallax });
+  }
+
+  setSkyTime(sky, sky.clock);
 }
 
 function paintSky(sky: Sky): void {
@@ -57,6 +120,7 @@ function paintSky(sky: Sky): void {
   sky.gradient?.destroy();
   sky.gradient = null;
   sky.fill.clear();
+  paintLayers(sky);
 
   if (background === null) {
     sky.fill.rect(0, 0, previewWidth, previewHeight).fill("#01040f");
@@ -75,5 +139,5 @@ function paintSky(sky: Sky): void {
   sky.fill.rect(0, 0, previewWidth, previewHeight).fill(sky.gradient);
 }
 
-export { createSky, skyKey, paintSky };
+export { createSky, skyKey, paintSky, setSkyTime, advanceSky };
 export type { Sky };

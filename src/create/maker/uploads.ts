@@ -1,9 +1,13 @@
 import { getTexture, loadTexture, storeImage } from "../images";
 import { createSpriteRow, type Control } from "../../ui/widgets";
-import type { Item, Studio } from "./studio";
+import type { Studio } from "./studio";
+
+type Holder = {
+  sprite?: string | null;
+};
 
 type Uploads = {
-  spriteRow: () => Control;
+  spriteRow: (name?: string, target?: () => Holder) => Control;
   pickImage: () => void;
   useImage: (file: File | undefined) => Promise<void>;
 };
@@ -12,13 +16,17 @@ function createUploads(studio: Studio): Uploads {
   const { preview, tab, changed, refresh, cleanup } = studio;
   const { current, emotion } = studio.pick;
   const picker: HTMLInputElement = document.createElement("input");
+  let pending: (() => Holder) | null = null;
 
   async function useImage(file: File | undefined): Promise<void> {
     if (file === undefined || !file.type.startsWith("image/")) {
       return;
     }
 
-    const item: Item = tab().name === "character" ? emotion() : current();
+    const item: Holder =
+      pending?.() ?? (tab().name === "character" ? emotion() : current());
+
+    pending = null;
 
     if (item.sprite === undefined) {
       return;
@@ -37,13 +45,19 @@ function createUploads(studio: Studio): Uploads {
     }
   }
 
-  function spriteRow(): Control {
+  function spriteRow(
+    name: string = "Sprite",
+    target: () => Holder = current,
+  ): Control {
     return createSpriteRow(
-      "Sprite",
-      () => getTexture(current().sprite ?? null),
-      () => picker.click(),
+      name,
+      () => getTexture(target().sprite ?? null),
       () => {
-        current().sprite = null;
+        pending = target;
+        picker.click();
+      },
+      () => {
+        target().sprite = null;
         preview.clear();
         changed();
         refresh();
@@ -54,6 +68,9 @@ function createUploads(studio: Studio): Uploads {
 
   picker.type = "file";
   picker.accept = "image/*";
+  picker.addEventListener("cancel", () => {
+    pending = null;
+  });
   picker.addEventListener("change", () => {
     useImage(picker.files?.[0]);
     picker.value = "";
@@ -61,7 +78,10 @@ function createUploads(studio: Studio): Uploads {
 
   return {
     spriteRow: spriteRow,
-    pickImage: () => picker.click(),
+    pickImage: () => {
+      pending = null;
+      picker.click();
+    },
     useImage: useImage,
   };
 }

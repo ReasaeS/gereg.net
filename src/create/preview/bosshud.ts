@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from "pixi.js";
 import type { Bar, Enemy } from "../types";
 import { fontFamily } from "../../ui/text";
 import { previewHeight, previewWidth } from "./bounds";
-import { barCount, type Actor } from "./actors";
+import { barCount, limitOf, type Actor } from "./actors";
 
 type BossHud = {
   view: Container;
@@ -120,11 +120,12 @@ function drawBossBar(
 
   const enemy: Enemy = boss.enemy;
   const maximum: number = Math.max(enemy.bars[boss.bar]?.health ?? 1, 1);
-  const limit: number = enemy.bars[boss.bar]?.time ?? 0;
+  const limit: number = limitOf(boss);
   const left: number = Math.max(limit - boss.barTime, 0);
-  const spells: number = enemy.bars
+  const ahead: Array<Bar> = enemy.bars
     .slice(boss.bar + 1, barCount(enemy))
-    .filter((bar: Bar) => bar.spell !== null).length;
+    .filter((bar: Bar) => bar.appears === "always");
+  const spells: number = ahead.filter((bar: Bar) => bar.spell !== null).length;
   const width: number = barRight - barLeft;
 
   boss.fill = Math.min(boss.fill + delta / fillTime, 1);
@@ -141,7 +142,7 @@ function drawBossBar(
     .fill("#ffd0da")
     .rect(barLeft, barTop, width, barHeight)
     .stroke({ color: "#ffffff", width: 0.5, alpha: 0.5, alignment: 1 });
-  bossHud.stages.text = String(barCount(enemy) - boss.bar - 1);
+  bossHud.stages.text = String(ahead.length);
   bossHud.timer.visible = limit > 0;
   bossHud.timer.text = String(Math.ceil(left)).padStart(2, "0");
   bossHud.timer.style.fill = left < hurryTime ? "#ff3b3b" : "#ffffff";

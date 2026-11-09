@@ -30,7 +30,7 @@ import type {
 import type { Choice } from "./selector";
 import { bestScore } from "./records";
 import { createScene, type Scene } from "../create/cutscene";
-import { useEffects } from "./sfx";
+import { cue, useEffects } from "./sfx";
 import { createGlide, type Glide } from "../ui/motion";
 import {
   playSound,
@@ -112,6 +112,7 @@ type Custom = {
   outcome: () => Outcome | null;
   score: () => number;
   hits: () => number;
+  lives: () => number;
   bombs: () => number;
   grazes: () => number;
   power: () => number;
@@ -119,6 +120,7 @@ type Custom = {
 };
 
 const startLives: number = 2;
+const maxLives: number = 8;
 const sceneSmoothing: number = 0.12; // s
 const favouriteStorageKey: string = "geregnet.favourites";
 
@@ -187,6 +189,10 @@ async function createCustom(
   let carriedBombs: number = 0;
   let misses: number = 0;
   let countedHits: number = 0;
+  let extraLives: number = 0;
+  let countedGains: number = 0;
+  let extendIndex: number = 0;
+  let extendScores: Array<number> = new Array();
   let track: Track | null = null;
   let playing: Sound | null = null;
   let resumeAt: number = 0;
@@ -465,6 +471,41 @@ async function createCustom(
 
     if (sound !== null) {
       loop(sound);
+      preview.announce(sound.name);
+    }
+  }
+
+  function lives(): number {
+    return startLives + extraLives - carriedHits - preview.hits();
+  }
+
+  function gainLives(count: number): void {
+    extraLives = Math.max(
+      extraLives,
+      Math.min(
+        extraLives + count,
+        maxLives - startLives + carriedHits + preview.hits(),
+      ),
+    );
+  }
+
+  function extend(): void {
+    const gained: number = preview.lifeGains() - countedGains;
+    const score: number = carriedScore + preview.score();
+
+    countedGains = preview.lifeGains();
+
+    if (gained > 0) {
+      gainLives(gained);
+    }
+
+    while (
+      extendIndex < extendScores.length &&
+      score >= extendScores[extendIndex]!
+    ) {
+      extendIndex++;
+      gainLives(1);
+      cue("extend");
     }
   }
 
@@ -483,7 +524,11 @@ async function createCustom(
     endCutscene();
     leg = index;
     outro = 0;
+    countedGains = 0;
     preview.clear();
+    preview.setChapter(
+      mode === "watch" || plan.stages.length <= 1 ? "" : "Stage " + (index + 1),
+    );
     preview.setBackground(byId(creations.backgrounds, chosen.background));
     preview.setStage(null, () => null);
     preview.setLoop(false);
@@ -531,12 +576,18 @@ async function createCustom(
     mode = next;
     fresh = null;
     plan = chosen;
-    useEffects(
-      next === "attract" ? null : creations.sounds,
+    const card: GameCard | null =
       creations.games.find((entry: GameCard) =>
         chosen.id.startsWith(entry.id + ":"),
-      ) ?? null,
-    );
+      ) ?? null;
+
+    useEffects(next === "attract" ? null : creations.sounds, card);
+    extraLives = 0;
+    countedGains = 0;
+    extendIndex = 0;
+    extendScores = (card?.extends ?? new Array())
+      .filter((score: number) => score > 0)
+      .sort((first: number, second: number) => first - second);
     carriedScore = 0;
     carriedHits = 0;
     carriedGrazes = 0;
@@ -602,8 +653,9 @@ async function createCustom(
       return;
     }
 
-    if (carriedHits + preview.hits() > startLives) {
+    if (lives() < 0) {
       carriedHits = -preview.hits();
+      extraLives = 0;
       preview.setBombs(startBombs);
     }
 
@@ -706,6 +758,7 @@ async function createCustom(
     countedHits = preview.hits();
     carriedScore = -preview.score();
     carriedHits = -preview.hits();
+    extraLives = 0;
     preview.setBombs(startBombs);
     continues++;
   }
@@ -744,7 +797,7 @@ async function createCustom(
       return null;
     }
 
-    if (carriedHits + preview.hits() > startLives) {
+    if (lives() < 0) {
       return "over";
     }
 
@@ -773,11 +826,12 @@ async function createCustom(
       controls.bombing,
     );
     preview.update(delta);
+    extend();
 
-    const cue: string | null = preview.takeCue();
+    const cued: string | null = preview.takeCue();
 
-    if (cue !== null) {
-      startCutscene(cue);
+    if (cued !== null) {
+      startCutscene(cued);
     }
 
     for (const id of preview.themes()) {
@@ -827,6 +881,7 @@ async function createCustom(
     outcome: outcome,
     score: () => carriedScore + preview.score(),
     hits: () => carriedHits + preview.hits(),
+    lives: () => Math.max(lives(), 0),
     bombs: preview.bombs,
     grazes: () => carriedGrazes + preview.grazes(),
     power: preview.power,

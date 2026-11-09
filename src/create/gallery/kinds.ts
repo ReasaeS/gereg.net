@@ -454,6 +454,7 @@ export {
   orderList,
   categoryTypes,
   categoryOf,
+  compareOrder,
   categoryDeals,
   entryRarity,
   listEntries,

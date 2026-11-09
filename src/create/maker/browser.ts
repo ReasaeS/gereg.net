@@ -13,7 +13,15 @@ import { createGlide, type Glide } from "../../ui/motion";
 import { smoothDamp, type Spring } from "../../effects/tween/tween";
 import { createTile, paintTile, stepTile, type Tile } from "../gallery/tile";
 import { drawEntry } from "../gallery/art";
-import { entryRarity, type Entry } from "../gallery/kinds";
+import {
+  categoryOf,
+  compareOrder,
+  entryRarity,
+  type Category,
+  type Entry,
+  type Search,
+} from "../gallery/kinds";
+import { createSearchBar, type SearchBar } from "../gallery/search";
 import { gameLayers, runLayers } from "../packs";
 import type { Game, Run } from "../types";
 import {
@@ -63,6 +71,8 @@ const panelPadding: number = 26; // px
 const panelRadius: number = 14; // px
 const panelGrow: number = 0.04;
 const headerHeight: number = 64; // px
+const searchGap: number = 24; // px
+const countRoom: number = 110; // px
 const footerHeight: number = 40; // px
 const badgeHeight: number = 32; // px
 const badgeSlant: number = 12; // px
@@ -81,7 +91,6 @@ const dealStep: number = 0.035; // s
 const riseTime: number = 0.22; // s
 const riseDistance: number = 26; // px
 const currentGlow: number = 0.45;
-const queryLength: number = 24;
 const emptyDetail: string = "Leave this empty";
 
 function createBrowser(app: Application, creations: () => Creations): Browser {
@@ -97,10 +106,11 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   const mask: Graphics = new Graphics();
   const marker: Graphics = new Graphics();
   const scroll: Spring = { value: 0, velocity: 0 };
+  const searchBar: SearchBar = createSearchBar(app, filter);
   const slots: Array<Slot> = new Array();
   let shownSlots: Array<Slot> = new Array();
   let heading: string = "";
-  let query: string = "";
+  let category: Category = "visual";
   let picked: (index: number) => void = () => undefined;
   let current: number = -1;
   let focus: number = 0;
@@ -110,6 +120,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   let columns: number = 1;
   let gridWidth: number = 0;
   let gridHeight: number = 0;
+  let panelWidth: number = 0;
   const fade: Glide = createGlide(
     0,
     (value: number) => {
@@ -196,10 +207,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
     gridWidth = columns * cellWidth() - cardGap;
     gridHeight = height - headerHeight - footerHeight - panelPadding;
 
-    const panelWidth: number = Math.min(
-      width,
-      Math.max(gridWidth + panelPadding * 2, 420),
-    );
+    panelWidth = Math.min(width, Math.max(gridWidth + panelPadding * 2, 420));
 
     shade
       .clear()
@@ -210,6 +218,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
     drawFrame(panelWidth, height);
     badge.position.set(panelPadding, (headerHeight - badgeHeight) / 2);
     count.position.set(panelWidth - panelPadding, headerHeight / 2);
+    placeSearch();
     grid.position.set(
       (panelWidth - gridWidth) / 2,
       headerHeight + panelPadding / 2,
@@ -244,23 +253,72 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
     scrollTarget = Math.min(scrollTarget, maxScroll());
   }
 
+  function placeSearch(): void {
+    const left: number = badge.x + badge.width + searchGap;
+    const right: number = panelWidth - panelPadding - countRoom - searchGap;
+
+    searchBar.view.position.set((left + right) / 2, headerHeight / 2);
+    searchBar.layout(Math.max(right - left, 0));
+  }
+
   function paintCount(): void {
-    count.text =
-      query === ""
-        ? shownSlots.length + (shownSlots.length === 1 ? " CARD" : " CARDS")
-        : 'SEARCH "' + query.toUpperCase() + '"  ·  ' + shownSlots.length;
+    count.text = searchBar.filtering()
+      ? shownSlots.length + " OF " + slots.length
+      : shownSlots.length + (shownSlots.length === 1 ? " CARD" : " CARDS");
     title.text = heading;
     drawBadge();
+    placeSearch();
+  }
+
+  function matches(slot: Slot, search: Search): boolean {
+    const needle: string = search.query.trim().toLowerCase();
+
+    if (slot.card.entry === null) {
+      return (
+        search.types.size === 0 &&
+        slot.card.label.toLowerCase().includes(needle)
+      );
+    }
+
+    return (
+      (search.types.size === 0 ||
+        search.types.has(entryRarity(slot.card.entry).label)) &&
+      slot.card.entry.item.name.toLowerCase().includes(needle)
+    );
+  }
+
+  function compareSlots(first: Slot, second: Slot, search: Search): number {
+    if (first.card.entry === null || second.card.entry === null) {
+      return (
+        Number(first.card.entry !== null) - Number(second.card.entry !== null)
+      );
+    }
+
+    return (
+      compareOrder(
+        search.order,
+        category,
+        first.card.entry,
+        second.card.entry,
+      ) * (search.reversed ? -1 : 1)
+    );
+  }
+
+  function sift(): void {
+    const search: Search = searchBar.search();
+
+    shownSlots = slots
+      .filter((slot: Slot) => matches(slot, search))
+      .sort((first: Slot, second: Slot) => compareSlots(first, second, search));
   }
 
   function filter(): void {
-    const needle: string = query.toLowerCase();
+    if (!open) {
+      return;
+    }
 
-    shownSlots = slots.filter(
-      (slot: Slot) =>
-        needle === "" || slot.card.label.toLowerCase().includes(needle),
-    );
-    focus = Math.min(focus, Math.max(shownSlots.length - 1, 0));
+    sift();
+    focus = 0;
     place();
     paintCount();
     reveal();
@@ -348,6 +406,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
 
   function close(): void {
     open = false;
+    searchBar.setActive(false);
     fade.set(0);
   }
 
@@ -359,7 +418,13 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   ): void {
     clear();
     heading = "CHOOSE " + name.toUpperCase();
-    query = "";
+    category = categoryOf(
+      cards.find((card: Card) => card.entry !== null)?.entry?.kind ??
+        "background",
+    );
+    searchBar.reset();
+    searchBar.setCategory(category);
+    searchBar.setActive(true);
     picked = choose;
     current = chosen;
     open = true;
@@ -389,8 +454,11 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
     }
 
     list.addChild(marker);
-    shownSlots = slots.slice();
-    focus = Math.max(chosen, 0);
+    sift();
+    focus = Math.max(
+      shownSlots.findIndex((slot: Slot) => slot.index === chosen),
+      0,
+    );
     layout();
     paintCount();
     scrollTarget = 0;
@@ -447,7 +515,13 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   window.addEventListener(
     "keydown",
     (event: KeyboardEvent) => {
-      if (!open || event.ctrlKey || event.metaKey || event.altKey) {
+      if (
+        !open ||
+        searchBar.focused() ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
         return;
       }
 
@@ -467,13 +541,6 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
         reveal();
       } else if (event.key === "Enter") {
         choose(focus);
-      } else if (event.key === "Backspace") {
-        query = query.slice(0, -1);
-        filter();
-      } else if (event.key.length === 1 && query.length < queryLength) {
-        query += event.key;
-        focus = 0;
-        filter();
       } else {
         return;
       }
@@ -497,7 +564,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
       maxScroll(),
     );
   });
-  panel.addChild(frame, badge, count, grid);
+  panel.addChild(frame, badge, count, grid, searchBar.view);
   shade.eventMode = "static";
   shade.on("pointertap", close);
   panel.eventMode = "static";

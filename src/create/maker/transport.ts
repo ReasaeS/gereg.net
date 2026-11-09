@@ -199,6 +199,7 @@ function createTransport(
 
     outro = 0;
     preview.clear();
+    preview.setChapter(packed() && legs.length > 1 ? "Stage " + (leg + 1) : "");
     preview.setBackground(backgroundById(chosen.background));
     preview.setPlayerVisible(true);
     preview.setStage(null, () => null);
@@ -234,6 +235,7 @@ function createTransport(
 
     if (chosen !== null) {
       loopMusic(chosen, musicToken);
+      preview.announce(chosen.name);
     }
   }
 
@@ -264,6 +266,7 @@ function createTransport(
       startLeg(false);
     } else {
       legs = new Array();
+      preview.setChapter("");
       preview.setLoop(true);
       setMusic(value);
       preview.setPlaytest(value);

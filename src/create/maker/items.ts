@@ -214,6 +214,10 @@ function forgetAttack(creations: Creations, id: string): void {
       if (barItem.spell === id) {
         barItem.spell = null;
       }
+
+      if (barItem.attack === id) {
+        barItem.attack = null;
+      }
     }
   }
 }

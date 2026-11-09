@@ -1,11 +1,9 @@
 import { Graphics, type Container } from "pixi.js";
-import type { Rank, Vector } from "../types";
+import type { Drop, Drops, Vector } from "../types";
 import { previewHeight, previewWidth } from "./bounds";
 
-type ItemKind = "power" | "big" | "point";
-
 type Item = {
-  kind: ItemKind;
+  kind: Drop;
   x: number; // units
   y: number; // units
   vx: number; // units/s
@@ -16,13 +14,17 @@ type Item = {
 type Defeat = {
   x: number; // units
   y: number; // units
-  rank: Rank;
+  drops: Drops;
 };
 
 type Haul = {
   power: number;
   points: number;
   count: number;
+  lives: number;
+  lifePieces: number;
+  bombs: number;
+  bombPieces: number;
 };
 
 type Items = {
@@ -32,44 +34,41 @@ type Items = {
   positions: () => ReadonlyArray<Vector>;
 };
 
-const drops: Map<Rank, Array<[ItemKind, number]>> = new Map([
-  [
-    "regular",
-    [
-      ["power", 1],
-      ["point", 1],
-    ],
-  ],
-  [
-    "subboss",
-    [
-      ["power", 4],
-      ["point", 4],
-    ],
-  ],
-  [
-    "boss",
-    [
-      ["big", 1],
-      ["power", 4],
-      ["point", 8],
-    ],
-  ],
-]);
-const powerValue: Map<ItemKind, number> = new Map([
+const dropOrder: Array<Drop> = [
+  "life",
+  "bomb",
+  "big",
+  "lifepiece",
+  "bombpiece",
+  "power",
+  "point",
+];
+const powerValue: Map<Drop, number> = new Map([
   ["power", 0.05],
   ["big", 1],
   ["point", 0],
+  ["life", 0],
+  ["lifepiece", 0],
+  ["bomb", 0],
+  ["bombpiece", 0],
 ]);
-const itemSize: Map<ItemKind, number> = new Map([
+const itemSize: Map<Drop, number> = new Map([
   ["power", 5],
   ["big", 9],
   ["point", 5],
+  ["life", 9],
+  ["lifepiece", 6],
+  ["bomb", 9],
+  ["bombpiece", 6],
 ]);
-const itemColor: Map<ItemKind, string> = new Map([
+const itemColor: Map<Drop, string> = new Map([
   ["power", "#ff4d5e"],
   ["big", "#ff4d5e"],
   ["point", "#4da6ff"],
+  ["life", "#ff6fd8"],
+  ["lifepiece", "#ff6fd8"],
+  ["bomb", "#7ae38f"],
+  ["bombpiece", "#7ae38f"],
 ]);
 const pointBase: number = 300;
 const pointBonus: number = 1700;
@@ -90,7 +89,9 @@ function createItems(layer: Container): Items {
   const items: Array<Item> = new Array();
 
   function drop(defeat: Defeat): void {
-    for (const [kind, count] of drops.get(defeat.rank) ?? []) {
+    for (const kind of dropOrder) {
+      const count: number = Math.max(Math.round(defeat.drops[kind] ?? 0), 0);
+
       for (let index = 0; index < count; index++) {
         items.push({
           kind: kind,
@@ -127,7 +128,7 @@ function createItems(layer: Container): Items {
         .poly(corners)
         .stroke({ color: "#ffffff", width: 1.25 });
 
-      if (item.kind === "big") {
+      if (item.kind === "big" || item.kind === "life" || item.kind === "bomb") {
         graphics
           .circle(item.x, item.y, size * 0.35)
           .fill({ color: "#ffffff", alpha: 0.9 });
@@ -136,7 +137,15 @@ function createItems(layer: Container): Items {
   }
 
   function update(delta: number, x: number, y: number, alive: boolean): Haul {
-    const haul: Haul = { power: 0, points: 0, count: 0 };
+    const haul: Haul = {
+      power: 0,
+      points: 0,
+      count: 0,
+      lives: 0,
+      lifePieces: 0,
+      bombs: 0,
+      bombPieces: 0,
+    };
     const pulled: boolean = alive && y < previewHeight * collectLine;
     let write: number = 0;
 
@@ -162,6 +171,10 @@ function createItems(layer: Container): Items {
       if (alive && Math.hypot(x - item.x, y - item.y) < collectRange) {
         haul.power += powerValue.get(item.kind)!;
         haul.count++;
+        haul.lives += item.kind === "life" ? 1 : 0;
+        haul.lifePieces += item.kind === "lifepiece" ? 1 : 0;
+        haul.bombs += item.kind === "bomb" ? 1 : 0;
+        haul.bombPieces += item.kind === "bombpiece" ? 1 : 0;
 
         if (item.kind === "point") {
           haul.points += Math.round(

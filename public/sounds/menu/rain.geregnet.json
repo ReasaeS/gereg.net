@@ -1,0 +1,1045 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "menu-rain",
+  "creations": {
+    "sounds": [
+      {
+        "id": "menu-rain",
+        "name": "Menu rain",
+        "source": "ambient",
+        "file": null,
+        "fileName": "",
+        "wave": "square",
+        "pitch": 880,
+        "slide": 440,
+        "attack": 0.01,
+        "sustain": 0.05,
+        "decay": 0.25,
+        "vibratoDepth": 0,
+        "vibratoRate": 8,
+        "volume": 0.25,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0.1,
+          "singer": "ritsu",
+          "voicebank": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "lyrics": "",
+          "shared": false,
+          "channels": [
+            {
+              "id": "mw8419tltuo2u7",
+              "name": "Drums",
+              "instrument": "drums",
+              "kit": 0,
+              "volume": 0.8,
+              "pan": 0,
+              "insert": 1,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw8419tl09f7w4",
+              "name": "Bass",
+              "instrument": "sub",
+              "kit": 0,
+              "volume": 0.75,
+              "pan": 0,
+              "insert": 2,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw8419tl3wanct",
+              "name": "Pads",
+              "instrument": "pad",
+              "kit": 0,
+              "volume": 0.6,
+              "pan": 0,
+              "insert": 3,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw8419tl9zbqy4",
+              "name": "Chords",
+              "instrument": "organ",
+              "kit": 0,
+              "volume": 0.5,
+              "pan": 0,
+              "insert": 4,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw8419tl21usu8",
+              "name": "Lead",
+              "instrument": "saw",
+              "kit": 0,
+              "volume": 0.7,
+              "pan": 0,
+              "insert": 5,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw8419tld4t08p",
+              "name": "Vocals",
+              "instrument": "vocals",
+              "kit": 0,
+              "volume": 0.6,
+              "pan": 0,
+              "insert": 6,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            },
+            {
+              "id": "mw8419tlturs8o",
+              "name": "FX",
+              "instrument": "fx",
+              "kit": 0,
+              "volume": 0.6,
+              "pan": 0,
+              "insert": 7,
+              "mute": false,
+              "sample": null,
+              "cut": false
+            }
+          ],
+          "patterns": [
+            {
+              "id": "mw8419tljdazww",
+              "name": "Drums",
+              "bars": 4,
+              "notes": {
+                "mw8419tltuo2u7": [
+                  {
+                    "step": 0,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 10,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 18,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 26,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 27,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 42,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 50,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 58,
+                    "length": 1,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 4,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 12,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 20,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 28,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 36,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 44,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 52,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 58,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 60,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 62,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 62,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 4,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 63,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 7,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 9,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 14,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 23,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 31,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 39,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 41,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 46,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 55,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 57,
+                    "length": 1,
+                    "pitch": 58,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 0,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 2,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 4,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 6,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 8,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 10,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 12,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 14,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 15,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 18,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 20,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 22,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 24,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 26,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 28,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 30,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 34,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 36,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 38,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 40,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 42,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 44,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 46,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 47,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 50,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 52,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 54,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 56,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 58,
+                    "length": 1,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw8419tl9nvwhp",
+              "name": "Bass",
+              "bars": 4,
+              "notes": {
+                "mw8419tl09f7w4": [
+                  {
+                    "step": 0,
+                    "length": 6,
+                    "pitch": 33,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 10,
+                    "length": 6,
+                    "pitch": 41,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 16,
+                    "length": 6,
+                    "pitch": 38,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 26,
+                    "length": 6,
+                    "pitch": 40,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 6,
+                    "pitch": 33,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 42,
+                    "length": 12,
+                    "pitch": 41,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 58,
+                    "length": 6,
+                    "pitch": 43,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw8419tlx61wj2",
+              "name": "Pads",
+              "bars": 4,
+              "notes": {
+                "mw8419tl3wanct": [
+                  {
+                    "step": 0,
+                    "length": 32,
+                    "pitch": 57,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 0,
+                    "length": 32,
+                    "pitch": 60,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 0,
+                    "length": 32,
+                    "pitch": 64,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 65,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 69,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 16,
+                    "pitch": 72,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 67,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 71,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 74,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw8419tlnwxqmp",
+              "name": "Vocals",
+              "bars": 4,
+              "notes": {
+                "mw8419tld4t08p": [
+                  {
+                    "step": 0,
+                    "length": 8,
+                    "pitch": 81,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 8,
+                    "length": 4,
+                    "pitch": 79,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 12,
+                    "length": 4,
+                    "pitch": 77,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 1
+                  },
+                  {
+                    "step": 16,
+                    "length": 13,
+                    "pitch": 76,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 32,
+                    "length": 4,
+                    "pitch": 72,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 36,
+                    "length": 4,
+                    "pitch": 74,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 1
+                  },
+                  {
+                    "step": 40,
+                    "length": 4,
+                    "pitch": 76,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  },
+                  {
+                    "step": 44,
+                    "length": 4,
+                    "pitch": 77,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 1
+                  },
+                  {
+                    "step": 48,
+                    "length": 16,
+                    "pitch": 76,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            },
+            {
+              "id": "mw8419tl1gemj3",
+              "name": "FX",
+              "bars": 4,
+              "notes": {
+                "mw8419tlturs8o": [
+                  {
+                    "step": 0,
+                    "length": 1,
+                    "pitch": 59,
+                    "velocity": 1,
+                    "roll": 1,
+                    "vowel": 0
+                  }
+                ]
+              }
+            }
+          ],
+          "clips": [
+            {
+              "pattern": "mw8419tljdazww",
+              "track": 0,
+              "step": 0,
+              "length": 64
+            },
+            {
+              "pattern": "mw8419tl9nvwhp",
+              "track": 1,
+              "step": 0,
+              "length": 64
+            },
+            {
+              "pattern": "mw8419tlx61wj2",
+              "track": 2,
+              "step": 0,
+              "length": 64
+            },
+            {
+              "pattern": "mw8419tlnwxqmp",
+              "track": 3,
+              "step": 0,
+              "length": 64
+            },
+            {
+              "pattern": "mw8419tl1gemj3",
+              "track": 4,
+              "step": 0,
+              "length": 64
+            }
+          ],
+          "tracks": 8,
+          "inserts": [
+            {
+              "name": "Master",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Drums",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0.4,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Bass",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Pads",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0.5,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Chords",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0.5,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Lead",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0.5,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Vocals",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0.5,
+              "delay": 6,
+              "filter": 1
+            },
+            {
+              "name": "FX",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0.5,
+              "delay": 3,
+              "filter": 1
+            },
+            {
+              "name": "Insert 8",
+              "volume": 1,
+              "pan": 0,
+              "mute": false,
+              "grit": 0,
+              "space": 0,
+              "delay": 3,
+              "filter": 1
+            }
+          ]
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0.30000000000000004,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0,
+          "motion": 1,
+          "length": 12,
+          "seed": 5
+        }
+      }
+    ]
+  },
+  "files": {}
+}

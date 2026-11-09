@@ -512,7 +512,7 @@ async function createPlayfield(
     if (watching) {
       hud.stats.score = custom.score();
       hud.stats.hiScore = Math.max(hud.stats.hiScore, custom.score());
-      hud.stats.lives = Math.max(startLives - custom.hits(), 0);
+      hud.stats.lives = custom.lives();
       hud.stats.bombs = custom.bombs();
       hud.stats.graze = custom.grazes();
       hud.stats.power = custom.power();
@@ -730,7 +730,7 @@ async function createPlayfield(
     });
     hud.stats.score = custom.score();
     hud.stats.hiScore = Math.max(best, custom.score());
-    hud.stats.lives = Math.max(startLives - custom.hits(), 0);
+    hud.stats.lives = custom.lives();
     hud.stats.bombs = custom.bombs();
     hud.stats.graze = custom.grazes();
     hud.stats.power = custom.power();

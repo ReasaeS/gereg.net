@@ -1,0 +1,58 @@
+{
+  "format": "geregnet-card",
+  "version": 1,
+  "kind": "sound",
+  "root": "sfx-extend",
+  "creations": {
+    "sounds": [
+      {
+        "id": "sfx-extend",
+        "name": "Extra Life",
+        "source": "synth",
+        "file": null,
+        "fileName": "",
+        "wave": "square",
+        "pitch": 784,
+        "slide": 1568,
+        "attack": 0.005,
+        "sustain": 0.35,
+        "decay": 0.7,
+        "vibratoDepth": 0.25,
+        "vibratoRate": 9,
+        "volume": 0.12,
+        "score": {
+          "tempo": 172,
+          "key": 0,
+          "swing": 0,
+          "singer": "lead",
+          "voicebank": [],
+          "lyrics": "",
+          "shared": false,
+          "channels": [],
+          "patterns": [],
+          "clips": [],
+          "tracks": 8,
+          "inserts": []
+        },
+        "ambience": {
+          "levels": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "brightness": 0.5,
+          "motion": 0.5,
+          "length": 12,
+          "seed": 1
+        }
+      }
+    ]
+  },
+  "files": {}
+}

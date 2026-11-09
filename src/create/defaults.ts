@@ -1,4 +1,6 @@
 import type {
+  Drops,
+  Rank,
   GameSounds,
   Pattern,
   Enemy,
@@ -79,7 +81,20 @@ function defaultEnemy(pattern: string | null): Enemy {
     pattern: pattern,
     theme: null,
     defeatSound: effectSound("defeat"),
+    drops: rankDrops("regular"),
     bars: [defaultBar(20)],
+  };
+}
+
+function rankDrops(rank: Rank): Drops {
+  return {
+    power: rank === "regular" ? 1 : 4,
+    point: rank === "regular" ? 1 : rank === "subboss" ? 4 : 8,
+    big: rank === "boss" ? 1 : 0,
+    life: 0,
+    lifepiece: 0,
+    bomb: 0,
+    bombpiece: rank === "regular" ? 0 : 1,
   };
 }
 
@@ -89,6 +104,9 @@ function defaultBar(health: number): Bar {
     health: health,
     time: 30,
     spell: null,
+    attack: null,
+    move: null,
+    appears: "always",
   };
 }
 
@@ -100,6 +118,7 @@ function defaultBackground(): Background {
     top: "#031448",
     bottom: "#01030a",
     scroll: 60,
+    layers: new Array(),
   };
 }
 
@@ -262,6 +281,7 @@ function defaultSpell(sigil: string): Spell {
     background: null,
     pattern: null,
     declareSound: effectSound("declare"),
+    survival: false,
   };
 }
 
@@ -483,6 +503,7 @@ function defaultStage(
         },
       ]),
     ],
+    titleCard: true,
   };
 }
 
@@ -502,7 +523,12 @@ function defaultGame(): Game {
     runs: { easy: null, normal: null, hard: null, lunatic: null },
     ost: null,
     sounds: defaultGameSounds(),
+    extends: defaultExtends(),
   };
+}
+
+function defaultExtends(): Array<number> {
+  return [1000000, 2500000, 5000000, 0];
 }
 
 function effectSound(name: string): string {
@@ -518,6 +544,8 @@ function defaultGameSounds(): GameSounds {
     capture: effectSound("capture"),
     timeout: effectSound("timeout"),
     cancel: effectSound("cancel"),
+    extend: effectSound("extend"),
+    bombget: effectSound("bombget"),
   };
 }
 
@@ -547,6 +575,8 @@ export {
   defaultPattern,
   defaultEnemy,
   defaultBar,
+  rankDrops,
+  defaultExtends,
   defaultBackground,
   defaultWallpaper,
   defaultBullet,

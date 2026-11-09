@@ -1,6 +1,12 @@
 import type { Background, Pattern, Sigil } from "../../types";
 import type { Studio } from "../studio";
 import { soundOptions } from "../swatches";
+import type { Option } from "../../../ui/widgets";
+
+const kinds: Array<Option<boolean>> = [
+  { value: false, label: "Normal" },
+  { value: true, label: "Survival" },
+];
 
 function addSpellTab(studio: Studio): void {
   const { creations, preview, addTab } = studio;
@@ -12,6 +18,14 @@ function addSpellTab(studio: Studio): void {
     () => creations.spells,
     [
       ...section("Spell", [
+        choice(
+          "Type",
+          () => kinds,
+          () => spell().survival,
+          (value: boolean) => {
+            spell().survival = value;
+          },
+        ),
         choice(
           "Sigil",
           () =>

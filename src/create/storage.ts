@@ -1,4 +1,5 @@
 import type {
+  Parallax,
   Wave,
   Pattern,
   Vessel,
@@ -20,6 +21,8 @@ import {
   createId,
   defaultBar,
   defaultGameSounds,
+  defaultExtends,
+  rankDrops,
   effectSound,
   repairSpells,
   limitBars,
@@ -47,7 +50,8 @@ const seedStorageKey: string = "geregnet.defaultgame";
 const seedVersion: string = "2";
 const revisionStorageKey: string = "geregnet.lockedrevisions";
 const lockedRevisions: Record<string, string> = {
-  "menu-theme": "2",
+  "menu-theme": "3",
+  "menu-rain": "4",
 };
 const saveListeners: Array<(creations: Creations) => void> = new Array();
 let lockedSounds: Array<Sound> = new Array();
@@ -330,6 +334,7 @@ function readCreations(): Creations {
     for (const game of creations.games) {
       game.ost = game.ost ?? null;
       game.sounds = { ...defaultGameSounds(), ...game.sounds };
+      game.extends = game.extends ?? defaultExtends();
     }
 
     for (const ost of creations.osts) {
@@ -387,6 +392,8 @@ function readCreations(): Creations {
       if (spell.declareSound === undefined) {
         spell.declareSound = effectSound("declare");
       }
+
+      spell.survival = spell.survival ?? false;
     }
 
     for (const enemy of creations.enemies) {
@@ -394,6 +401,20 @@ function readCreations(): Creations {
 
       if (enemy.defeatSound === undefined) {
         enemy.defeatSound = effectSound("defeat");
+      }
+
+      enemy.drops = { ...rankDrops(enemy.rank), ...enemy.drops };
+
+      for (const bar of enemy.bars) {
+        if (bar.attack === undefined) {
+          bar.attack = null;
+        }
+
+        if (bar.move === undefined) {
+          bar.move = null;
+        }
+
+        bar.appears = bar.appears ?? "always";
       }
     }
 
@@ -403,6 +424,14 @@ function readCreations(): Creations {
 
     for (const background of creations.backgrounds) {
       background.sprite = background.sprite ?? null;
+      background.layers = (background.layers ?? new Array()).map(
+        (layer: Parallax) => ({
+          sprite: layer.sprite ?? null,
+          scroll: layer.scroll ?? 0,
+          drift: layer.drift ?? 0,
+          opacity: layer.opacity ?? 1,
+        }),
+      );
     }
 
     for (const wallpaper of creations.wallpapers) {
@@ -513,6 +542,7 @@ function upgradeSigils(creations: Creations, old: Array<OldSigil>): void {
         background: item.background ?? null,
         pattern: null,
         declareSound: effectSound("declare"),
+        survival: false,
       });
     }
   }
@@ -528,6 +558,7 @@ function upgradeStage(
   stage.wallpaper = stage.wallpaper ?? null;
   stage.palette = stage.palette ?? null;
   stage.music = stage.music ?? null;
+  stage.titleCard = stage.titleCard ?? true;
 
   if (stage.keyframes === undefined) {
     const keyframes: Map<number, Keyframe> = new Map();
@@ -592,6 +623,12 @@ function usedSprites(creations: Creations): Set<string> {
   for (const background of creations.backgrounds) {
     if (background.sprite !== null) {
       used.add(background.sprite);
+    }
+
+    for (const layer of background.layers) {
+      if (layer.sprite !== null) {
+        used.add(layer.sprite);
+      }
     }
   }
 

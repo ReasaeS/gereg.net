@@ -15,6 +15,7 @@ import {
 type Mix = {
   intro: number;
   portal: number;
+  rain: number;
   music: number;
   depth: number;
   level: number;
@@ -41,6 +42,8 @@ const openFilter: number = 20000; // Hz
 const deepFilter: number = 320; // Hz
 const deepLevel: number = 0.6;
 const settle: number = 0.001;
+const swellTime: number = 5; // s
+const swellStart: number = 0.2;
 
 function loadMenuSound(name: string): Promise<Sound | null> {
   return loadSoundCard("menu/" + name.replace(".geregnet.json", ""));
@@ -75,10 +78,26 @@ async function createSoundscape(): Promise<Soundscape> {
     gain: null,
     token: 0,
   }));
-  const shown: Mix = { intro: -1, portal: -1, music: -1, depth: -1, level: -1 };
-  let wanted: Mix = { intro: 0, portal: 0, music: 0, depth: 0, level: 0 };
+  const shown: Mix = {
+    intro: -1,
+    portal: -1,
+    rain: -1,
+    music: -1,
+    depth: -1,
+    level: -1,
+  };
+  let wanted: Mix = {
+    intro: 0,
+    portal: 0,
+    rain: 0,
+    music: 0,
+    depth: 0,
+    level: 0,
+  };
   let master: GainNode | null = null;
   let filter: BiquadFilterNode | null = null;
+  let swell: GainNode | null = null;
+  let swelled: boolean = false;
 
   function levelOf(layer: Layer): number {
     return wanted[layer.slot] * (layer.sound?.volume ?? 0);
@@ -104,6 +123,17 @@ async function createSoundscape(): Promise<Soundscape> {
     source.connect(layer.gain);
     source.start();
     layer.source = source;
+
+    if (layer.slot === "music" && swell !== null && !swelled) {
+      swelled = true;
+      swell.gain.cancelScheduledValues(context.currentTime);
+      swell.gain.setValueAtTime(swellStart, context.currentTime);
+      swell.gain.exponentialRampToValueAtTime(
+        1,
+        context.currentTime + swellTime,
+      );
+    }
+
     glide(layer.gain.gain, levelOf(layer));
   }
 
@@ -213,11 +243,14 @@ async function createSoundscape(): Promise<Soundscape> {
     filter.type = "lowpass";
     filter.frequency.value = openFilter;
     filter.connect(master).connect(context.destination);
+    swell = context.createGain();
+    swell.gain.value = swellStart;
+    swell.connect(filter);
 
     for (const layer of layers) {
       layer.gain = context.createGain();
       layer.gain.gain.value = 0;
-      layer.gain.connect(filter);
+      layer.gain.connect(layer.slot === "music" ? swell : filter);
       load(layer);
     }
 

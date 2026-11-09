@@ -68,7 +68,6 @@ const headerSlant: number = 4; // units
 const chevronSize: number = 3.5; // units
 const thumbnailSize: number = 18; // units
 const choiceSlide: number = 10; // units
-const browseInset: number = 3; // units
 const browseIcon: number = 5; // units
 const fieldColor: string = "#01040f";
 const fieldAlpha: number = 0.85;
@@ -348,6 +347,66 @@ function createVector(
   return { view: view, refresh: refresh };
 }
 
+function drawBrowseField(
+  field: Graphics,
+  left: number,
+  width: number,
+  lit: number,
+): void {
+  const top: number = controlY - chipHeight / 2;
+  const iconX: number = left + width - browseIcon - 3;
+  const iconY: number = controlY - browseIcon / 2 - 1;
+
+  field
+    .clear()
+    .rect(left, top, width, chipHeight)
+    .fill({ color: fieldColor, alpha: fieldAlpha })
+    .rect(left, top, width, chipHeight)
+    .stroke({
+      color: getTheme().accent,
+      width: 1,
+      alpha: 0.3 + 0.7 * lit,
+      alignment: 1,
+    })
+    .roundRect(iconX + 1.5, iconY - 1.5, browseIcon * 0.75, browseIcon, 0.8)
+    .stroke({ color: 0xffffff, width: 0.75, alpha: 0.35 + 0.65 * lit })
+    .roundRect(iconX, iconY, browseIcon * 0.75, browseIcon, 0.8)
+    .fill(fieldColor)
+    .stroke({ color: 0xffffff, width: 0.75, alpha: 0.5 + 0.5 * lit });
+}
+
+function createPick(
+  name: Name,
+  label: () => string,
+  browse: () => void,
+): Control {
+  const row: Row = createRow(name);
+  const view: Container = row.view;
+  const value: Text = createText(valueSize, "#ffffff");
+  const field: Graphics = new Graphics();
+  const hover: Glide = createGlide(0, (lit: number) =>
+    drawBrowseField(field, 0, rowWidth, lit),
+  );
+
+  function refresh(): void {
+    row.refresh();
+    value.text = label().toUpperCase();
+  }
+
+  drawBrowseField(field, 0, rowWidth, 0);
+  value.anchor.set(0.5);
+  value.position.set(rowWidth / 2, controlY);
+  field.eventMode = "static";
+  field.cursor = "pointer";
+  field.hitArea = new Rectangle(0, 0, rowWidth, rowHeight);
+  field.on("pointerover", () => hover.set(1));
+  field.on("pointerout", () => hover.set(0));
+  field.on("pointertap", () => browse());
+  view.addChild(field, value);
+
+  return { view: view, refresh: refresh };
+}
+
 function createChoice<T>(
   name: Name,
   options: () => Array<Option<T>>,
@@ -355,13 +414,21 @@ function createChoice<T>(
   set: (value: T) => void,
   browse?: () => void,
 ): Control {
+  if (browse !== undefined) {
+    return createPick(
+      name,
+      () =>
+        (
+          options().find((option: Option<T>) => option.value === get()) ??
+          options()[0]
+        )?.label ?? "-",
+      browse,
+    );
+  }
+
   const row: Row = createRow(name);
   const view: Container = row.view;
   const value: Text = createText(valueSize, "#ffffff");
-  const field: Graphics = new Graphics();
-  const fieldLeft: number = arrowWidth + browseInset;
-  const fieldWidth: number = rowWidth - fieldLeft * 2;
-  const hover: Glide = createGlide(0, paintField);
   const slide: Glide = createGlide(0, (offset: number) => {
     value.x = rowWidth / 2 + offset;
     value.alpha = 1 - Math.min(Math.abs(offset) / choiceSlide, 1) * 0.8;
@@ -395,49 +462,10 @@ function createChoice<T>(
     value.text = options()[index()]?.label.toUpperCase() ?? "-";
   }
 
-  function paintField(lit: number): void {
-    const top: number = controlY - chipHeight / 2;
-    const iconX: number = fieldLeft + fieldWidth - browseIcon - 3;
-    const iconY: number = controlY - browseIcon / 2 - 1;
-
-    field
-      .clear()
-      .rect(fieldLeft, top, fieldWidth, chipHeight)
-      .fill({ color: fieldColor, alpha: fieldAlpha })
-      .rect(fieldLeft, top, fieldWidth, chipHeight)
-      .stroke({
-        color: getTheme().accent,
-        width: 1,
-        alpha: 0.3 + 0.7 * lit,
-        alignment: 1,
-      })
-      .roundRect(iconX + 1.5, iconY - 1.5, browseIcon * 0.75, browseIcon, 0.8)
-      .stroke({ color: 0xffffff, width: 0.75, alpha: 0.35 + 0.65 * lit })
-      .roundRect(iconX, iconY, browseIcon * 0.75, browseIcon, 0.8)
-      .fill(fieldColor)
-      .stroke({ color: 0xffffff, width: 0.75, alpha: 0.5 + 0.5 * lit });
-  }
-
   previous.view.position.set(0, controlY - chipHeight / 2);
   next.view.position.set(rowWidth - arrowWidth, controlY - chipHeight / 2);
   value.anchor.set(0.5);
   value.position.set(rowWidth / 2, controlY);
-
-  if (browse !== undefined) {
-    paintField(0);
-    field.eventMode = "static";
-    field.cursor = "pointer";
-    field.hitArea = new Rectangle(
-      fieldLeft,
-      controlY - chipHeight / 2,
-      fieldWidth,
-      chipHeight,
-    );
-    field.on("pointerover", () => hover.set(1));
-    field.on("pointerout", () => hover.set(0));
-    field.on("pointertap", () => browse());
-    view.addChild(field);
-  }
 
   view.addChild(previous.view, next.view, value);
 
@@ -694,6 +722,7 @@ export {
   createSlider,
   createVector,
   createChoice,
+  createPick,
   createColors,
   createHeader,
   drawField,

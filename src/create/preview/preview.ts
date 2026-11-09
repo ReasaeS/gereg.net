@@ -24,7 +24,14 @@ import { deathbombWindow, startBombs, type Bomb } from "../../game/bomb";
 import { createPilot, type Pilot } from "../../game/pilot";
 import { archetype } from "../../game/archetype";
 import { previewHeight, previewWidth } from "./bounds";
-import { createSky, paintSky, skyKey, type Sky } from "./sky";
+import {
+  advanceSky,
+  createSky,
+  paintSky,
+  setSkyTime,
+  skyKey,
+  type Sky,
+} from "./sky";
 import { createBullets, type Bullets, type Emitter } from "./bullets";
 import { createActors, forward, type Actor, type Actors } from "./actors";
 import { createBossHud, drawBossBar, type BossHud } from "./bosshud";
@@ -78,6 +85,9 @@ type Preview = {
   setBombs: (value: number) => void;
   finished: () => boolean;
   takeCue: () => string | null;
+  lifeGains: () => number;
+  setChapter: (text: string) => void;
+  announce: (name: string) => void;
 };
 
 type Arrival = {
@@ -130,6 +140,24 @@ const still: Path = {
 };
 const fadeTime: number = 1; // s
 const grazePoints: number = 50;
+const maxBombs: number = 8;
+const piecesPerLife: number = 3;
+const piecesPerBomb: number = 3;
+const titleStart: number = 0.6; // s
+const titleIn: number = 0.7; // s
+const titleHold: number = 2.6; // s
+const titleOut: number = 0.9; // s
+const titleY: number = 170; // units
+const titleRise: number = 10; // units
+const titleSize: number = 26; // units
+const chapterSize: number = 13; // units
+const chapterGap: number = 26; // units
+const titleLine: number = 150; // units
+const bgmTime: number = 4.5; // s
+const bgmFade: number = 0.6; // s
+const bgmSlide: number = 30; // units
+const bgmSize: number = 10; // units
+const bgmMargin: number = 6; // units
 
 async function createPreview(
   playerTexture: Texture,
@@ -212,6 +240,29 @@ async function createPreview(
     3,
   );
   const calloutValue: Text = createText(calloutValueSize, "#ffe27a");
+  const title: Container = new Container();
+  const titleText: Text = createShadowText(
+    "",
+    titleSize,
+    "#ffffff",
+    "#020b30",
+    3,
+  );
+  const chapterText: Text = createShadowText(
+    "",
+    chapterSize,
+    "#9fd8ff",
+    "#020b30",
+    2,
+  );
+  const titleRule: Graphics = new Graphics()
+    .rect(-titleLine / 2, 0, titleLine, 1)
+    .fill({ color: "#ffffff", alpha: 0.7 });
+  const bgm: Text = createShadowText("", bgmSize, "#ffffff", "#020b30", 2);
+  let bgmLeft: number = 0;
+  let lifeGains: number = 0;
+  let lifePieces: number = 0;
+  let bombPieces: number = 0;
   let itemCount: number = 0;
   let bombsUsed: number = 0;
   let blend: number = 0;
@@ -251,6 +302,16 @@ async function createPreview(
   declaration.visible = false;
   callout.position.set(previewWidth / 2, calloutY);
   callout.visible = false;
+  titleText.anchor.set(0.5);
+  chapterText.anchor.set(0.5);
+  chapterText.y = -chapterGap;
+  titleRule.y = -chapterGap / 2;
+  title.addChild(chapterText, titleRule, titleText);
+  title.position.set(previewWidth / 2, titleY);
+  title.visible = false;
+  bgm.anchor.set(1, 1);
+  bgm.position.set(previewWidth - bgmMargin, previewHeight - bgmMargin);
+  bgm.visible = false;
   pilot.reset(playerX, playerY);
   squad.view.visible = false;
   sigil.position.set(previewWidth / 2, previewHeight / 2);
@@ -273,6 +334,8 @@ async function createPreview(
     bossHud.view,
     declaration,
     callout,
+    title,
+    bgm,
     overlay,
     mask,
   );
@@ -538,7 +601,7 @@ async function createPreview(
       cue("bomb");
       bombsUsed++;
       feel(bombRumble, bombRumbleTime);
-      actors.spoil();
+      actors.spoil("bomb");
     }
 
     grace = Math.max(grace - delta, 0);
@@ -576,7 +639,7 @@ async function createPreview(
       if (!autopilot) {
         cue("miss");
         dying = deathbombWindow;
-        actors.spoil();
+        actors.spoil("miss");
       }
     }
 
@@ -625,6 +688,24 @@ async function createPreview(
 
     itemPoints += haul.points;
     itemCount += haul.count;
+    lifePieces += haul.lifePieces;
+    bombPieces += haul.bombPieces;
+
+    const lives: number = haul.lives + Math.floor(lifePieces / piecesPerLife);
+    const bombs: number = haul.bombs + Math.floor(bombPieces / piecesPerBomb);
+
+    lifePieces %= piecesPerLife;
+    bombPieces %= piecesPerBomb;
+
+    if (lives > 0) {
+      lifeGains += lives;
+      cue("extend");
+    }
+
+    if (bombs > 0) {
+      bomb.setStock(Math.min(bomb.stock() + bombs, maxBombs));
+      cue("bombget");
+    }
 
     if (haul.count > 0) {
       cue("item");
@@ -676,6 +757,9 @@ async function createPreview(
     callout.visible = false;
     actors.captures();
     bombsUsed = 0;
+    lifeGains = 0;
+    lifePieces = 0;
+    bombPieces = 0;
     items.clear();
     actors.defeats();
     setPower(maxPower);
@@ -730,9 +814,9 @@ async function createPreview(
 
     if (stage !== null) {
       runStage(delta);
-      base.tiles.tilePosition.y = (base.background?.scroll ?? 0) * time;
+      setSkyTime(base, time);
     } else {
-      base.tiles.tilePosition.y += (base.background?.scroll ?? 0) * delta;
+      advanceSky(base, delta);
 
       if (actors.list.length > 0) {
         actors.move(delta);
@@ -746,8 +830,10 @@ async function createPreview(
       drawSigil(sigil, shown, spellTime);
     }
 
-    cover.tiles.tilePosition.y += (cover.background?.scroll ?? 0) * delta;
+    advanceSky(cover, delta);
     fade(delta);
+    placeTitle();
+    placeBgm(delta);
 
     if (playtest) {
       actors.shoot(squad);
@@ -775,7 +861,44 @@ async function createPreview(
     spellTime = 0;
     blend = 0;
     cover.view.visible = false;
-    base.tiles.tilePosition.y = 0;
+    setSkyTime(base, 0);
+    bgmLeft = 0;
+    bgm.visible = false;
+  }
+
+  function placeTitle(): void {
+    const end: number = titleStart + titleIn + titleHold + titleOut;
+    const showing: boolean =
+      stage !== null &&
+      stage.titleCard &&
+      time > titleStart &&
+      time < end &&
+      stage.name !== "";
+
+    title.visible = showing;
+
+    if (!showing) {
+      return;
+    }
+
+    const rise: number = Math.min((time - titleStart) / titleIn, 1);
+
+    titleText.text = stage!.name.toUpperCase();
+    title.alpha = Math.min(rise, (end - time) / titleOut, 1);
+    title.y = titleY + titleRise * Math.pow(1 - rise, 3);
+    chapterText.visible = chapterText.text !== "";
+    titleRule.visible = chapterText.visible;
+  }
+
+  function placeBgm(delta: number): void {
+    bgmLeft = Math.max(bgmLeft - delta, 0);
+    bgm.visible = bgmLeft > 0;
+
+    const elapsed: number = bgmTime - bgmLeft;
+    const slide: number = Math.min(elapsed / bgmFade, 1);
+
+    bgm.alpha = Math.min(slide, bgmLeft / bgmFade, 1);
+    bgm.x = previewWidth - bgmMargin + bgmSlide * Math.pow(1 - slide, 3);
   }
 
   function showSigil(value: Sigil | null): void {
@@ -925,6 +1048,14 @@ async function createPreview(
       return taken;
     },
     finished: () => ended && cleared() && nextCue >= cues.length,
+    lifeGains: () => lifeGains,
+    setChapter: (text: string) => {
+      chapterText.text = text.toUpperCase();
+    },
+    announce: (name: string) => {
+      bgm.text = "BGM: " + name;
+      bgmLeft = bgmTime;
+    },
   };
 }
 

@@ -18,6 +18,7 @@ import { saveCreations } from "../../storage";
 import { curveOptions } from "../swatches";
 import { waveAmplitude } from "../kit";
 import type { Studio } from "../studio";
+import type { Option } from "../../../ui/widgets";
 import { isMusic } from "../../sound";
 
 const positionMin: number = -0.2;
@@ -25,6 +26,10 @@ const positionMax: number = 1.2;
 const derivativeLimit: number = 400; // units/s^n
 const derivativeStep: number = 5; // units/s^n
 const pasteOffset: number = 0.05; // of field width
+const titleCards: Array<Option<boolean>> = [
+  { value: true, label: "Show" },
+  { value: false, label: "Hide" },
+];
 
 type StageTab = {
   selectKeyframe: (index: number) => void;
@@ -252,6 +257,14 @@ function addStageTab(studio: Studio): StageTab {
           () => stage().length,
           (value: number) => {
             stage().length = value;
+          },
+        ),
+        choice(
+          "Title card",
+          () => titleCards,
+          () => stage().titleCard,
+          (value: boolean) => {
+            stage().titleCard = value;
           },
         ),
       ]),

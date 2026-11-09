@@ -18,6 +18,13 @@ type Wave<T> = {
 
 type Rank = "regular" | "subboss" | "boss";
 
+type Appearance = "always" | "nomiss" | "nobomb" | "perfect";
+
+type Drop =
+  "power" | "point" | "big" | "life" | "lifepiece" | "bomb" | "bombpiece";
+
+type Drops = Record<Drop, number>;
+
 type Difficulty = "easy" | "normal" | "hard" | "lunatic";
 
 type Pattern = {
@@ -85,6 +92,7 @@ type Enemy = {
   pattern: string | null;
   theme: string | null;
   defeatSound: string | null;
+  drops: Drops;
   bars: Array<Bar>;
 };
 
@@ -93,6 +101,9 @@ type Bar = {
   health: number;
   time: number; // s
   spell: string | null;
+  attack: string | null;
+  move: Vector | null; // of field
+  appears: Appearance;
 };
 
 type Ring = {
@@ -119,6 +130,7 @@ type Spell = {
   background: string | null;
   pattern: string | null;
   declareSound: string | null;
+  survival: boolean;
 };
 
 type Waveform = "square" | "sine" | "sawtooth" | "triangle" | "noise";
@@ -276,6 +288,14 @@ type Background = {
   top: string;
   bottom: string;
   scroll: number; // units/s
+  layers: Array<Parallax>;
+};
+
+type Parallax = {
+  sprite: string | null;
+  scroll: number; // units/s
+  drift: number; // units/s
+  opacity: number;
 };
 
 type Motif =
@@ -330,6 +350,7 @@ type Stage = {
   difficulty: Difficulty;
   length: number; // s
   keyframes: Array<Keyframe>;
+  titleCard: boolean;
 };
 
 type Run = {
@@ -340,7 +361,15 @@ type Run = {
 };
 
 type GameEffect =
-  "graze" | "item" | "power" | "miss" | "capture" | "timeout" | "cancel";
+  | "graze"
+  | "item"
+  | "power"
+  | "miss"
+  | "capture"
+  | "timeout"
+  | "cancel"
+  | "extend"
+  | "bombget";
 
 type GameSounds = Record<GameEffect, string | null>;
 
@@ -350,6 +379,7 @@ type Game = {
   runs: Record<Difficulty, string | null>;
   ost: string | null;
   sounds: GameSounds;
+  extends: Array<number>;
 };
 
 type OstTrack = {
@@ -391,6 +421,10 @@ export type {
   Curve,
   Wave,
   Rank,
+  Appearance,
+  Drop,
+  Drops,
+  Parallax,
   Difficulty,
   Vector,
   Pattern,

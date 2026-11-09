@@ -6,6 +6,7 @@ const soundFolder: string = "./sounds/";
 const builtinCards: Array<string> = [
   "menu/storm",
   "menu/shore",
+  "menu/rain",
   "menu/theme",
   "game/shot",
   "game/hit",
@@ -20,6 +21,8 @@ const builtinCards: Array<string> = [
   "game/capture",
   "game/timeout",
   "game/cancel",
+  "game/extend",
+  "game/bombget",
 ];
 
 async function loadSoundCard(path: string): Promise<Sound | null> {

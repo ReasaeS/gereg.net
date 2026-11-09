@@ -24,6 +24,7 @@ const outlines: Map<string, Outline> = new Map();
 const effectCache: number = 64;
 const effects: Map<string, AudioBuffer> = new Map();
 const loadingEffects: Set<string> = new Set();
+const sounding: Set<() => void> = new Set();
 const plots: WeakMap<Graphics, Plot> = new WeakMap();
 const plotting: WeakSet<Graphics> = new WeakSet();
 const noiseSeed: number = 12345;
@@ -717,14 +718,35 @@ function stopPreview(): void {
   songPreview = null;
 }
 
+function stopSounds(): void {
+  for (const stop of [...sounding]) {
+    stop();
+  }
+}
+
 function playSound(sound: Sound): () => void {
   let source: AudioBufferSourceNode | null = null;
   let stopped: boolean = false;
 
   function stop(): void {
     stopped = true;
+    sounding.delete(stop);
     source?.stop();
   }
+
+  function begin(
+    buffer: AudioBuffer,
+    volume: number,
+    channel: Channel = "sfx",
+  ): AudioBufferSourceNode {
+    const node: AudioBufferSourceNode = start(buffer, volume, channel);
+
+    node.onended = () => sounding.delete(stop);
+
+    return node;
+  }
+
+  sounding.add(stop);
 
   try {
     if (audio().state === "suspended") {
@@ -734,7 +756,7 @@ function playSound(sound: Sound): () => void {
     if (sound.source === "file") {
       void loadAudio(sound.file).then((buffer: AudioBuffer | null) => {
         if (buffer !== null && !stopped) {
-          source = start(buffer, sound.volume);
+          source = begin(buffer, sound.volume);
         }
       });
       return stop;
@@ -746,7 +768,7 @@ function playSound(sound: Sound): () => void {
       void trackSamples(sound).then(
         (sides: Array<Float32Array<ArrayBuffer>> | null) => {
           if (sides !== null && !stopped) {
-            source = start(samplesBuffer(sides), sound.volume, "soundtrack");
+            source = begin(samplesBuffer(sides), sound.volume, "soundtrack");
           }
         },
       );
@@ -759,7 +781,7 @@ function playSound(sound: Sound): () => void {
       void trackSamples(sound).then(
         (sides: Array<Float32Array<ArrayBuffer>> | null) => {
           if (sides !== null && !stopped) {
-            source = start(samplesBuffer(sides), sound.volume, "soundtrack");
+            source = begin(samplesBuffer(sides), sound.volume, "soundtrack");
           }
         },
       );
@@ -777,7 +799,7 @@ function playSound(sound: Sound): () => void {
     );
 
     buffer.copyToChannel(samples, 0);
-    source = start(buffer, 1);
+    source = begin(buffer, 1);
   } catch {
     console.warn("Could not play the sound");
   }
@@ -1100,6 +1122,7 @@ export {
   loadAudio,
   importAudio,
   playSound,
+  stopSounds,
   playEffect,
   stopPreview,
   useSounds,

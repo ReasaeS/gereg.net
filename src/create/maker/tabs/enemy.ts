@@ -1,9 +1,39 @@
-import type { Bar, Pattern, Rank, Vessel, Sound, Spell } from "../../types";
-import { defaultBar, limitBars } from "../../defaults";
+import type {
+  Appearance,
+  Bar,
+  Drop,
+  Pattern,
+  Rank,
+  Vessel,
+  Sound,
+  Spell,
+} from "../../types";
+import { defaultBar, limitBars, rankDrops } from "../../defaults";
+import type { Option } from "../../../ui/widgets";
 import { ranks } from "../../rarity";
 import { brightColors, soundOptions } from "../swatches";
 import type { Studio } from "../studio";
 import { isMusic } from "../../sound";
+
+const dropRows: Array<[Drop, string, number]> = [
+  ["power", "Power", 16],
+  ["point", "Point", 16],
+  ["big", "Big power", 4],
+  ["life", "Extra life", 3],
+  ["lifepiece", "Life piece", 6],
+  ["bomb", "Bomb", 3],
+  ["bombpiece", "Bomb piece", 6],
+];
+const appearances: Array<Option<Appearance>> = [
+  { value: "always", label: "Always" },
+  { value: "nomiss", label: "No misses" },
+  { value: "nobomb", label: "No bombs" },
+  { value: "perfect", label: "No misses or bombs" },
+];
+const movements: Array<Option<boolean>> = [
+  { value: false, label: "Stay on path" },
+  { value: true, label: "Move to point" },
+];
 
 function addEnemyTab(studio: Studio): void {
   const {
@@ -72,6 +102,13 @@ function addEnemyTab(studio: Studio): void {
           rarityOptions(ranks),
           () => enemy().rank,
           (value: Rank) => {
+            if (
+              JSON.stringify(enemy().drops) ===
+              JSON.stringify(rankDrops(enemy().rank))
+            ) {
+              enemy().drops = rankDrops(value);
+            }
+
             enemy().rank = value;
             limitBars(enemy());
             renameDefault("enemy", enemy());
@@ -120,6 +157,25 @@ function addEnemyTab(studio: Studio): void {
           "sound",
         ),
       ]),
+      ...section("Drops", [
+        ...dropRows.map(([kind, name, most]: [Drop, string, number]) =>
+          slider(
+            name,
+            0,
+            most,
+            1,
+            () => enemy().drops[kind],
+            (value: number) => {
+              enemy().drops[kind] = value;
+            },
+          ),
+        ),
+        actionRow("Rank defaults", () => {
+          enemy().drops = rankDrops(enemy().rank);
+          changed();
+          refresh();
+        }),
+      ]),
       ...section("Stages", [
         {
           ...actionRow(
@@ -155,7 +211,8 @@ function addEnemyTab(studio: Studio): void {
                   "Stage " +
                   (index + 1) +
                   "  ·  " +
-                  (spellById(value.spell)?.name ?? "No spell"),
+                  (spellById(value.spell)?.name ?? "No spell") +
+                  (value.appears === "always" ? "" : "  ·  Hidden"),
               })),
             () => cursor.bar,
             (value: number) => selectBar(value),
@@ -202,6 +259,75 @@ function addEnemyTab(studio: Studio): void {
             "spell",
           ),
           shown: () => enemy().rank !== "regular",
+        },
+        {
+          ...choice(
+            "Normal attack",
+            () => [
+              {
+                value: null,
+                label: bar().spell === null ? "Enemy pattern" : "None",
+              },
+              ...creations.patterns.map((value: Pattern) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => bar().attack,
+            (value: string | null) => {
+              bar().attack = value;
+            },
+            "pattern",
+          ),
+          shown: () => enemy().rank !== "regular",
+        },
+        {
+          ...choice(
+            "Movement",
+            () => movements,
+            () => bar().move !== null,
+            (value: boolean) => {
+              bar().move = value ? { x: 0.5, y: 0.25 } : null;
+            },
+          ),
+          shown: () => enemy().rank !== "regular",
+        },
+        {
+          ...slider(
+            "Move to X",
+            0,
+            100,
+            5,
+            () => Math.round((bar().move?.x ?? 0.5) * 100),
+            (value: number) => {
+              bar().move = { x: value / 100, y: bar().move?.y ?? 0.25 };
+            },
+          ),
+          shown: () => enemy().rank !== "regular" && bar().move !== null,
+        },
+        {
+          ...slider(
+            "Move to Y",
+            0,
+            100,
+            5,
+            () => Math.round((bar().move?.y ?? 0.25) * 100),
+            (value: number) => {
+              bar().move = { x: bar().move?.x ?? 0.5, y: value / 100 };
+            },
+          ),
+          shown: () => enemy().rank !== "regular" && bar().move !== null,
+        },
+        {
+          ...choice(
+            "Appears",
+            () => appearances,
+            () => bar().appears,
+            (value: Appearance) => {
+              bar().appears = value;
+            },
+          ),
+          shown: () => enemy().rank === "boss",
         },
       ]),
     ],

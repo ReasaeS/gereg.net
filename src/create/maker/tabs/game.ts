@@ -12,11 +12,16 @@ const effectNames: Array<[GameEffect, string]> = [
   ["capture", "Spell capture"],
   ["timeout", "Timer tick"],
   ["cancel", "Bullet cancel"],
+  ["extend", "Extra life"],
+  ["bombget", "Extra bomb"],
 ];
+
+const extendSlots: Array<number> = [0, 1, 2, 3];
+const million: number = 1000000;
 
 function addGameTab(studio: Studio): void {
   const { creations, preview, addTab } = studio;
-  const { choice, section } = studio.kit;
+  const { choice, section, slider } = studio.kit;
   const { game, backgroundById, resolve } = studio.pick;
 
   addTab(
@@ -62,6 +67,25 @@ function addGameTab(studio: Studio): void {
           "ost",
         ),
       ]),
+      ...section(
+        "Extends",
+        extendSlots.map((slot: number) =>
+          slider(
+            "Extend " + (slot + 1) + " (millions)",
+            0,
+            50,
+            0.25,
+            () => (game().extends[slot] ?? 0) / million,
+            (value: number) => {
+              while (game().extends.length <= slot) {
+                game().extends.push(0);
+              }
+
+              game().extends[slot] = Math.round(value * million);
+            },
+          ),
+        ),
+      ),
       ...section(
         "Sounds",
         effectNames.map(([effect, name]: [GameEffect, string]) =>

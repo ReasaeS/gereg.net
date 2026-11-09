@@ -6,7 +6,7 @@ import {
   type Ticker,
 } from "pixi.js";
 import { droneTexture, playerTexture } from "../../editor/drawings";
-import { loadAudio, playSound } from "../sound";
+import { loadAudio, playSound, stopSounds } from "../sound";
 import { cleanName } from "../transcript";
 import { createClock, runClock, type Clock } from "../../game/clock";
 import { bombKeys, playKeys, shotKeys } from "../../game/input";
@@ -203,7 +203,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     refresh: refresh,
     cleanup: cleanup,
     refreshControls: refreshControls,
-    spriteRow: () => uploads.spriteRow(),
+    spriteRow: (name?: string, target?: () => { sprite?: string | null }) =>
+      uploads.spriteRow(name, target),
     pickImage: () => uploads.pickImage(),
     renameDefault: (kind: Kind, item: Item) =>
       renameDefault(creations, kind, item),
@@ -717,6 +718,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     }
 
     transport.stopTyping();
+    composer.close();
+    stopSounds();
     editing = false;
     drop.fade();
     gallery.refresh();
@@ -948,6 +951,7 @@ async function createMaker(app: Application): Promise<PageContent> {
       script.close();
       painter.close();
       composer.close();
+      stopSounds();
     }
 
     view.eventMode = value ? "passive" : "none";

@@ -107,7 +107,10 @@ type Studio = {
   refresh: () => void;
   cleanup: () => void;
   refreshControls: () => void;
-  spriteRow: () => Control;
+  spriteRow: (
+    name?: string,
+    target?: () => { sprite?: string | null },
+  ) => Control;
   pickImage: () => void;
   renameDefault: (kind: Kind, item: Item) => void;
   playScene: () => void;

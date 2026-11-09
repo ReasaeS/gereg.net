@@ -9,6 +9,7 @@ import {
 import {
   createChip,
   createChoice,
+  createPick,
   createColors,
   createSlider,
   rowHeight,
@@ -56,12 +57,20 @@ import {
   type PlayerEffect,
 } from "../game/sfx";
 import { loadCreations } from "../create/storage";
-import type { Sound } from "../create/types";
+import type { Creations, Sound } from "../create/types";
+import {
+  createBrowser,
+  type Browser,
+  type Card,
+} from "../create/maker/browser";
+import { onTyping } from "../ui/typing";
 
 type Power = {
   view: Container;
   layout: (x: number, y: number, width: number, height: number) => void;
   setActive: (active: boolean) => void;
+  browser: Container;
+  back: () => boolean;
 };
 
 const fieldColor: string = "#01040f";
@@ -122,16 +131,38 @@ function createPower(
   let active: boolean = false;
   let laidOut: boolean = false;
   let sounds: Array<Sound> = new Array();
-  const keyboard: Keyboard = createKeyboard(() => active);
+  let browsing: Creations = loadCreations();
+  const browser: Browser = createBrowser(app, () => browsing);
+  const keyboard: Keyboard = createKeyboard(() => active && !browser.shown());
 
-  function soundChoices(): Array<Option<string | null>> {
-    return [
-      { value: null, label: "None" },
-      ...sounds.map((sound: Sound) => ({
-        value: sound.id as string | null,
-        label: sound.name,
-      })),
-    ];
+  function browseSound(effect: PlayerEffect): void {
+    browsing = loadCreations();
+
+    const choices: Array<Sound | null> = [null, ...browsing.sounds];
+    const cards: Array<Card> = choices.map((sound: Sound | null) => ({
+      label: sound?.name ?? "None",
+      entry:
+        sound === null
+          ? null
+          : {
+              kind: "sound",
+              index: browsing.sounds.indexOf(sound),
+              item: sound,
+            },
+    }));
+    const current: number = choices.findIndex(
+      (sound: Sound | null) => (sound?.id ?? null) === playerSound(effect),
+    );
+
+    browser.open(
+      effectNames[effect],
+      cards,
+      Math.max(current, 0),
+      (index: number) => {
+        setPlayerSound(effect, choices[index]?.id ?? null);
+        refresh();
+      },
+    );
   }
 
   function changed(): void {
@@ -317,14 +348,12 @@ function createPower(
     ...section(
       "Sounds",
       playerEffects.map((effect: PlayerEffect) =>
-        createChoice(
+        createPick(
           effectNames[effect],
-          soundChoices,
-          () => playerSound(effect),
-          (value: string | null) => {
-            setPlayerSound(effect, value);
-            refresh();
-          },
+          () =>
+            sounds.find((sound: Sound) => sound.id === playerSound(effect))
+              ?.name ?? "None",
+          () => browseSound(effect),
         ),
       ),
     ),
@@ -359,6 +388,7 @@ function createPower(
     );
     rows.setViewport(height / panelScale);
     sharpen(rows.view, screenResolution(panelScale));
+    browser.layout();
   }
 
   function update(delta: number): void {
@@ -382,6 +412,7 @@ function createPower(
       useEffects(sounds, null);
       refresh();
     } else if (was) {
+      browser.close();
       useEffects(null, null);
     }
   }
@@ -414,10 +445,26 @@ function createPower(
 
     if (active) {
       update(frameDelta(ticker));
+      browser.update(ticker.deltaMS / 1000);
     }
   });
 
-  return { view: view, layout: layout, setActive: setActive };
+  onTyping(() => active && browser.shown());
+
+  return {
+    view: view,
+    layout: layout,
+    setActive: setActive,
+    browser: browser.view,
+    back: () => {
+      if (!browser.shown()) {
+        return false;
+      }
+
+      browser.close();
+      return true;
+    },
+  };
 }
 
 export { createPower };

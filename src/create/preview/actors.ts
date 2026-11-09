@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import type { Enemy, Pattern, Rank, Vessel, Sigil, Spell } from "../types";
+import type { Bar, Enemy, Pattern, Rank, Vessel, Sigil, Spell } from "../types";
 import { drawSigil } from "../sigil";
 import { drawBody } from "../vessel";
 import { motion, velocity, type Path } from "../kinematics";
@@ -9,6 +9,18 @@ import { previewHeight, previewWidth } from "./bounds";
 import type { Bullets, Emitter } from "./bullets";
 import type { Defeat } from "./items";
 import { cue } from "../../game/sfx";
+
+type Phase = "attack" | "spell";
+
+type Reason = "miss" | "bomb";
+
+type Glide = {
+  fromX: number; // units
+  fromY: number; // units
+  toX: number; // units
+  toY: number; // units
+  time: number; // s
+};
 
 type Actor = {
   enemy: Enemy;
@@ -24,6 +36,7 @@ type Actor = {
   facing: number; // rad
   emitter: Emitter;
   bar: number;
+  phase: number;
   barTime: number; // s
   locked: boolean;
   staged: boolean;
@@ -31,6 +44,10 @@ type Actor = {
   fill: number;
   dead: boolean;
   capture: boolean;
+  survival: boolean;
+  glide: Glide | null;
+  missed: boolean;
+  bombed: boolean;
 };
 
 type Capture = {
@@ -55,7 +72,7 @@ type Actors = {
     bar: number | null,
     staged: boolean,
   ) => Actor;
-  arm: (actor: Actor, index: number) => void;
+  arm: (actor: Actor, index: number, phase?: number) => void;
   dress: (actor: Actor) => void;
   clear: () => void;
   move: (delta: number) => void;
@@ -68,14 +85,15 @@ type Actors = {
   captures: () => Array<Capture>;
   declarations: () => Array<string>;
   themes: () => Array<string>;
-  spoil: () => void;
+  spoil: (reason: Reason) => void;
 };
 
 const forward: number = Math.PI / 2; // rad
 const actorMargin: number = 60; // units
 const actorGrace: number = 2; // s
 const stillSpeed: number = 1; // units/s
-const damagePoints: number = 10;
+const hitPoints: number = 10;
+const bombTick: number = 0.1; // s
 const defeatPoints: Map<Rank, number> = new Map([
   ["regular", 1000],
   ["subboss", 10000],
@@ -84,9 +102,44 @@ const defeatPoints: Map<Rank, number> = new Map([
 const spellBonus: number = 200000;
 const spellDecay: number = 0.5;
 const countdown: number = 10; // s
+const survivalTime: number = 30; // s
+const glideTime: number = 1.2; // s
 
 function barCount(enemy: Enemy): number {
   return enemy.rank === "boss" ? enemy.bars.length : 1;
+}
+
+function phasesOf(enemy: Enemy, bar: Bar | undefined): Array<Phase> {
+  if (enemy.rank === "regular" || bar === undefined || bar.spell === null) {
+    return ["attack"];
+  }
+
+  return bar.attack === null ? ["spell"] : ["attack", "spell"];
+}
+
+function limitOf(actor: Actor): number {
+  const time: number = actor.enemy.bars[actor.bar]?.time ?? 0;
+
+  return time > 0 ? time : actor.survival ? survivalTime : 0;
+}
+
+function shows(actor: Actor, bar: Bar): boolean {
+  return (
+    bar.appears === "always" ||
+    (bar.appears === "nomiss" && !actor.missed) ||
+    (bar.appears === "nobomb" && !actor.bombed) ||
+    (bar.appears === "perfect" && !actor.missed && !actor.bombed)
+  );
+}
+
+function nextBar(actor: Actor, from: number): number {
+  for (let index = from; index < barCount(actor.enemy); index++) {
+    if (shows(actor, actor.enemy.bars[index]!)) {
+      return index;
+    }
+  }
+
+  return barCount(actor.enemy);
 }
 
 function createActors(
@@ -100,6 +153,7 @@ function createActors(
   const declared: Array<string> = new Array();
   const themed: Array<string> = new Array();
   let points: number = 0;
+  let bombClock: number = 0; // s
 
   function dress(actor: Actor): void {
     const enemy: Enemy = actor.enemy;
@@ -115,25 +169,77 @@ function createActors(
     }
   }
 
+  function cancel(actor: Actor): void {
+    if (actor.enemy.rank !== "regular") {
+      bullets.clear();
+      cue("cancel");
+    }
+  }
+
+  function cycle(actor: Actor): void {
+    const phases: number = phasesOf(
+      actor.enemy,
+      actor.enemy.bars[actor.bar],
+    ).length;
+
+    if (phases > 1) {
+      arm(actor, actor.bar, (actor.phase + 1) % phases);
+    } else {
+      actor.hp = Math.max(actor.enemy.bars[actor.bar]?.health ?? 1, 1);
+      actor.barTime = 0;
+      actor.fill = 0;
+      dress(actor);
+    }
+  }
+
   function finishBar(actor: Actor): void {
-    const next: number = actor.bar + 1;
+    const phases: Array<Phase> = phasesOf(
+      actor.enemy,
+      actor.enemy.bars[actor.bar],
+    );
+
+    if (actor.phase + 1 < phases.length) {
+      cancel(actor);
+      arm(actor, actor.bar, actor.phase + 1);
+      return;
+    }
+
+    const next: number = nextBar(actor, actor.bar + 1);
 
     if (next >= barCount(actor.enemy) && actor.staged) {
       actor.dead = true;
       return;
     }
 
-    if (actor.enemy.rank !== "regular") {
-      bullets.clear();
-      cue("cancel");
+    cancel(actor);
+    arm(actor, next < barCount(actor.enemy) ? next : nextBar(actor, 0));
+  }
+
+  function reward(actor: Actor, bonus: number): void {
+    points += defeatPoints.get(actor.enemy.rank) ?? 0;
+
+    if (actor.capture && actor.spell !== null) {
+      points += bonus;
+      captured.push({ name: actor.spell.name, bonus: bonus });
+      cue("capture");
     }
 
-    arm(actor, next < barCount(actor.enemy) ? next : 0);
+    cue("defeat", actor.enemy.defeatSound);
+    defeated.push({
+      x: actor.view.x,
+      y: actor.view.y,
+      drops: actor.enemy.drops,
+    });
+    finishBar(actor);
   }
 
   function damage(actor: Actor, amount: number): void {
-    if (!actor.locked) {
-      points += Math.min(amount, Math.max(actor.hp, 0)) * damagePoints;
+    if (actor.survival) {
+      return;
+    }
+
+    if (!actor.locked && actor.hp > 0) {
+      points += hitPoints;
     }
 
     actor.hp -= amount;
@@ -147,33 +253,22 @@ function createActors(
     }
 
     if (actor.locked) {
-      actor.hp = Math.max(actor.enemy.bars[actor.bar]?.health ?? 1, 1);
-      actor.fill = 0;
-      dress(actor);
+      cycle(actor);
       return;
     }
 
-    points += defeatPoints.get(actor.enemy.rank) ?? 0;
+    const limit: number = limitOf(actor);
 
-    if (actor.capture && actor.spell !== null) {
-      const limit: number = actor.enemy.bars[actor.bar]?.time ?? 0;
-      const bonus: number =
-        Math.round(
-          (spellBonus *
-            (1 -
-              spellDecay *
-                (limit > 0 ? Math.min(actor.barTime / limit, 1) : 0))) /
-            10,
-        ) * 10;
-
-      points += bonus;
-      captured.push({ name: actor.spell.name, bonus: bonus });
-      cue("capture");
-    }
-
-    cue("defeat", actor.enemy.defeatSound);
-    defeated.push({ x: actor.x, y: actor.y, rank: actor.enemy.rank });
-    finishBar(actor);
+    reward(
+      actor,
+      Math.round(
+        (spellBonus *
+          (1 -
+            spellDecay *
+              (limit > 0 ? Math.min(actor.barTime / limit, 1) : 0))) /
+          10,
+      ) * 10,
+    );
   }
 
   function targets(): Array<Target> {
@@ -219,32 +314,62 @@ function createActors(
   }
 
   function bomb(source: Bomb, delta: number): void {
-    for (const actor of actors) {
-      if (
-        !actor.dead &&
-        source.covers(actor.view.x, actor.view.y, actor.enemy.size / 2)
-      ) {
-        damage(actor, source.damage() * delta);
+    bombClock += delta;
+
+    while (bombClock >= bombTick) {
+      bombClock -= bombTick;
+
+      for (const actor of actors) {
+        if (
+          !actor.dead &&
+          source.covers(actor.view.x, actor.view.y, actor.enemy.size / 2)
+        ) {
+          damage(actor, source.damage() * bombTick);
+        }
       }
     }
   }
 
-  function arm(actor: Actor, index: number): void {
+  function arm(actor: Actor, index: number, phase: number = 0): void {
     const enemy: Enemy = actor.enemy;
 
     actor.bar = Math.max(Math.min(index, barCount(enemy) - 1), 0);
+
+    const bar: Bar | undefined = enemy.bars[actor.bar];
+    const phases: Array<Phase> = phasesOf(enemy, bar);
+
+    actor.phase = Math.max(Math.min(phase, phases.length - 1), 0);
     actor.barTime = 0;
-    actor.hp = Math.max(enemy.bars[actor.bar]?.health ?? 1, 1);
+    actor.hp = Math.max(bar?.health ?? 1, 1);
     actor.fill = 0;
     actor.spell =
-      enemy.rank === "regular"
-        ? null
-        : find.spell(enemy.bars[actor.bar]?.spell ?? null);
+      phases[actor.phase] === "spell" ? find.spell(bar?.spell ?? null) : null;
     actor.pattern =
-      find.pattern(actor.spell?.pattern ?? null) ?? find.pattern(enemy.pattern);
+      actor.spell === null
+        ? (find.pattern(bar?.attack ?? null) ?? find.pattern(enemy.pattern))
+        : (find.pattern(actor.spell.pattern) ?? find.pattern(enemy.pattern));
+    actor.survival = actor.spell?.survival ?? false;
     actor.emitter.timer = 0;
     actor.emitter.time = 0;
     actor.capture = actor.spell !== null && !actor.locked;
+
+    if (enemy.rank !== "regular" && bar !== undefined && bar.move !== null) {
+      actor.glide = {
+        fromX: actor.view.x,
+        fromY: actor.view.y,
+        toX: bar.move.x * previewWidth,
+        toY: bar.move.y * previewHeight,
+        time: 0,
+      };
+    } else if (!actor.staged && actor.glide !== null) {
+      actor.glide = {
+        fromX: actor.view.x,
+        fromY: actor.view.y,
+        toX: actor.x,
+        toY: actor.y,
+        time: 0,
+      };
+    }
 
     if (actor.capture) {
       declared.push(actor.spell!.name);
@@ -275,19 +400,25 @@ function createActors(
       facing: forward,
       emitter: { timer: 0, time: 0 },
       bar: 0,
+      phase: 0,
       barTime: 0,
       hp: 1,
       fill: 0,
       dead: false,
       capture: false,
+      survival: false,
+      glide: null,
+      missed: false,
+      bombed: false,
       locked: bar !== null,
       staged: staged,
     };
 
     actor.view.addChild(actor.sigil, actor.body);
+    actor.view.position.set(x, y);
     layer.addChild(actor.view);
     actors.push(actor);
-    arm(actor, bar ?? 0);
+    arm(actor, bar ?? nextBar(actor, 0));
 
     if (staged && enemy.rank !== "regular" && enemy.theme !== null) {
       themed.push(enemy.theme);
@@ -304,6 +435,24 @@ function createActors(
     actors.length = 0;
   }
 
+  function place(actor: Actor, delta: number): [number, number] {
+    const glide: Glide | null = actor.glide;
+
+    if (glide === null) {
+      return motion(actor.x, actor.y, actor.path, actor.time);
+    }
+
+    glide.time += delta;
+
+    const progress: number = Math.min(glide.time / glideTime, 1);
+    const eased: number = 1 - Math.pow(1 - progress, 3);
+
+    return [
+      glide.fromX + (glide.toX - glide.fromX) * eased,
+      glide.fromY + (glide.toY - glide.fromY) * eased,
+    ];
+  }
+
   function move(delta: number): void {
     let write: number = 0;
 
@@ -317,19 +466,19 @@ function createActors(
         continue;
       }
 
-      const [x, y] = motion(actor.x, actor.y, actor.path, actor.time);
+      const [x, y] = place(actor, delta);
       const outside: boolean =
         x < -actorMargin ||
         y < -actorMargin ||
         x > previewWidth + actorMargin ||
         y > previewHeight + actorMargin;
 
-      if (outside && actor.time > actorGrace) {
+      if (outside && actor.time > actorGrace && actor.glide === null) {
         actor.view.destroy({ children: true });
         continue;
       }
 
-      const limit: number = actor.enemy.bars[actor.bar]?.time ?? 0;
+      const limit: number = limitOf(actor);
       const before: number = limit - actor.barTime;
 
       actor.barTime += delta;
@@ -353,7 +502,14 @@ function createActors(
         actor.barTime >= limit
       ) {
         if (actor.locked || (!actor.staged && barCount(actor.enemy) === 1)) {
-          actor.barTime = 0;
+          cycle(actor);
+        } else if (actor.survival) {
+          reward(actor, spellBonus);
+
+          if (actor.dead) {
+            actor.view.destroy({ children: true });
+            continue;
+          }
         } else {
           finishBar(actor);
 
@@ -368,7 +524,9 @@ function createActors(
 
       const [speedX, speedY] = velocity(actor.path, actor.time);
 
-      if (Math.hypot(speedX, speedY) > stillSpeed) {
+      if (actor.glide !== null) {
+        actor.facing = forward;
+      } else if (Math.hypot(speedX, speedY) > stillSpeed) {
         actor.facing = Math.atan2(speedY, speedX);
       }
 
@@ -416,13 +574,18 @@ function createActors(
     captures: () => captured.splice(0, captured.length),
     declarations: () => declared.splice(0, declared.length),
     themes: () => themed.splice(0, themed.length),
-    spoil: () => {
+    spoil: (reason: Reason) => {
       for (const actor of actors) {
         actor.capture = false;
+
+        if (actor.staged && actor.enemy.rank !== "regular") {
+          actor.missed = actor.missed || reason === "miss";
+          actor.bombed = actor.bombed || reason === "bomb";
+        }
       }
     },
   };
 }
 
-export { createActors, barCount, forward };
+export { createActors, barCount, forward, limitOf };
 export type { Actor, Actors, Capture };

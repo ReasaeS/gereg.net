@@ -539,15 +539,16 @@ function onVolume(listener: VolumeListener): void {
   volumeListeners.push(listener);
 }
 
-type MenuSlot = "intro" | "portal" | "music";
+type MenuSlot = "intro" | "portal" | "rain" | "music";
 
 type MenuSoundListener = (slot: MenuSlot, id: string | null) => void;
 
-const menuSlots: Array<MenuSlot> = ["intro", "portal", "music"];
+const menuSlots: Array<MenuSlot> = ["intro", "portal", "rain", "music"];
 const menuSoundStorageKey: string = "geregnet.menusounds";
 const defaultMenuSounds: Record<MenuSlot, string> = {
   intro: "menu-storm",
   portal: "menu-shore",
+  rain: "menu-rain",
   music: "menu-theme",
 };
 const menuSoundListeners: Array<MenuSoundListener> = new Array();

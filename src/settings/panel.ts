@@ -133,6 +133,7 @@ const frameBorder: number = 2; // px
 const toggleStates: Array<boolean> = [true, false];
 const menuSoundNames: Array<[MenuSlot, string]> = [
   ["music", "menu music"],
+  ["rain", "menu ambience"],
   ["intro", "intro ambience"],
   ["portal", "portal ambience"],
 ];
