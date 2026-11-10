@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { createId, defaultSigil, repairSpells } from "../defaults";
 import { defaultName } from "../rarity";
+import { effectGroup } from "../effects";
 import { blankEntry } from "../blank";
 import type { Deal, Kind } from "../gallery/kinds";
 import type { Item } from "./studio";
@@ -68,7 +69,7 @@ function rarityKey(kind: Kind, item: Item): string {
         : kind === "pattern"
           ? (item as Pattern).frame
           : kind === "effect"
-            ? (item as Effect).target
+            ? effectGroup(item as Effect)
             : kind;
 }
 

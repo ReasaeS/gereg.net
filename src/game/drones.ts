@@ -48,6 +48,7 @@ type Squad = {
   setPower: (value: number) => void;
   setDrones: (shown: boolean) => void;
   setTempo: (value: number) => void;
+  setPace: (value: number) => void;
   update: (
     delta: number,
     x: number,
@@ -187,6 +188,7 @@ function createSquad(
   let mainTimer: number = 0;
   let droneTimer: number = 0;
   let tempo: number = 1;
+  let pace: number = 1;
   let spin: number = 0;
   let power: number = maxPower;
   let dronesShown: boolean = true;
@@ -366,8 +368,8 @@ function createSquad(
         steer(shot, targets);
       }
 
-      shot.x += shot.vx * delta;
-      shot.y += shot.vy * delta;
+      shot.x += shot.vx * delta * pace;
+      shot.y += shot.vy * delta * pace;
       shot.view.position.set(shot.x, shot.y);
 
       if (
@@ -426,6 +428,9 @@ function createSquad(
     },
     setTempo: (value: number) => {
       tempo = value;
+    },
+    setPace: (value: number) => {
+      pace = value;
     },
     update: update,
     clear: clear,

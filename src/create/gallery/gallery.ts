@@ -142,6 +142,8 @@ function createGallery(
   );
   const scroll: Spring = { value: 0, velocity: 0 };
   let category: Category = "stage";
+  let paintedCategory: Category | null = null;
+  const stale: Set<Tile> = new Set();
   let selected: number = 0;
   let onTabs: boolean = true;
   let target: number = 0;
@@ -224,9 +226,17 @@ function createGallery(
   }
 
   function paint(): void {
+    const all: boolean = paintedCategory !== category;
+
+    paintedCategory = category;
+
     for (let index = 0; index < tiles.length; index++) {
-      drawTile(index);
+      if (all || stale.has(tiles[index]!)) {
+        drawTile(index);
+      }
     }
+
+    stale.clear();
 
     tabs.paint(category, onTabs);
   }
@@ -424,6 +434,7 @@ function createGallery(
   function describe(tile: Tile, index: number): void {
     const width: number = tileWidth - artInset * 2;
 
+    stale.add(tile);
     release(tile);
 
     tile.actions.visible = index !== 0;
@@ -496,12 +507,14 @@ function createGallery(
       const tile: Tile = tiles[index]!;
       const place: Place = places.get(tile)!;
 
+      const y: number = place.y.value + appearDistance * (1 - eased);
+
       tile.view.alpha = Math.min(progress * 3, 1) * place.fade.value;
+      tile.view.visible =
+        y + tileHeight + tileGap > scroll.value &&
+        y - tileGap < scroll.value + visibleHeight;
       applyTransform(tile);
-      tile.view.position.set(
-        place.x.value,
-        place.y.value + appearDistance * (1 - eased),
-      );
+      tile.view.position.set(place.x.value, y);
     }
 
     for (const tile of leaving) {
@@ -726,7 +739,7 @@ function createGallery(
     animateLive(Math.min(ticker.deltaMS / 1000, rainMaxDelta));
 
     for (const tile of tiles) {
-      if (tile.cover.visible) {
+      if (tile.view.visible && tile.cover.visible) {
         drawRain(
           tile.rain,
           tile.drops,

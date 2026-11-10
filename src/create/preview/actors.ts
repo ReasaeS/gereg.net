@@ -4,6 +4,7 @@ import type {
   Effect,
   EffectDrop,
   Enemy,
+  ModifierTarget,
   Pattern,
   Rank,
   Vessel,
@@ -17,7 +18,7 @@ import type { Squad, Target } from "../../game/drones";
 import type { Bomb } from "../../game/bomb";
 import { previewHeight, previewWidth } from "./bounds";
 import type { Bullets, Emitter } from "./bullets";
-import type { Defeat } from "./items";
+import type { Defeat, Granted } from "./items";
 import { cue } from "../../game/sfx";
 
 type Phase = "attack" | "spell";
@@ -58,6 +59,7 @@ type Actor = {
   glide: Glide | null;
   missed: boolean;
   bombed: boolean;
+  effectsTo: ModifierTarget;
 };
 
 type Capture = {
@@ -82,6 +84,7 @@ type Actors = {
     path: Path,
     bar: number | null,
     staged: boolean,
+    effectsTo?: ModifierTarget,
   ) => Actor;
   arm: (actor: Actor, index: number, phase?: number) => void;
   dress: (actor: Actor) => void;
@@ -97,6 +100,7 @@ type Actors = {
   declarations: () => Array<string>;
   themes: () => Array<string>;
   spoil: (reason: Reason) => void;
+  setPace: (value: number) => void;
 };
 
 const forward: number = Math.PI / 2; // rad
@@ -164,6 +168,7 @@ function createActors(
   const declared: Array<string> = new Array();
   const themed: Array<string> = new Array();
   let points: number = 0;
+  let pace: number = 1;
   let bombClock: number = 0; // s
 
   function dress(actor: Actor): void {
@@ -226,14 +231,14 @@ function createActors(
     arm(actor, next < barCount(actor.enemy) ? next : nextBar(actor, 0));
   }
 
-  function rollEffects(enemy: Enemy): Array<Effect> {
-    const rolled: Array<Effect> = new Array();
+  function rollEffects(actor: Actor): Array<Granted> {
+    const rolled: Array<Granted> = new Array();
 
-    for (const drop of enemy.effects as Array<EffectDrop>) {
+    for (const drop of actor.enemy.effects as Array<EffectDrop>) {
       const found: Effect | null = find.effect(drop.effect);
 
       if (found !== null && Math.random() * 100 < drop.chance) {
-        rolled.push(found);
+        rolled.push({ effect: found, target: actor.effectsTo });
       }
     }
 
@@ -254,7 +259,7 @@ function createActors(
       x: actor.view.x,
       y: actor.view.y,
       drops: actor.enemy.drops,
-      effects: rollEffects(actor.enemy),
+      effects: rollEffects(actor),
     });
     finishBar(actor);
   }
@@ -411,6 +416,7 @@ function createActors(
     path: Path,
     bar: number | null,
     staged: boolean,
+    effectsTo: ModifierTarget = "player",
   ): Actor {
     const actor: Actor = {
       enemy: enemy,
@@ -438,6 +444,7 @@ function createActors(
       bombed: false,
       locked: bar !== null,
       staged: staged,
+      effectsTo: effectsTo,
     };
 
     actor.view.addChild(actor.sigil, actor.body);
@@ -485,7 +492,7 @@ function createActors(
     for (let index = 0; index < actors.length; index++) {
       const actor: Actor = actors[index]!;
 
-      actor.time += delta;
+      actor.time += delta * pace;
 
       if (actor.dead) {
         actor.view.destroy({ children: true });
@@ -609,6 +616,9 @@ function createActors(
           actor.bombed = actor.bombed || reason === "bomb";
         }
       }
+    },
+    setPace: (value: number) => {
+      pace = value;
     },
   };
 }

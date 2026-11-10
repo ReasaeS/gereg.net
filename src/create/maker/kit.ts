@@ -35,6 +35,7 @@ import {
   diceOf,
   entryLimit,
   isDiced,
+  usageOf,
   seedLimit,
   tableOf,
   toggleDice,
@@ -114,6 +115,7 @@ type Kit = {
 };
 
 const cellLength: number = 15;
+const headLength: number = 11;
 const actionGap: number = 6; // units
 const actionWidth: number = (rowWidth - actionGap) / 2; // units
 const waveNames: Array<string> = ["wave 1", "wave 2", "wave 3"];
@@ -151,6 +153,7 @@ function createKit(
   const sectionOpen: Map<number, boolean> = new Map();
   let sections: number = 0;
   let pending: Array<Meta> = new Array();
+  const ownerOf: Map<Meta, SectionMeta> = new Map();
   let claimed: Array<SectionMeta> = new Array();
 
   function claimSections(): Array<SectionMeta> {
@@ -193,7 +196,7 @@ function createKit(
     const names: Array<string> = entryNames();
 
     return [
-      createTableHead([shortText(meta.name), "Weight", "Chance"]),
+      createTableHead([() => headName(meta), "Weight", "Chance"]),
       ...names.map((_: string, index: number) => {
         const entry: () => Weighted = (): Weighted =>
           entries()[index] ?? { value: meta.min, weight: 0 };
@@ -249,7 +252,7 @@ function createKit(
         );
 
     return [
-      createTableHead([shortText(meta.name), "Weight", "Chance"]),
+      createTableHead([() => headName(meta), "Weight", "Chance"]),
       ...new Array(count).fill(0).map((_: number, index: number) => {
         const key: () => string = (): string =>
           String(meta.options()[index]?.value);
@@ -292,7 +295,7 @@ function createKit(
         );
 
     return [
-      createTableHead([shortText(meta.name), "Weight", "Chance"]),
+      createTableHead([() => headName(meta), "Weight", "Chance"]),
       ...names.map((_: string, index: number) => {
         const entry: () => CardPick = (): CardPick =>
           entries()[index] ?? { card: null, weight: 0 };
@@ -363,12 +366,21 @@ function createKit(
       ...metas.flatMap((meta: Meta) => {
         const table: () => DiceTable = (): DiceTable =>
           tableOf(creations, current().id, name, meta);
+        const rows: Array<Control> =
+          meta.kind === "number"
+            ? numberTable(table, meta)
+            : meta.kind === "choice"
+              ? choiceTable(table, meta)
+              : cardTable(table, meta, meta.cardKind!);
 
-        return meta.kind === "number"
-          ? numberTable(table, meta)
-          : meta.kind === "choice"
-            ? choiceTable(table, meta)
-            : cardTable(table, meta, meta.cardKind!);
+        return rows.map((control: Control) => {
+          const shown: (() => boolean) | undefined = control.shown;
+
+          return {
+            ...control,
+            shown: () => usage(meta) > 0 && (shown?.() ?? true),
+          };
+        });
       }),
     ];
   }
@@ -381,6 +393,48 @@ function createKit(
       }));
   }
 
+  function usage(meta: Meta | SectionMeta): number {
+    return usageOf(creations, current(), meta);
+  }
+
+  function percent(share: number): number {
+    return Math.max(Math.round(share * 100), 1);
+  }
+
+  function shareNote(share: number): string {
+    return share > 0 && share < 1 ? "  ·  used " + percent(share) + "%" : "";
+  }
+
+  function usageNote(meta: Meta): string {
+    const share: number = usage(meta);
+    const owner: SectionMeta | undefined = ownerOf.get(meta);
+
+    return owner !== undefined && percent(usage(owner)) === percent(share)
+      ? ""
+      : shareNote(share);
+  }
+
+  function used(meta: Meta, shown: (() => boolean) | undefined): boolean {
+    return diceOf(creations, current().id) === null
+      ? (shown?.() ?? true)
+      : usage(meta) > 0;
+  }
+
+  function headName(meta: Meta): string {
+    const share: number = usage(meta);
+
+    return share > 0 && share < 1
+      ? shortText(meta.name).slice(0, headLength) + "  " + percent(share) + "%"
+      : shortText(meta.name);
+  }
+
+  function register(meta: Meta, control: Control): Control {
+    meta.view = control.view;
+    pending.push(meta);
+
+    return control;
+  }
+
   function slider(
     name: Name,
     min: number,
@@ -389,20 +443,7 @@ function createKit(
     get: () => number,
     set: (value: number) => void,
   ): Control {
-    const control: Control = createSlider(
-      name,
-      min,
-      max,
-      step,
-      get,
-      (value: number) => {
-        set(value);
-        changed();
-        refresh();
-      },
-    );
-
-    pending.push({
+    const meta: Meta = {
       name: nameText(name),
       kind: "number",
       min: min,
@@ -411,11 +452,25 @@ function createKit(
       options: () => new Array(),
       get: get,
       set: (value: unknown) => set(value as number),
-      view: control.view,
+      view: null,
       cardKind: null,
-    });
+    };
 
-    return control;
+    return register(
+      meta,
+      createSlider(
+        () => nameText(name) + usageNote(meta),
+        min,
+        max,
+        step,
+        get,
+        (value: number) => {
+          set(value);
+          changed();
+          refresh();
+        },
+      ),
+    );
   }
 
   function choice<T>(
@@ -425,23 +480,7 @@ function createKit(
     set: (value: T) => void,
     kind?: Kind,
   ): Control {
-    function apply(value: T): void {
-      set(value);
-      changed();
-      refresh();
-    }
-
-    const control: Control = createChoice(
-      name,
-      options,
-      get,
-      apply,
-      kind === undefined
-        ? undefined
-        : () => browse(name, kind, options(), get(), apply),
-    );
-
-    pending.push({
+    const meta: Meta = {
       name: name,
       kind: kind === undefined ? "choice" : "cards",
       min: 0,
@@ -450,11 +489,28 @@ function createKit(
       options: options as () => Array<Option<unknown>>,
       get: get,
       set: (value: unknown) => set(value as T),
-      view: control.view,
+      view: null,
       cardKind: kind ?? null,
-    });
+    };
 
-    return control;
+    function apply(value: T): void {
+      set(value);
+      changed();
+      refresh();
+    }
+
+    return register(
+      meta,
+      createChoice(
+        () => name + usageNote(meta),
+        options,
+        get,
+        apply,
+        kind === undefined
+          ? undefined
+          : () => browse(name, kind, options(), get(), apply),
+      ),
+    );
   }
 
   function colors(
@@ -463,12 +519,7 @@ function createKit(
     get: () => string,
     set: (value: string) => void,
   ): Control {
-    const control: Control = createColors(name, list, get, (value: string) => {
-      set(value);
-      changed();
-    });
-
-    pending.push({
+    const meta: Meta = {
       name: name,
       kind: "choice",
       min: 0,
@@ -478,11 +529,22 @@ function createKit(
         list.map((color: string) => ({ value: color, label: color })),
       get: get,
       set: (value: unknown) => set(value as string),
-      view: control.view,
+      view: null,
       cardKind: null,
-    });
+    };
 
-    return control;
+    return register(
+      meta,
+      createColors(
+        () => name + usageNote(meta),
+        list,
+        get,
+        (value: string) => {
+          set(value);
+          changed();
+        },
+      ),
+    );
   }
 
   function section(
@@ -501,24 +563,60 @@ function createKit(
 
     pending = new Array();
 
-    if (!dice || metas.length === 0) {
-      return createSection(name, list, open, toggleOpen, visible);
-    }
+    const owned: SectionMeta = { name: name, metas: metas, visible: visible };
+    const title: () => string = () => name + shareNote(usage(owned));
+    const reached: () => boolean = () =>
+      diceOf(creations, current().id) === null ? visible() : usage(owned) > 0;
 
-    const owned: SectionMeta = { name: name, metas: metas };
-    const views: Set<unknown> = new Set(metas.map((meta: Meta) => meta.view));
-    const diced: () => boolean = () => isDiced(creations, current().id, name);
+    for (const control of list) {
+      const meta: Meta | undefined = metas.find(
+        (value: Meta) => value.view === control.view,
+      );
+
+      if (meta !== undefined) {
+        ownerOf.set(meta, owned);
+
+        if (control.shown !== undefined) {
+          meta.shown = control.shown;
+        }
+      }
+    }
 
     claimed.push(owned);
 
+    if (!dice || metas.length === 0) {
+      return createSection(
+        title,
+        list.map((control: Control) => {
+          const shown: (() => boolean) | undefined = control.shown;
+          const meta: Meta | undefined = metas.find(
+            (value: Meta) => value.view === control.view,
+          );
+
+          return meta !== undefined
+            ? { ...control, shown: () => used(meta, shown) }
+            : control;
+        }),
+        open,
+        toggleOpen,
+        reached,
+      );
+    }
+
+    const diced: () => boolean = () => isDiced(creations, current().id, name);
+
     return createSection(
-      name,
+      title,
       [
         ...list.map((control: Control) => {
           const shown: (() => boolean) | undefined = control.shown;
 
-          return views.has(control.view)
-            ? { ...control, shown: () => !diced() && (shown?.() ?? true) }
+          const meta: Meta | undefined = metas.find(
+            (value: Meta) => value.view === control.view,
+          );
+
+          return meta !== undefined
+            ? { ...control, shown: () => !diced() && used(meta, shown) }
             : control;
         }),
         ...diceRows(name, metas).map((control: Control) => {
@@ -529,7 +627,7 @@ function createKit(
       ],
       open,
       toggleOpen,
-      visible,
+      reached,
       {
         on: diced,
         toggle: () => {
@@ -595,8 +693,12 @@ function createKit(
               name + " amplitude",
               () => list()[order]?.amplitude ?? blank(),
               (value: T) => {
-                list()[order]!.amplitude = value;
-                moved();
+                const wave: Wave<T> | undefined = list()[order];
+
+                if (wave !== undefined) {
+                  wave.amplitude = value;
+                  moved();
+                }
               },
             ),
             shown: shown,
@@ -609,8 +711,12 @@ function createKit(
               frequencyStep,
               () => list()[order]?.frequency ?? waveFrequency,
               (value: number) => {
-                list()[order]!.frequency = value;
-                moved();
+                const wave: Wave<T> | undefined = list()[order];
+
+                if (wave !== undefined) {
+                  wave.frequency = value;
+                  moved();
+                }
               },
             ),
             shown: shown,
@@ -623,8 +729,12 @@ function createKit(
               5,
               () => list()[order]?.phase ?? 0,
               (value: number) => {
-                list()[order]!.phase = value;
-                moved();
+                const wave: Wave<T> | undefined = list()[order];
+
+                if (wave !== undefined) {
+                  wave.phase = value;
+                  moved();
+                }
               },
             ),
             shown: shown,
@@ -637,8 +747,12 @@ function createKit(
               5,
               () => list()[order]?.phaseShift ?? 0,
               (value: number) => {
-                list()[order]!.phaseShift = value;
-                moved();
+                const wave: Wave<T> | undefined = list()[order];
+
+                if (wave !== undefined) {
+                  wave.phaseShift = value;
+                  moved();
+                }
               },
             ),
             shown: shown,

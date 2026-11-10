@@ -27,23 +27,62 @@ type Drops = Record<Drop, number>;
 
 type Difficulty = "easy" | "normal" | "hard" | "lunatic";
 
-type EffectTarget = "player" | "stage" | "both";
+type EffectGroup = "lasting" | "special" | "instant";
 
-type Stat =
-  "fireRate" | "shotDamage" | "moveSpeed" | "enemyFireRate" | "bulletSpeed";
+type Stat = "fireRate" | "bulletSpeed" | "moveSpeed" | "damage";
+
+type ModifierTarget = "player" | "enemies";
 
 type Modifier = {
   stat: Stat;
   amount: number; // %
 };
 
+type EffectMode =
+  | "timed"
+  | "instant"
+  | "shield"
+  | "stacking"
+  | "curse"
+  | "aura"
+  | "ramp"
+  | "focus";
+
+type InstantAction = "clear" | "score" | "bomb" | "life" | "shield";
+
+type Cleanse = "graze" | "defeat";
+
+type RampShape = "rise" | "fade";
+
+type AuraKind = "slow" | "erase";
+
+type WorldKind =
+  "freeze" | "mirror" | "fog" | "windBullets" | "windPlayer" | "recolor";
+
+type World = {
+  kind: WorldKind;
+  strength: number; // % or units/s
+  angle: number; // deg from straight down
+  color: string;
+};
+
 type Effect = {
   id: string;
   name: string;
-  target: EffectTarget;
+  mode: EffectMode;
   color: string;
   duration: number; // s
+  action: InstantAction;
+  hits: number;
+  stacks: number;
+  cleanse: Cleanse;
+  cleanseTime: number; // s
+  ramp: RampShape;
+  aura: AuraKind;
+  auraRadius: number; // units
+  auraSlow: number; // %
   modifiers: Array<Modifier>;
+  world: Array<World>;
   pickupSound: string | null;
 };
 
@@ -420,6 +459,7 @@ type Spawn = {
   waves: Array<Wave<Vector>>; // units
   count: number;
   gap: number; // s
+  effectsTo?: ModifierTarget;
 };
 
 type Keyframe = {
@@ -530,6 +570,14 @@ type Creations = {
 };
 
 export type {
+  ModifierTarget,
+  EffectMode,
+  InstantAction,
+  Cleanse,
+  RampShape,
+  AuraKind,
+  WorldKind,
+  World,
   GameEffect,
   GameSounds,
   Frame,
@@ -544,7 +592,7 @@ export type {
   SceneKind,
   Scenery,
   Difficulty,
-  EffectTarget,
+  EffectGroup,
   Stat,
   Modifier,
   Effect,

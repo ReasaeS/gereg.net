@@ -1,12 +1,17 @@
 import { Graphics, type Container } from "pixi.js";
-import type { Drop, Drops, Effect, Vector } from "../types";
+import type { Drop, Drops, Effect, ModifierTarget, Vector } from "../types";
 import { previewHeight, previewWidth } from "./bounds";
 
 type Pickup = Drop | "effect";
 
+type Granted = {
+  effect: Effect;
+  target: ModifierTarget;
+};
+
 type Item = {
   kind: Pickup;
-  effect: Effect | null;
+  effect: Granted | null;
   x: number; // units
   y: number; // units
   vx: number; // units/s
@@ -18,7 +23,7 @@ type Defeat = {
   x: number; // units
   y: number; // units
   drops: Drops;
-  effects: Array<Effect>;
+  effects: Array<Granted>;
 };
 
 type Haul = {
@@ -29,7 +34,7 @@ type Haul = {
   lifePieces: number;
   bombs: number;
   bombPieces: number;
-  effects: Array<Effect>;
+  effects: Array<Granted>;
 };
 
 type Items = {
@@ -125,7 +130,7 @@ function createItems(layer: Container): Items {
   }
 
   function drawEffect(item: Item): void {
-    const color: string = item.effect?.color ?? "#ffffff";
+    const color: string = item.effect?.effect.color ?? "#ffffff";
     const corners: Array<number> = new Array();
 
     for (let corner = 0; corner < 4; corner++) {
@@ -266,4 +271,4 @@ function createItems(layer: Container): Items {
 }
 
 export { createItems };
-export type { Items, Defeat, Haul };
+export type { Items, Defeat, Haul, Granted };

@@ -35,6 +35,18 @@ type Round = {
   vx: number; // units/s
   vy: number; // units/s
   grazed: boolean;
+  originX: number; // units
+  mirrored: boolean;
+  pushX: number; // units
+  pushY: number; // units
+  fade: number;
+  tone: string | number;
+};
+
+type Aura = {
+  radius: number; // units
+  slow: number;
+  erase: boolean;
 };
 
 type Emitter = {
@@ -58,6 +70,12 @@ type Bullets = {
   threats: () => ReadonlyArray<Threat>;
   setTempo: (value: number) => void;
   setPace: (value: number) => void;
+  setFreeze: (value: number) => void;
+  setMirror: (on: boolean) => void;
+  setWind: (x: number, y: number) => void;
+  setRecolor: (color: string | null) => void;
+  setAura: (aura: Aura | null) => void;
+  cancel: () => number;
 };
 
 const bulletPath: string = "./sprites/bullets/orb.png";
@@ -69,6 +87,7 @@ const grazeReach: number = 16; // units
 const none: Array<never> = [];
 const bulletHitbox: number = 0.25; // of size
 const edgeOffset: number = 8; // units
+const eraseTime: number = 0.4; // s
 
 async function loadBullet(): Promise<BulletLayers> {
   const texture: Texture = await Assets.load<Texture>(bulletPath);
@@ -99,6 +118,12 @@ async function createBullets(
   let retired: number = 0;
   let tempo: number = 1;
   let pace: number = 1;
+  let freeze: number = 0;
+  let mirror: boolean = false;
+  let windX: number = 0; // units/s
+  let windY: number = 0; // units/s
+  let recolor: string | null = null;
+  let aura: Aura | null = null;
 
   function clear(): void {
     for (let index = 0; index < bullets.length; index++) {
@@ -130,6 +155,7 @@ async function createBullets(
     marginX: number,
     marginY: number,
     launch: number,
+    originX: number,
   ): void {
     if (bullets.length - retired >= maxBullets) {
       retireOldest();
@@ -144,7 +170,9 @@ async function createBullets(
 
     color.anchor.set(0.5);
     color.scale.set(scale);
-    color.tint = energy === null ? source.color : 0xffffff;
+    const tone: string | number = energy === null ? source.color : 0xffffff;
+
+    color.tint = recolor ?? tone;
     bulletLayer.addChild(color);
     core.anchor.set(0.5);
     core.scale.set(scale);
@@ -173,6 +201,12 @@ async function createBullets(
       launch: launch,
       radius: (source.size * bulletHitbox) / 2,
       grazed: false,
+      originX: originX,
+      mirrored: mirror,
+      pushX: 0,
+      pushY: 0,
+      fade: 1,
+      tone: tone,
     });
   }
 
@@ -203,6 +237,7 @@ async function createBullets(
         bulletMargin,
         bulletMargin,
         time,
+        x,
       );
     }
   }
@@ -241,6 +276,7 @@ async function createBullets(
         marginX,
         marginY,
         time,
+        previewWidth / 2,
       );
     }
   }
@@ -289,8 +325,9 @@ async function createBullets(
       return;
     }
 
+    const aimX: number = mirror ? 2 * x - target.x : target.x;
     const aim: number = source.aim
-      ? Math.atan2(target.y - y, target.x - x)
+      ? Math.atan2(target.y - y, aimX - x)
       : facing + (source.heading * Math.PI) / 180;
 
     spawn(
@@ -355,11 +392,14 @@ async function createBullets(
       bullet.curve === "sinusoidal"
         ? swayVector(bullet.swayWaves, bullet.age, bullet.launch + bullet.age)
         : [0, 0];
-    const rotation: number =
+    const turn: number =
       headingOf(bullet) - Math.PI / 2 + (speedOf(bullet) < 0 ? Math.PI : 0);
+    const rotation: number = bullet.mirrored ? -turn : turn;
+    const rawX: number = bullet.x + swayX;
 
-    bullet.shownX = bullet.x + swayX;
-    bullet.shownY = bullet.y + swayY;
+    bullet.shownX =
+      (bullet.mirrored ? 2 * bullet.originX - rawX : rawX) + bullet.pushX;
+    bullet.shownY = bullet.y + swayY + bullet.pushY;
     bullet.color.position.set(bullet.shownX, bullet.shownY);
     bullet.color.rotation = rotation;
 
@@ -387,7 +427,26 @@ async function createBullets(
       const fromX: number = bullet.shownX;
       const fromY: number = bullet.shownY;
 
-      advance(bullet, delta * pace);
+      const inside: boolean =
+        aura !== null &&
+        (bullet.shownX - target.x) ** 2 + (bullet.shownY - target.y) ** 2 <
+          (aura.radius + bullet.radius) ** 2;
+      const flow: number =
+        delta * (1 - freeze) * (inside && !aura!.erase ? 1 - aura!.slow : 1);
+
+      advance(bullet, flow * pace);
+      bullet.pushX += windX * flow;
+      bullet.pushY += windY * flow;
+
+      if (bullet.fade < 1 || (inside && aura!.erase)) {
+        bullet.fade -= delta / eraseTime;
+        bullet.color.alpha = Math.max(bullet.fade, 0);
+
+        if (bullet.core !== null) {
+          bullet.core.alpha = Math.max(bullet.fade, 0);
+        }
+      }
+
       render(bullet);
 
       if (delta > 0) {
@@ -395,7 +454,7 @@ async function createBullets(
         bullet.vy = (bullet.shownY - fromY) / delta;
       }
 
-      if (gone(bullet)) {
+      if (gone(bullet) || bullet.fade <= 0) {
         bullet.color.destroy();
         bullet.core?.destroy();
         continue;
@@ -432,7 +491,7 @@ async function createBullets(
         continue;
       }
 
-      if (touching && vulnerable && !hit) {
+      if (touching && vulnerable && !hit && bullet.fade >= 1) {
         hit = true;
         bullet.color.destroy();
         bullet.core?.destroy();
@@ -458,6 +517,7 @@ async function createBullets(
       if (
         !bullet.grazed &&
         bullet.age !== Infinity &&
+        bullet.fade >= 1 &&
         (bullet.shownX - x) ** 2 + (bullet.shownY - y) ** 2 < reach * reach
       ) {
         bullet.grazed = true;
@@ -481,8 +541,41 @@ async function createBullets(
     setPace: (value: number) => {
       pace = value;
     },
+    setFreeze: (value: number) => {
+      freeze = Math.min(Math.max(value, 0), 1);
+    },
+    setMirror: (on: boolean) => {
+      mirror = on;
+    },
+    setWind: (x: number, y: number) => {
+      windX = x;
+      windY = y;
+    },
+    setRecolor: (color: string | null) => {
+      if (color === recolor) {
+        return;
+      }
+
+      recolor = color;
+
+      for (const bullet of bullets) {
+        bullet.color.tint = recolor ?? bullet.tone;
+      }
+    },
+    setAura: (value: Aura | null) => {
+      aura = value;
+    },
+    cancel: () => {
+      const count: number = bullets.filter(
+        (bullet: Round) => bullet.age !== Infinity,
+      ).length;
+
+      clear();
+
+      return count;
+    },
   };
 }
 
 export { createBullets };
-export type { Bullets, Emitter };
+export type { Bullets, Emitter, Aura };

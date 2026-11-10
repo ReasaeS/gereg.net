@@ -5,7 +5,7 @@ import type {
   Creations,
   Cutscene,
   Effect,
-  EffectTarget,
+  EffectGroup,
   Enemy,
   Frame,
   Game,
@@ -26,7 +26,7 @@ import {
   audio,
   cosmetics,
   difficulties,
-  effectTargets,
+  effectGroups,
   story,
   visuals,
   attacks,
@@ -39,6 +39,7 @@ import {
   type Rarity,
 } from "../rarity";
 import { isMusic } from "../sound";
+import { effectGroup } from "../effects";
 
 type Kind =
   | "stage"
@@ -94,7 +95,7 @@ type Deal = {
   frame: Frame | null;
   rank: Rank | null;
   source: SoundSource | null;
-  target: EffectTarget | null;
+  group: EffectGroup | null;
   rarity: Rarity<unknown>;
   text: string;
 };
@@ -161,9 +162,9 @@ const dealTexts: Map<string, string> = new Map([
   ["ost", "Songs for a game"],
   ["cutscene", "A conversation"],
   ["character", "A speaker"],
-  ["player", "Buffs or debuffs you"],
-  ["field", "Changes the enemies"],
-  ["both", "Affects everyone"],
+  ["lasting", "Lasts a while"],
+  ["special", "Shields, auras, curses"],
+  ["instant", "Happens at once"],
 ]);
 
 const soundSources: Array<[Cosmetic, SoundSource]> = [
@@ -216,7 +217,7 @@ function categoryTypes(category: Category): Array<Rarity<unknown>> {
   }
 
   if (category === "effect") {
-    return effectTargets;
+    return effectGroups;
   }
 
   return cosmeticTypes(category);
@@ -247,7 +248,7 @@ function categoryDeals(category: Category): Array<Deal> {
       frame: frame,
       rank: rank,
       source: source,
-      target: null,
+      group: null,
       rarity: rarity,
       text:
         dealTexts.get(
@@ -280,11 +281,10 @@ function categoryDeals(category: Category): Array<Deal> {
   }
 
   if (category === "effect") {
-    return effectTargets.map((target: Rarity<EffectTarget>) => ({
-      ...deal("effect", null, target),
-      target: target.value,
-      text:
-        dealTexts.get(target.value === "stage" ? "field" : target.value) ?? "",
+    return effectGroups.map((group: Rarity<EffectGroup>) => ({
+      ...deal("effect", null, group),
+      group: group.value,
+      text: dealTexts.get(group.value) ?? "",
     }));
   }
 
@@ -335,7 +335,7 @@ function entryRarity(entry: Entry): Rarity<unknown> {
   }
 
   if (entry.kind === "effect") {
-    return rarityOf(effectTargets, (entry.item as Effect).target);
+    return rarityOf(effectGroups, effectGroup(entry.item as Effect));
   }
 
   if (entry.kind === "sound") {

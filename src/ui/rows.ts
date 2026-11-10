@@ -14,6 +14,7 @@ import {
   rowWidth,
   type Control,
   type DiceToggle,
+  type Name,
 } from "./widgets";
 
 type Rows = {
@@ -37,7 +38,7 @@ function rowSpacing(control: Control): number {
 }
 
 function createSection(
-  name: string,
+  name: Name,
   list: Array<Control>,
   open: () => boolean,
   toggle: () => void,

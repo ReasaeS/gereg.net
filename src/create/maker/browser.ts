@@ -104,7 +104,8 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   const shade: Graphics = new Graphics();
   const panel: Container = new Container();
   const frame: Graphics = new Graphics();
-  const badge: Graphics = new Graphics();
+  const badge: Container = new Container();
+  const badgeBack: Graphics = new Graphics();
   const title: Text = createText(titleSize, "#ffffff");
   const count: Text = createText(countSize, "#ffffff");
   const grid: Container = new Container();
@@ -186,7 +187,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   function drawBadge(): void {
     const width: number = title.width + badgePadding * 2;
 
-    badge
+    badgeBack
       .clear()
       .poly([
         badgeSlant,
@@ -556,7 +557,7 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
   title.anchor.set(0.5);
   count.anchor.set(1, 0.5);
   count.alpha = 0.7;
-  badge.addChild(title);
+  badge.addChild(badgeBack, title);
   list.mask = mask;
   grid.addChild(list, mask);
   grid.eventMode = "static";

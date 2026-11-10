@@ -29,6 +29,7 @@ import type {
   Creations,
   Effect,
   EffectDrop,
+  World,
   Modifier,
 } from "./types";
 import { createPixels, encodePixels, type Pixels } from "../editor/pixels";
@@ -37,6 +38,7 @@ import { drawBulletDefault, drawVesselDefault } from "../editor/default";
 import { defaultScore } from "./arrange";
 import { defaultAmbience } from "./ambience";
 import { buildPixels, defaultBuild, repairBuild } from "./hangar";
+import { repairStat } from "./effects";
 
 function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -258,21 +260,49 @@ function defaultEffect(): Effect {
   return {
     id: createId(),
     name: "Effect",
-    target: "player",
     color: "#7ae38f",
+    mode: "timed",
     duration: 10,
+    action: "clear",
+    hits: 1,
+    stacks: 3,
+    cleanse: "graze",
+    cleanseTime: 0.5,
+    ramp: "fade",
+    aura: "slow",
+    auraRadius: 60,
+    auraSlow: 50,
     modifiers: [{ stat: "fireRate", amount: 50 }],
+    world: new Array(),
     pickupSound: effectSound("power"),
   };
 }
 
 function repairEffect(effect: Effect): void {
-  effect.target = effect.target ?? "player";
+  const legacy: { target?: unknown } = effect as { target?: unknown };
+
+  delete legacy.target;
   effect.color = effect.color ?? "#7ae38f";
   effect.duration = effect.duration ?? 10;
+  effect.mode = effect.mode ?? "timed";
+  effect.action = effect.action ?? "clear";
+  effect.hits = effect.hits ?? 1;
+  effect.stacks = effect.stacks ?? 3;
+  effect.cleanse = effect.cleanse ?? "graze";
+  effect.cleanseTime = effect.cleanseTime ?? 0.5;
+  effect.ramp = effect.ramp ?? "fade";
+  effect.aura = effect.aura ?? "slow";
+  effect.auraRadius = effect.auraRadius ?? 60;
+  effect.auraSlow = effect.auraSlow ?? 50;
+  effect.world = (effect.world ?? new Array()).map((world: World) => ({
+    kind: world.kind ?? "freeze",
+    strength: world.strength ?? 100,
+    angle: world.angle ?? 0,
+    color: world.color ?? "#ffffff",
+  }));
   effect.modifiers = (effect.modifiers ?? new Array()).map(
     (modifier: Modifier) => ({
-      stat: modifier.stat ?? "fireRate",
+      stat: repairStat(modifier.stat),
       amount: modifier.amount ?? 0,
     }),
   );

@@ -14,11 +14,13 @@ type Meta = {
   set: (value: unknown) => void;
   view: unknown;
   cardKind: Kind | null;
+  shown?: () => boolean;
 };
 
 type SectionMeta = {
   name: string;
   metas: Array<Meta>;
+  visible: () => boolean;
 };
 
 type Item = {
@@ -55,13 +57,29 @@ const listKinds: Array<[keyof Creations, string]> = [
   ["cutscenes", "cutscene"],
   ["effects", "effect"],
 ];
+const usageSamples: number = 120;
+const usageSpread: number = 7919;
 const registry: Map<string, Array<SectionMeta>> = new Map();
+const tabOf: Map<Meta | SectionMeta, string> = new Map();
+const usages: Map<
+  string,
+  { key: string; version: number; values: Map<Meta | SectionMeta, number> }
+> = new Map();
+let version: number = 0;
 const rolledCards: Map<string, Rolled> = new Map();
 let runner: Runner | null = null;
 let rolling: boolean = false;
 
 function registerTab(kind: string, sections: Array<SectionMeta>): void {
   registry.set(kind, sections);
+
+  for (const section of sections) {
+    tabOf.set(section, kind);
+
+    for (const meta of section.metas) {
+      tabOf.set(meta, kind);
+    }
+  }
 }
 
 function useRunner(value: Runner): void {
@@ -202,6 +220,107 @@ function drawValue(
   return index < 0 ? null : { value: picks[index]!.card };
 }
 
+function measure(
+  dice: Dice,
+  kind: string,
+  item: Item,
+  sections: Array<SectionMeta>,
+): Map<Meta | SectionMeta, number> {
+  const counts: Map<Meta | SectionMeta, number> = new Map();
+
+  rolling = true;
+
+  try {
+    for (let sample = 0; sample < usageSamples; sample++) {
+      const clone: Item = structuredClone(item);
+      const random: () => number = seeded(sample * usageSpread + 1);
+
+      runner!(kind, clone, () => {
+        for (const section of sections) {
+          const tables: Record<string, DiceTable> | undefined =
+            dice.sections[section.name];
+          const visible: boolean = section.visible();
+
+          if (visible) {
+            counts.set(section, (counts.get(section) ?? 0) + 1);
+          }
+
+          for (const meta of section.metas) {
+            if (!visible || (meta.shown !== undefined && !meta.shown())) {
+              continue;
+            }
+
+            counts.set(meta, (counts.get(meta) ?? 0) + 1);
+
+            const table: DiceTable | undefined = tables?.[meta.name];
+            const drawn: { value: unknown } | null =
+              table === undefined ? null : drawValue(meta, table, random);
+
+            if (drawn !== null) {
+              meta.set(drawn.value);
+            }
+          }
+        }
+      });
+    }
+  } finally {
+    rolling = false;
+  }
+
+  return new Map(
+    [...counts].map(([meta, count]: [Meta | SectionMeta, number]) => [
+      meta,
+      count / usageSamples,
+    ]),
+  );
+}
+
+function markDirty(): void {
+  version++;
+}
+
+function usageOf(
+  creations: Creations,
+  item: Item,
+  meta: Meta | SectionMeta,
+): number {
+  const dice: Dice | null = diceOf(creations, item.id);
+  const kind: string | undefined = tabOf.get(meta);
+  const sections: Array<SectionMeta> | undefined =
+    kind === undefined ? undefined : registry.get(kind);
+
+  if (
+    dice === null ||
+    kind === undefined ||
+    sections === undefined ||
+    runner === null ||
+    rolling
+  ) {
+    return 1;
+  }
+
+  let cached:
+    | { key: string; version: number; values: Map<Meta | SectionMeta, number> }
+    | undefined = usages.get(item.id);
+
+  if (cached === undefined || cached.version !== version) {
+    const key: string = kind + JSON.stringify(item) + JSON.stringify(dice);
+
+    if (cached === undefined || cached.key !== key) {
+      cached = {
+        key: key,
+        version: version,
+        values: measure(dice, kind, item, sections),
+      };
+      usages.set(item.id, cached);
+    } else {
+      cached.version = version;
+    }
+  }
+
+  return cached.values.get(meta) ?? 0;
+}
+
 function rollItem<T extends Item>(
   creations: Creations,
   kind: string,
@@ -232,11 +351,15 @@ function rollItem<T extends Item>(
         const tables: Record<string, DiceTable> | undefined =
           dice.sections[section.name];
 
-        if (tables === undefined) {
+        if (tables === undefined || !section.visible()) {
           continue;
         }
 
         for (const meta of section.metas) {
+          if (meta.shown !== undefined && !meta.shown()) {
+            continue;
+          }
+
           const table: DiceTable | undefined = tables[meta.name];
           const drawn: { value: unknown } | null =
             table === undefined ? null : drawValue(meta, table, random);
@@ -372,6 +495,8 @@ export {
   tableOf,
   toggleDice,
   diceOf,
+  usageOf,
+  markDirty,
   rollItem,
   rollById,
   rollCreations,

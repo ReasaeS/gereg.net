@@ -3,6 +3,7 @@ import type {
   Background,
   Creations,
   Cutscene,
+  Effect,
   Enemy,
   Game,
   Pattern,
@@ -55,6 +56,7 @@ async function createCards(
     cardPreview.overlay.visible = false;
     cardPreview.setBackground(null);
     cardPreview.setPlayerVisible(false);
+    cardPreview.setEffect(null);
 
     if (item === undefined) {
       return null;
@@ -85,6 +87,9 @@ async function createCards(
       cardPreview.setPattern(bulletDemo(shown.id));
     } else if (shownKind === "vessel") {
       cardPreview.setEnemy(vesselDemo(shown.id), null);
+    } else if (shownKind === "effect") {
+      cardPreview.setPlayerVisible(true);
+      cardPreview.setEffect(shown as Effect);
     } else if (shownKind === "background") {
       cardPreview.setBackground(shown as Background);
       cardPreview.setPattern(null);

@@ -30,6 +30,7 @@ import type {
   Background,
   Bullet,
   Creations,
+  Effect,
   Enemy,
   Pattern,
   Sigil,
@@ -73,7 +74,14 @@ import { createScript, type Script } from "./script";
 import type { Cursor, Item, Selection, Studio, Tab } from "./studio";
 import { createKit, type Kit } from "./kit";
 import { createSelection } from "./selection";
-import { isRolling, registerTab, rollById, useRunner } from "../dice";
+import { generateStage } from "../generate";
+import {
+  isRolling,
+  markDirty,
+  registerTab,
+  rollById,
+  useRunner,
+} from "../dice";
 import { createScenes, type Scenes } from "./scenes";
 import { createUploads, type Uploads } from "./uploads";
 import { createMarkers, type Markers } from "./markers";
@@ -209,6 +217,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     const setSigil: Preview["setSigil"] = base.setSigil;
     const setSpell: Preview["setSpell"] = base.setSpell;
     const setStage: Preview["setStage"] = base.setStage;
+    const setEffect: Preview["setEffect"] = base.setEffect;
 
     return {
       ...base,
@@ -220,6 +229,8 @@ async function createMaker(app: Application): Promise<PageContent> {
         setEnemy(rollById(creations, "enemy", value), bar),
       setSigil: (value: Sigil | null) =>
         setSigil(rollById(creations, "sigil", value)),
+      setEffect: (value: Effect | null) =>
+        setEffect(rollById(creations, "effect", value)),
       setSpell: (value: Spell | null, attack: Pattern | null) =>
         setSpell(
           rollById(creations, "spell", value),
@@ -546,6 +557,8 @@ async function createMaker(app: Application): Promise<PageContent> {
     if (isRolling()) {
       return;
     }
+
+    markDirty();
 
     if (tab.items()[tab.selected] === undefined) {
       return;
@@ -924,6 +937,23 @@ async function createMaker(app: Application): Promise<PageContent> {
       painter.shown() ||
       composer.shown()
     ) {
+      return;
+    }
+
+    if (
+      active &&
+      !editing &&
+      event.altKey &&
+      event.code === "KeyG" &&
+      !event.repeat &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      generateStage(creations);
+      saveCreations(creations);
+      openItem("stage", creations.stages.length - 1);
+      toast.show("Random stage generated");
+      event.preventDefault();
       return;
     }
 

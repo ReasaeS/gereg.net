@@ -54,7 +54,7 @@ import {
   runStages,
 } from "../packs";
 import { blend, createSerif } from "./style";
-import { describeModifier } from "../effects";
+import { effectLines } from "../effects";
 
 const wallpaperScale: number = 0.6;
 const dotLimit: number = 24;
@@ -317,10 +317,12 @@ function drawEffectArt(
     .fill({ color: "#ffffff", alpha: 0.9 });
   art.addChild(graphics);
 
-  for (let index = 0; index < Math.min(effect.modifiers.length, 2); index++) {
+  const lines: Array<string> = effectLines(effect);
+
+  for (let index = 0; index < Math.min(lines.length, 2); index++) {
     const line: Text = createSerif(10, "#ffffff");
 
-    line.text = describeModifier(effect.modifiers[index]!).toUpperCase();
+    line.text = lines[index]!.toUpperCase();
     line.anchor.set(0.5);
     line.scale.set(Math.min((width * 0.9) / Math.max(line.width, 1), 1));
     line.position.set(width / 2, height * 0.78 + index * 13);

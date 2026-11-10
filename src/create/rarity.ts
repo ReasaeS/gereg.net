@@ -1,4 +1,4 @@
-import type { Difficulty, EffectTarget, Frame, Rank } from "./types";
+import type { Difficulty, EffectGroup, Frame, Rank } from "./types";
 
 type Cosmetic =
   | "background"
@@ -32,10 +32,10 @@ const difficulties: Array<Rarity<Difficulty>> = [
   { value: "lunatic", label: "Lunatic", color: "#ff6fd8", tier: 4 },
 ];
 
-const effectTargets: Array<Rarity<EffectTarget>> = [
-  { value: "player", label: "Player", color: "#7ae38f", tier: 1 },
-  { value: "stage", label: "Stage", color: "#ff5a5a", tier: 2 },
-  { value: "both", label: "Both", color: "#b48cff", tier: 3 },
+const effectGroups: Array<Rarity<EffectGroup>> = [
+  { value: "lasting", label: "Lasting", color: "#7ae38f", tier: 1 },
+  { value: "special", label: "Special", color: "#ff5a5a", tier: 2 },
+  { value: "instant", label: "Instant", color: "#b48cff", tier: 3 },
 ];
 
 const gameRarity: Rarity<"game"> = {
@@ -95,7 +95,7 @@ function rarityOf<T>(list: Array<Rarity<T>>, value: T): Rarity<T> {
 
 export {
   difficulties,
-  effectTargets,
+  effectGroups,
   gameRarity,
   forms,
   visuals,

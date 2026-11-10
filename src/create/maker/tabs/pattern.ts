@@ -84,100 +84,6 @@ function addPatternTab(studio: Studio): void {
           shown: () => pattern().bullet === null,
         },
       ]),
-      ...section("Spread", [
-        slider(
-          "Count",
-          1,
-          36,
-          1,
-          () => pattern().count,
-          (value: number) => {
-            pattern().count = value;
-          },
-        ),
-        {
-          ...slider(
-            "Coverage",
-            0.05,
-            5,
-            0.05,
-            () => pattern().cover,
-            (value: number) => {
-              pattern().cover = value;
-            },
-          ),
-          shown: () => pattern().frame === "objective",
-        },
-        {
-          ...slider(
-            "Spread",
-            0,
-            360,
-            5,
-            () => pattern().spread,
-            (value: number) => {
-              pattern().spread = value;
-            },
-          ),
-          shown: () =>
-            pattern().frame === "subjective" && Math.round(pattern().count) > 1,
-        },
-      ]),
-      ...section(
-        "Gaps",
-        [
-          slider(
-            "Frequency",
-            0,
-            8,
-            1,
-            () => pattern().gapFrequency,
-            (value: number) => {
-              pattern().gapFrequency = value;
-            },
-          ),
-          {
-            ...slider(
-              "Offset",
-              -0.5,
-              0.5,
-              0.01,
-              () => pattern().gapShift,
-              (value: number) => {
-                pattern().gapShift = value;
-              },
-            ),
-            shown: () => pattern().gapFrequency > 0,
-          },
-          {
-            ...slider(
-              "Phase shift",
-              -gapPhaseShiftLimit,
-              gapPhaseShiftLimit,
-              0.01,
-              () => pattern().gapPhaseShift,
-              (value: number) => {
-                pattern().gapPhaseShift = value;
-              },
-            ),
-            shown: () => pattern().gapFrequency > 0,
-          },
-          {
-            ...slider(
-              "Width",
-              0.01,
-              1,
-              0.01,
-              () => pattern().gapWidth,
-              (value: number) => {
-                pattern().gapWidth = value;
-              },
-            ),
-            shown: () => pattern().gapFrequency > 0,
-          },
-        ],
-        () => pattern().frame === "objective",
-      ),
       ...section("Aim", [
         choice(
           "Frame",
@@ -281,6 +187,100 @@ function addPatternTab(studio: Studio): void {
             pattern().aimCurve === "sinusoidal",
         ),
       ]),
+      ...section("Spread", [
+        slider(
+          "Count",
+          1,
+          36,
+          1,
+          () => pattern().count,
+          (value: number) => {
+            pattern().count = value;
+          },
+        ),
+        {
+          ...slider(
+            "Coverage",
+            0.05,
+            5,
+            0.05,
+            () => pattern().cover,
+            (value: number) => {
+              pattern().cover = value;
+            },
+          ),
+          shown: () => pattern().frame === "objective",
+        },
+        {
+          ...slider(
+            "Spread",
+            0,
+            360,
+            5,
+            () => pattern().spread,
+            (value: number) => {
+              pattern().spread = value;
+            },
+          ),
+          shown: () =>
+            pattern().frame === "subjective" && Math.round(pattern().count) > 1,
+        },
+      ]),
+      ...section(
+        "Gaps",
+        [
+          slider(
+            "Frequency",
+            0,
+            8,
+            1,
+            () => pattern().gapFrequency,
+            (value: number) => {
+              pattern().gapFrequency = value;
+            },
+          ),
+          {
+            ...slider(
+              "Offset",
+              -0.5,
+              0.5,
+              0.01,
+              () => pattern().gapShift,
+              (value: number) => {
+                pattern().gapShift = value;
+              },
+            ),
+            shown: () => pattern().gapFrequency > 0,
+          },
+          {
+            ...slider(
+              "Phase shift",
+              -gapPhaseShiftLimit,
+              gapPhaseShiftLimit,
+              0.01,
+              () => pattern().gapPhaseShift,
+              (value: number) => {
+                pattern().gapPhaseShift = value;
+              },
+            ),
+            shown: () => pattern().gapFrequency > 0,
+          },
+          {
+            ...slider(
+              "Width",
+              0.01,
+              1,
+              0.01,
+              () => pattern().gapWidth,
+              (value: number) => {
+                pattern().gapWidth = value;
+              },
+            ),
+            shown: () => pattern().gapFrequency > 0,
+          },
+        ],
+        () => pattern().frame === "objective",
+      ),
       ...section("Fire", [
         choice(
           "Fire sound",

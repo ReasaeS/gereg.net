@@ -10,6 +10,7 @@ import type {
   Background,
   Bullet,
   Effect,
+  ModifierTarget,
   Vessel,
   Enemy,
   Pattern,
@@ -36,7 +37,13 @@ import {
 import { createBullets, type Bullets, type Emitter } from "./bullets";
 import { createActors, forward, type Actor, type Actors } from "./actors";
 import { createBossHud, drawBossBar, type BossHud } from "./bosshud";
-import { createItems, type Haul, type Items } from "./items";
+import {
+  createItems,
+  type Defeat,
+  type Granted,
+  type Haul,
+  type Items,
+} from "./items";
 import { createShadowText, createText } from "../../ui/text";
 import type { Capture } from "./actors";
 import { getShake } from "../../settings/settings";
@@ -44,7 +51,15 @@ import { rumble } from "../../game/gamepad";
 import { createAutopilot, type Autopilot, type Decision } from "./autopilot";
 import { maxPower, minPower } from "../../game/drones";
 import { cue, hush } from "../../game/sfx";
-import { combineFactors, neutralFactors, type Factors } from "../effects";
+import {
+  combineFactors,
+  lasts,
+  neutralFactors,
+  type Factors,
+  type Weighted,
+} from "../effects";
+import { playerSize } from "../../game/player";
+import { defaultEnemy, defaultPattern } from "../defaults";
 
 type Resolve = (spawn: Spawn) => Enemy | null;
 
@@ -54,6 +69,7 @@ type Preview = {
   setBackground: (background: Background | null) => void;
   setPattern: (pattern: Pattern | null) => void;
   setEnemy: (enemy: Enemy | null, bar: number | null) => void;
+  setEffect: (effect: Effect | null) => void;
   setSigil: (sigil: Sigil | null) => void;
   setSpell: (spell: Spell | null, attack: Pattern | null) => void;
   setStage: (stage: Stage | null, resolve: Resolve) => void;
@@ -104,7 +120,11 @@ type Cue = {
 
 type Boost = {
   effect: Effect;
+  target: ModifierTarget;
   left: number; // s
+  age: number; // s
+  hits: number;
+  layers: number;
 };
 
 const emitterX: number = previewWidth / 2; // units
@@ -170,6 +190,39 @@ const boostGap: number = 13; // units
 const boostLimit: number = 6;
 const boostWarning: number = 3; // s
 const boostBlink: number = 6; // Hz
+const bulletPoints: number = 100;
+const fogLight: number = 70; // units
+const fogRings: number = 4;
+const fogDepth: number = 0.95;
+const auraAlpha: number = 0.4;
+const auraFill: number = 0.06;
+const idleBoostAlpha: number = 0.45;
+const demoId: string = "effect-demo";
+const demoEvery: number = 3; // s
+const demoSway: number = 90; // units
+const demoFrequency: number = 0.25; // Hz
+const demoPattern: Pattern = {
+  ...defaultPattern(),
+  id: demoId,
+  aim: true,
+  count: 5,
+  spread: 50,
+  rate: 1.5,
+  speed: 120,
+};
+const demoEnemy: Enemy = { ...defaultEnemy(demoId), id: demoId };
+const demoPath: Path = {
+  curve: "sinusoidal",
+  derivatives: new Array(),
+  waves: [
+    {
+      amplitude: { x: demoSway, y: 0 },
+      frequency: demoFrequency,
+      phase: 0,
+      phaseShift: 0,
+    },
+  ],
+};
 
 async function createPreview(
   playerTexture: Texture,
@@ -203,6 +256,12 @@ async function createPreview(
   const hitbox: Graphics = pilot.hitbox;
   const sigil: Graphics = new Graphics();
   const dim: Graphics = new Graphics();
+  const fog: Graphics = new Graphics();
+  const halo: Graphics = new Graphics();
+  const playerWind: Vector = { x: 0, y: 0 };
+  let fogAmount: number = 0;
+  let demo: Effect | null = null;
+  let demoClock: number = 0;
   const input: Vector = { x: 0, y: 0 };
   const mask: Graphics = new Graphics();
   const bullets: Bullets = await createBullets(
@@ -216,7 +275,8 @@ async function createPreview(
     {
       sigil: findSigil,
       spell: findSpell,
-      pattern: findPattern,
+      pattern: (id: string | null) =>
+        id === demoId ? demoPattern : findPattern(id),
       vessel: findVessel,
       effect: findEffect,
     },
@@ -278,6 +338,7 @@ async function createPreview(
   const boostTexts: Array<Text> = new Array();
   let boosts: Array<Boost> = new Array();
   let factors: Factors = neutralFactors();
+  let enemyFactors: Factors = neutralFactors();
   let boostClock: number = 0;
   let lifeGains: number = 0;
   let lifePieces: number = 0;
@@ -359,6 +420,8 @@ async function createPreview(
     itemLayer,
     bulletLayer,
     coreLayer,
+    fog,
+    halo,
     bomb.view,
     hitbox,
     bossHud.view,
@@ -563,6 +626,7 @@ async function createPreview(
           arrival.spawn,
           null,
           true,
+          arrival.spawn.effectsTo ?? "player",
         );
       }
     }
@@ -628,6 +692,20 @@ async function createPreview(
       dying = 0;
     }
 
+    if (playerWind.x !== 0 || playerWind.y !== 0) {
+      player.position.set(
+        Math.min(
+          Math.max(player.x + playerWind.x * delta, playerSize / 2),
+          previewWidth - playerSize / 2,
+        ),
+        Math.min(
+          Math.max(player.y + playerWind.y * delta, playerSize / 2),
+          previewHeight - playerSize / 2,
+        ),
+      );
+      hitbox.position.copyFrom(player.position);
+    }
+
     if (bomb.stock() < stock) {
       cue("bomb");
       bombsUsed++;
@@ -667,7 +745,15 @@ async function createPreview(
         grace <= 0 && dying <= 0 && !bomb.invincible(),
       )
     ) {
-      if (!autopilot) {
+      const shield: Boost | undefined = boosts.find(
+        (boost: Boost) => boost.effect.mode === "shield" && boost.hits > 0,
+      );
+
+      if (!autopilot && shield !== undefined) {
+        shield.hits--;
+        grace = hitGrace;
+        cue("cancel");
+      } else if (!autopilot) {
         cue("miss");
         dying = deathbombWindow;
         actors.spoil("miss");
@@ -679,6 +765,7 @@ async function createPreview(
 
       if (grazed > 0) {
         cue("graze");
+        cleanse("graze", grazed);
       }
 
       grazeCount += grazed;
@@ -691,9 +778,13 @@ async function createPreview(
   }
 
   function collect(delta: number): void {
-    for (const defeat of actors.defeats()) {
+    const defeats: Array<Defeat> = actors.defeats();
+
+    for (const defeat of defeats) {
       items.drop(defeat);
     }
+
+    cleanse("defeat", defeats.length);
 
     const haul: Haul = items.update(delta, player.x, player.y, dying <= 0);
 
@@ -755,34 +846,230 @@ async function createPreview(
     }
   }
 
-  function applyFactors(): void {
-    factors = combineFactors(boosts.map((boost: Boost) => boost.effect));
-    squad.setTempo(factors.fireRate);
-    pilot.setPace(factors.moveSpeed);
-    bullets.setTempo(factors.enemyFireRate);
-    bullets.setPace(factors.bulletSpeed);
+  function cleanse(kind: "graze" | "defeat", count: number): void {
+    for (const boost of boosts) {
+      if (boost.effect.mode === "curse" && boost.effect.cleanse === kind) {
+        boost.left -= count * boost.effect.cleanseTime;
+      }
+    }
   }
 
-  function gainBoosts(effects: Array<Effect>, delta: number): void {
-    for (const effect of effects) {
+  function scaleOf(boost: Boost): number {
+    const effect: Effect = boost.effect;
+
+    if (effect.mode === "focus") {
+      return focused ? 1 : 0;
+    }
+
+    if (effect.mode === "ramp") {
+      const progress: number = Math.min(
+        boost.age / Math.max(effect.duration, 0.001),
+        1,
+      );
+
+      return effect.ramp === "rise" ? progress : 1 - progress;
+    }
+
+    return 1;
+  }
+
+  function factorsFor(target: ModifierTarget): Factors {
+    return combineFactors(
+      boosts
+        .filter((boost: Boost) => boost.target === target)
+        .map((boost: Boost): Weighted => ({
+          effect: boost.effect,
+          scale: scaleOf(boost),
+          layers: boost.layers,
+        })),
+    );
+  }
+
+  function applyFactors(): void {
+    factors = factorsFor("player");
+    enemyFactors = factorsFor("enemies");
+    squad.setTempo(factors.fireRate);
+    squad.setPace(factors.bulletSpeed);
+    pilot.setPace(factors.moveSpeed);
+    bullets.setTempo(enemyFactors.fireRate);
+    bullets.setPace(enemyFactors.bulletSpeed);
+    actors.setPace(enemyFactors.moveSpeed);
+    applyWorld();
+  }
+
+  function applyWorld(): void {
+    let freeze: number = 0;
+    let mirror: boolean = false;
+    let darkness: number = 0;
+    let recolor: string | null = null;
+    let auraRadius: number = 0;
+    let auraSlow: number = 0;
+    let erase: boolean = false;
+    const wind: Vector = { x: 0, y: 0 };
+
+    playerWind.x = 0;
+    playerWind.y = 0;
+
+    for (const boost of boosts) {
+      const scale: number = scaleOf(boost);
+
+      if (scale <= 0) {
+        continue;
+      }
+
+      if (boost.effect.mode === "aura") {
+        auraRadius = Math.max(auraRadius, boost.effect.auraRadius * scale);
+
+        if (boost.effect.aura === "erase") {
+          erase = true;
+        } else {
+          auraSlow = Math.max(auraSlow, boost.effect.auraSlow / 100);
+        }
+      }
+
+      for (const world of boost.effect.world) {
+        const amount: number = world.strength * scale;
+        const angle: number = forward + (world.angle * Math.PI) / 180;
+
+        if (world.kind === "freeze") {
+          freeze = Math.max(freeze, amount / 100);
+        } else if (world.kind === "mirror") {
+          mirror = true;
+        } else if (world.kind === "fog") {
+          darkness = Math.max(darkness, amount / 100);
+        } else if (world.kind === "recolor") {
+          recolor = world.color;
+        } else {
+          const push: Vector = world.kind === "windBullets" ? wind : playerWind;
+
+          push.x += Math.cos(angle) * amount;
+          push.y += Math.sin(angle) * amount;
+        }
+      }
+    }
+
+    bullets.setFreeze(freeze);
+    bullets.setMirror(mirror);
+    bullets.setWind(wind.x, wind.y);
+    bullets.setRecolor(recolor);
+    bullets.setAura(
+      auraRadius > 0
+        ? { radius: auraRadius, slow: erase ? 1 : auraSlow, erase: erase }
+        : null,
+    );
+    fogAmount = darkness;
+    drawWorld();
+  }
+
+  function drawWorld(): void {
+    const aura: Boost | undefined = boosts.find(
+      (boost: Boost) => boost.effect.mode === "aura" && scaleOf(boost) > 0,
+    );
+
+    fog.clear();
+    halo.clear();
+
+    if (fogAmount > 0) {
+      const alpha: number = Math.min(fogAmount, 1) * fogDepth;
+
+      fog
+        .rect(0, 0, previewWidth, previewHeight)
+        .fill({ color: "#000000", alpha: alpha })
+        .circle(player.x, player.y, fogLight)
+        .cut();
+
+      for (let ring = 0; ring < fogRings; ring++) {
+        const outer: number = fogLight * (1 - ring / fogRings);
+        const inner: number = fogLight * (1 - (ring + 1) / fogRings);
+
+        fog
+          .circle(player.x, player.y, outer)
+          .fill({ color: "#000000", alpha: alpha * (1 - ring / fogRings) })
+          .circle(player.x, player.y, inner)
+          .cut();
+      }
+    }
+
+    if (aura !== undefined) {
+      const radius: number = aura.effect.auraRadius * scaleOf(aura);
+
+      halo
+        .circle(player.x, player.y, radius)
+        .fill({ color: aura.effect.color, alpha: auraFill })
+        .stroke({ color: aura.effect.color, width: 1.5, alpha: auraAlpha });
+    }
+  }
+
+  function instant(effect: Effect): void {
+    if (effect.action === "clear" || effect.action === "score") {
+      const count: number = bullets.cancel();
+
+      if (effect.action === "score") {
+        itemPoints += count * bulletPoints;
+      }
+
+      cue("cancel");
+    } else if (effect.action === "bomb") {
+      bomb.setStock(Math.min(bomb.stock() + 1, maxBombs));
+      cue("bombget");
+    } else if (effect.action === "life") {
+      lifeGains++;
+      cue("extend");
+    } else {
+      for (const boost of boosts) {
+        if (boost.effect.mode === "shield") {
+          boost.hits = Math.min(boost.hits + 1, boost.effect.hits);
+        }
+      }
+    }
+  }
+
+  function gainBoosts(granted: Array<Granted>, delta: number): void {
+    for (const { effect, target } of granted) {
+      cue("pickup", effect.pickupSound);
+
+      if (effect.mode === "instant") {
+        instant(effect);
+        continue;
+      }
+
       const held: Boost | undefined = boosts.find(
-        (boost: Boost) => boost.effect.id === effect.id,
+        (boost: Boost) =>
+          boost.effect.id === effect.id && boost.target === target,
       );
 
       if (held === undefined) {
-        boosts.push({ effect: effect, left: effect.duration });
-      } else {
-        held.left = effect.duration;
+        boosts.push({
+          effect: effect,
+          target: target,
+          left: effect.duration,
+          age: 0,
+          hits: effect.hits,
+          layers: 1,
+        });
+        continue;
       }
 
-      cue("pickup", effect.pickupSound);
+      held.left = effect.duration;
+      held.age = 0;
+      held.hits = effect.hits;
+
+      if (effect.mode === "stacking") {
+        held.layers = Math.min(held.layers + 1, Math.max(effect.stacks, 1));
+      }
     }
 
     for (const boost of boosts) {
-      boost.left -= delta;
+      boost.age += delta;
+
+      if (lasts(boost.effect)) {
+        boost.left -= delta;
+      }
     }
 
-    boosts = boosts.filter((boost: Boost) => boost.left > 0);
+    boosts = boosts.filter((boost: Boost) =>
+      lasts(boost.effect) ? boost.left > 0 : boost.hits > 0,
+    );
     applyFactors();
     paintBoosts(delta);
   }
@@ -801,14 +1088,121 @@ async function createPreview(
       }
 
       line.text =
-        boost.effect.name.toUpperCase() + "  " + Math.ceil(boost.left) + "s";
+        (boost.target === "enemies" ? "ENEMY " : "") +
+        boost.effect.name.toUpperCase() +
+        (boost.effect.mode === "stacking" ? "  x" + boost.layers : "") +
+        (lasts(boost.effect)
+          ? "  " + Math.ceil(boost.left) + "s"
+          : "  x" + boost.hits);
       line.tint = boost.effect.color;
       line.alpha =
+        lasts(boost.effect) &&
         boost.left < boostWarning &&
         Math.floor(boostClock * boostBlink) % 2 === 0
           ? 0.4
-          : 1;
+          : scaleOf(boost) <= 0
+            ? idleBoostAlpha
+            : 1;
     }
+  }
+
+  function endDemo(): void {
+    if (demo === null) {
+      return;
+    }
+
+    demo = null;
+    actors.clear();
+    bullets.clear();
+    clearBoosts();
+  }
+
+  function showEffect(value: Effect | null): void {
+    if (value === null) {
+      endDemo();
+      return;
+    }
+
+    showSpell(null);
+    stage = null;
+    pattern = null;
+
+    if (demo === null || actors.list[0]?.enemy !== demoEnemy) {
+      actors.clear();
+      bullets.clear();
+      boosts = new Array();
+      actors.add(demoEnemy, previewWidth / 2, hoverY, demoPath, null, false);
+      pilot.reset(playerX, playerY);
+      demoClock = 0;
+      grace = 0;
+    }
+
+    demo = value;
+    player.visible = true;
+  }
+
+  function runDemo(delta: number): void {
+    const effect: Effect = demo!;
+
+    focused = true;
+    demoClock += delta;
+
+    if (effect.mode === "instant") {
+      boosts = new Array();
+
+      if (demoClock >= demoEvery) {
+        demoClock = 0;
+        instant(effect);
+      }
+    } else {
+      let boost: Boost | undefined = boosts[0];
+
+      if (boost === undefined || boost.effect.id !== effect.id) {
+        boost = {
+          effect: effect,
+          target: "enemies",
+          left: effect.duration,
+          age: 0,
+          hits: effect.hits,
+          layers: 1,
+        };
+        boosts = [boost];
+      }
+
+      boost.effect = effect;
+      boost.layers = effect.mode === "stacking" ? effect.stacks : 1;
+      boost.age += delta;
+
+      if (lasts(effect)) {
+        boost.left -= delta;
+      }
+
+      if (boost.left <= 0 || boost.hits <= 0) {
+        boost.left = effect.duration;
+        boost.age = 0;
+        boost.hits = effect.hits;
+      }
+    }
+
+    if (bullets.collide(player.x, player.y, bomb, grace <= 0)) {
+      const shield: Boost | undefined = boosts.find(
+        (boost: Boost) => boost.effect.mode === "shield" && boost.hits > 0,
+      );
+
+      if (shield !== undefined) {
+        shield.hits--;
+      }
+
+      grace = hitGrace;
+    }
+
+    cleanse("graze", bullets.graze(player.x, player.y));
+    grace = Math.max(grace - delta, 0);
+    blink += delta;
+    player.alpha =
+      grace > 0 && Math.floor(blink * blinkRate) % 2 === 0 ? blinkAlpha : 1;
+    applyFactors();
+    paintBoosts(delta);
   }
 
   function clearBoosts(): void {
@@ -932,10 +1326,12 @@ async function createPreview(
     placeBgm(delta);
 
     if (playtest) {
-      actors.shoot(squad, factors.shotDamage);
+      actors.shoot(squad, factors.damage / enemyFactors.damage);
       actors.bomb(bomb, delta);
       collide();
       collect(delta);
+    } else if (demo !== null) {
+      runDemo(delta);
     } else {
       actors.declarations();
       actors.themes();
@@ -1022,12 +1418,14 @@ async function createPreview(
     setDim: (amount: number) => {
       dim.alpha = amount * maxDim;
     },
+    setEffect: showEffect,
     setBackground: (value: Background | null) => {
       base.background = value;
       paintSky(base);
       paintSky(cover);
     },
     setPattern: (value: Pattern | null) => {
+      endDemo();
       showSpell(null);
       stage = null;
       pattern = value;
@@ -1037,6 +1435,7 @@ async function createPreview(
       }
     },
     setEnemy: (value: Enemy | null, bar: number | null) => {
+      endDemo();
       showSpell(null);
       stage = null;
       pattern = null;
@@ -1065,6 +1464,7 @@ async function createPreview(
       actor.barTime = bar === null ? elapsed : 0;
     },
     setSigil: (value: Sigil | null) => {
+      endDemo();
       stage = null;
       pattern = null;
       actors.clear();
@@ -1072,12 +1472,14 @@ async function createPreview(
       showSigil(value);
     },
     setSpell: (value: Spell | null, attack: Pattern | null) => {
+      endDemo();
       stage = null;
       pattern = attack;
       actors.clear();
       showSpell(value);
     },
     setStage: (value: Stage | null, lookup: Resolve) => {
+      endDemo();
       showSpell(null);
 
       const changed: boolean = value !== stage;

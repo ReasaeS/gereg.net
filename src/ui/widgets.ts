@@ -120,6 +120,7 @@ function createRow(name: Name): Row {
   label.text = nameOf(name);
   label.anchor.set(0, 0.5);
   label.y = labelY;
+  label.eventMode = "none";
   row.addChild(label);
 
   return {
@@ -422,6 +423,7 @@ function createPick(
   drawBrowseField(field, 0, rowWidth, 0);
   value.anchor.set(0.5);
   value.position.set(rowWidth / 2, controlY);
+  value.eventMode = "none";
   field.eventMode = "static";
   field.cursor = "pointer";
   field.hitArea = new Rectangle(0, 0, rowWidth, rowHeight);
@@ -504,6 +506,7 @@ function createNumberField(
   field.position.set(0, controlY - chipHeight / 2);
   value.anchor.set(0.5);
   value.position.set(rowWidth / 2, controlY);
+  value.eventMode = "none";
   field.eventMode = "static";
   field.cursor = "text";
   field.hitArea = new Rectangle(
@@ -530,14 +533,17 @@ function createNumberField(
   return { view: view, refresh: refresh };
 }
 
-function createTableHead(columns: Array<string>): Control {
+function createTableHead(columns: Array<Name>): Control {
   const view: Container = new Container();
   const line: Graphics = new Graphics();
+  const labels: Array<Text> = new Array();
 
-  columns.forEach((column: string, index: number) => {
+  columns.forEach((column: Name, index: number) => {
     const label: Text = createText(labelSize, labelColor);
 
-    label.text = column.toUpperCase();
+    label.text = nameOf(column);
+    label.eventMode = "none";
+    labels.push(label);
     label.anchor.set(0, 0.5);
     label.position.set(
       tableColumns[index]! + tableInset,
@@ -551,7 +557,15 @@ function createTableHead(columns: Array<string>): Control {
     .fill({ color: getTheme().accent, alpha: 0.8 });
   view.addChild(line);
 
-  return { view: view, refresh: () => undefined, height: tableHeadHeight };
+  return {
+    view: view,
+    refresh: () => {
+      columns.forEach((column: Name, index: number) => {
+        labels[index]!.text = nameOf(column);
+      });
+    },
+    height: tableHeadHeight,
+  };
 }
 
 function createTableCell(
@@ -920,7 +934,7 @@ function drawDie(die: Graphics, lit: number, hovered: number): void {
 }
 
 function createHeader(
-  name: string,
+  name: Name,
   open: () => boolean,
   toggle: () => void,
   dice?: DiceToggle,
@@ -957,11 +971,12 @@ function createHeader(
   }
 
   function refresh(): void {
+    title.text = nameOf(name);
     opened.set(open() ? 1 : 0);
     draw();
   }
 
-  title.text = name.toUpperCase();
+  title.text = nameOf(name);
   title.anchor.set(0, 0.5);
   title.position.set(chevronSize * 3 + 4, middle);
   chevron

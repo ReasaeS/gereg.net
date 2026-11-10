@@ -5,6 +5,7 @@ import type {
   Difficulty,
   Enemy,
   Keyframe,
+  ModifierTarget,
   Palette,
   Sound,
   Spawn,
@@ -20,6 +21,7 @@ import { waveAmplitude } from "../kit";
 import type { Studio } from "../studio";
 import type { Option } from "../../../ui/widgets";
 import { isMusic } from "../../sound";
+import { modifierTargets } from "../../effects";
 
 const positionMin: number = -0.2;
 const positionMax: number = 1.2;
@@ -430,6 +432,14 @@ function addStageTab(studio: Studio): StageTab {
             () => spawn().gap,
             (value: number) => {
               spawn().gap = value;
+            },
+          ),
+          choice(
+            "Effects apply to",
+            () => modifierTargets,
+            () => spawn().effectsTo ?? "player",
+            (value: ModifierTarget) => {
+              spawn().effectsTo = value;
             },
           ),
         ],

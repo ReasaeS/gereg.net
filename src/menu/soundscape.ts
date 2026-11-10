@@ -36,6 +36,7 @@ type Layer = {
   gain: GainNode | null;
   token: number;
   loudness: number;
+  rest: number | null;
 };
 
 const blend: number = 0.6; // s
@@ -46,6 +47,22 @@ const settle: number = 0.001;
 const swellTime: number = 5; // s
 const swellStart: number = 0.2;
 const loudnessStride: number = 64;
+const restTime: number = 60; // s
+const breathTime: number = 6; // s
+const breathSteps: number = 32;
+
+function breathCurve(rising: boolean): Float32Array {
+  const curve: Float32Array = new Float32Array(breathSteps);
+
+  for (let index = 0; index < breathSteps; index++) {
+    const progress: number = index / (breathSteps - 1);
+    const eased: number = progress * progress * (3 - 2 * progress);
+
+    curve[index] = rising ? eased : 1 - eased;
+  }
+
+  return curve;
+}
 
 function loudnessOf(buffer: AudioBuffer): number {
   let total: number = 0;
@@ -96,6 +113,7 @@ async function createSoundscape(): Promise<Soundscape> {
     gain: null,
     token: 0,
     loudness: 0,
+    rest: null,
   }));
   const shown: Mix = {
     intro: -1,
@@ -116,6 +134,7 @@ async function createSoundscape(): Promise<Soundscape> {
   let master: GainNode | null = null;
   let filter: BiquadFilterNode | null = null;
   let swell: GainNode | null = null;
+  let breath: GainNode | null = null;
   let swelled: boolean = false;
 
   function layerOf(slot: MenuSlot): Layer {
@@ -123,16 +142,16 @@ async function createSoundscape(): Promise<Soundscape> {
   }
 
   function levelOf(layer: Layer): number {
-    const music: Layer = layerOf("music");
+    const rain: Layer = layerOf("rain");
 
     if (
       layer.slot === "intro" &&
       layer.loudness > 0 &&
-      music.loudness > 0 &&
-      music.sound !== null
+      rain.loudness > 0 &&
+      rain.sound !== null
     ) {
       return (
-        (wanted.intro * music.sound.volume * music.loudness) / layer.loudness
+        (wanted.intro * rain.sound.volume * rain.loudness) / layer.loudness
       );
     }
 
@@ -151,22 +170,66 @@ async function createSoundscape(): Promise<Soundscape> {
     param.setTargetAtTime(value, audioContext().currentTime, blend / 3);
   }
 
-  function begin(layer: Layer): void {
-    if (layer.buffer === null || layer.gain === null) {
+  function rest(layer: Layer): void {
+    layer.rest = window.setTimeout(() => {
+      layer.rest = null;
+
+      if (wanted[layer.slot] > settle && layer.source === null) {
+        begin(layer, true);
+      }
+    }, restTime * 1000);
+  }
+
+  function breathe(buffer: AudioBuffer, replay: boolean): void {
+    if (breath === null) {
+      return;
+    }
+
+    const now: number = audioContext().currentTime;
+    const ease: number = Math.min(breathTime, buffer.duration / 3);
+
+    breath.gain.cancelScheduledValues(now);
+
+    if (replay) {
+      breath.gain.setValueCurveAtTime(breathCurve(true), now, ease);
+    } else {
+      breath.gain.setValueAtTime(1, now);
+    }
+
+    breath.gain.setValueCurveAtTime(
+      breathCurve(false),
+      now + buffer.duration - ease,
+      ease,
+    );
+  }
+
+  function begin(layer: Layer, replay: boolean = false): void {
+    if (layer.buffer === null || layer.gain === null || layer.rest !== null) {
       return;
     }
 
     const context: AudioContext = audioContext();
     const source: AudioBufferSourceNode = context.createBufferSource();
+    const resting: boolean = layer.slot === "music";
 
     layer.source?.stop();
     layer.gain.gain.cancelScheduledValues(context.currentTime);
     layer.gain.gain.setValueAtTime(0, context.currentTime);
     source.buffer = layer.buffer;
-    source.loop = true;
+    source.loop = !resting;
     source.connect(layer.gain);
     source.start();
     layer.source = source;
+
+    if (resting) {
+      breathe(layer.buffer, replay);
+      source.onended = () => {
+        if (layer.source === source) {
+          layer.source = null;
+          rest(layer);
+        }
+      };
+    }
 
     if (layer.slot === "music" && swell !== null && !swelled) {
       swelled = true;
@@ -199,6 +262,11 @@ async function createSoundscape(): Promise<Soundscape> {
     layer.loudness = 0;
     fade(layer);
 
+    if (layer.rest !== null) {
+      window.clearTimeout(layer.rest);
+      layer.rest = null;
+    }
+
     if (sound === null || master === null) {
       return;
     }
@@ -215,7 +283,7 @@ async function createSoundscape(): Promise<Soundscape> {
         begin(layer);
       }
 
-      if (layer.slot === "music") {
+      if (layer.slot === "rain") {
         matchIntro();
       }
     });
@@ -296,11 +364,14 @@ async function createSoundscape(): Promise<Soundscape> {
     swell = context.createGain();
     swell.gain.value = swellStart;
     swell.connect(filter);
+    breath = context.createGain();
+    breath.gain.value = 1;
+    breath.connect(swell);
 
     for (const layer of layers) {
       layer.gain = context.createGain();
       layer.gain.gain.value = 0;
-      layer.gain.connect(layer.slot === "music" ? swell : filter);
+      layer.gain.connect(layer.slot === "music" ? breath : filter);
       load(layer);
     }
 

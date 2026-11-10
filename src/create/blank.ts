@@ -1,4 +1,4 @@
-import type { Creations, Game, Run, Sound, Stage } from "./types";
+import type { Creations, EffectMode, Game, Run, Sound, Stage } from "./types";
 import {
   defaultBackground,
   defaultBullet,
@@ -126,7 +126,14 @@ function blankEntry(
   }
 
   if (kind === "effect") {
-    return { ...defaultEffect(), target: deal.target ?? "player" };
+    const mode: EffectMode =
+      deal.group === "instant"
+        ? "instant"
+        : deal.group === "special"
+          ? "shield"
+          : "timed";
+
+    return { ...defaultEffect(), mode: mode };
   }
 
   return defaultBackground();
