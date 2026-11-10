@@ -2,6 +2,7 @@ import type {
   Creations,
   Cutscene,
   Difficulty,
+  Effect,
   Enemy,
   Game,
   Ost,
@@ -10,16 +11,21 @@ import type {
   Sound,
   Spell,
   Stage,
+  Dice,
 } from "./types";
 import {
   createId,
   repairCharacter,
   repairEnemy,
+  repairEffect,
   repairVessel,
+  emptyCreations,
   repairBullet,
   repairWallpaper,
 } from "./defaults";
 import { repairScore } from "./arrange";
+import { repairScenery } from "./scenery";
+import { repairDice } from "./dice";
 import { repairAmbience } from "./ambience";
 import { isBuiltin, readBlob, storeBlob } from "./images";
 import { usedFiles } from "./storage";
@@ -59,6 +65,7 @@ const kindList: Array<Kind> = [
   "ost",
   "character",
   "cutscene",
+  "effect",
 ];
 
 function listOf(creations: Creations, kind: Kind): Array<Creation> {
@@ -79,30 +86,10 @@ function listOf(creations: Creations, kind: Kind): Array<Creation> {
     ost: creations.osts,
     character: creations.characters,
     cutscene: creations.cutscenes,
+    effect: creations.effects,
   };
 
   return lists[kind];
-}
-
-function emptyCreations(): Creations {
-  return {
-    stages: new Array(),
-    runs: new Array(),
-    games: new Array(),
-    patterns: new Array(),
-    enemies: new Array(),
-    backgrounds: new Array(),
-    wallpapers: new Array(),
-    bullets: new Array(),
-    vessels: new Array(),
-    palettes: new Array(),
-    sigils: new Array(),
-    spells: new Array(),
-    sounds: new Array(),
-    osts: new Array(),
-    characters: new Array(),
-    cutscenes: new Array(),
-  };
 }
 
 function collect(source: Creations, kind: Kind, item: Creation): Creations {
@@ -130,6 +117,10 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
 
   function include(target: Kind, value: Creation): void {
     listOf(bundle, target).push(structuredClone(value));
+
+    if (source.dice[value.id] !== undefined) {
+      bundle.dice[value.id] = structuredClone(source.dice[value.id]!);
+    }
 
     if (target === "stage") {
       const stage: Stage = value as Stage;
@@ -183,6 +174,12 @@ function collect(source: Creations, kind: Kind, item: Creation): Creations {
         add("spell", bar.spell);
         add("pattern", bar.attack ?? null);
       }
+
+      for (const drop of enemy.effects ?? []) {
+        add("effect", drop.effect);
+      }
+    } else if (target === "effect") {
+      add("sound", (value as Effect).pickupSound ?? null);
     } else if (target === "spell") {
       const spell: Spell = value as Spell;
 
@@ -382,6 +379,18 @@ async function importCard(
     repairBullet(bullet);
   }
 
+  for (const effect of incoming.effects) {
+    repairEffect(effect);
+  }
+
+  repairDice(incoming);
+
+  for (const background of incoming.backgrounds) {
+    for (const layer of background.layers ?? []) {
+      layer.scene = repairScenery(layer.scene);
+    }
+  }
+
   for (const sound of incoming.sounds) {
     sound.score = repairScore(sound.score);
     sound.score.shared = true;
@@ -396,10 +405,16 @@ async function importCard(
         (other: Creation) => other.id === value.id,
       );
 
+      const dice: Dice | undefined = incoming.dice[value.id];
+
       if (value === root && taken) {
         value.id = createId();
       } else if (taken) {
         continue;
+      }
+
+      if (dice !== undefined) {
+        target.dice[value.id] = dice;
       }
 
       list.push(value);

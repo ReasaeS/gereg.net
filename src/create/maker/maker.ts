@@ -26,7 +26,19 @@ import {
   tween,
   type Easing,
 } from "../../effects/tween/tween";
-import type { Bullet, Creations, Sound, Stage, Vessel } from "../types";
+import type {
+  Background,
+  Bullet,
+  Creations,
+  Enemy,
+  Pattern,
+  Sigil,
+  Sound,
+  Spawn,
+  Spell,
+  Stage,
+  Vessel,
+} from "../types";
 import { drawVesselFallback, readVessel, vesselTexture } from "../vessel";
 import { readBullet } from "../energy";
 import { bulletSide, vesselSide } from "../defaults";
@@ -61,6 +73,7 @@ import { createScript, type Script } from "./script";
 import type { Cursor, Item, Selection, Studio, Tab } from "./studio";
 import { createKit, type Kit } from "./kit";
 import { createSelection } from "./selection";
+import { isRolling, registerTab, rollById, useRunner } from "../dice";
 import { createScenes, type Scenes } from "./scenes";
 import { createUploads, type Uploads } from "./uploads";
 import { createMarkers, type Markers } from "./markers";
@@ -96,6 +109,7 @@ import { addStageTab, type StageTab } from "./tabs/stage";
 import { addRunTab } from "./tabs/run";
 import { addGameTab } from "./tabs/game";
 import { addOstTab } from "./tabs/ost";
+import { addEffectTab } from "./tabs/effect";
 import { gameStages, runStages } from "../packs";
 import { onTyping } from "../../ui/typing";
 
@@ -134,6 +148,10 @@ async function createMaker(app: Application): Promise<PageContent> {
     track: 0,
   };
   const pick: Selection = createSelection(creations, tabs, () => tab, cursor);
+
+  useRunner((kind: string, item: { id: string }, action: () => void) =>
+    pick.withItem(kind, item as Item, action),
+  );
   const scenes: Scenes = createScenes(
     creations,
     () => pick,
@@ -156,18 +174,66 @@ async function createMaker(app: Application): Promise<PageContent> {
   );
   const panelBack: Graphics = new Graphics();
   const frameMask: Graphics = new Graphics();
-  const preview: Preview = await createPreview(
-    playerTexture(),
-    droneTexture(),
-    pick.backgroundById,
-    pick.sigilById,
-    pick.spellById,
-    pick.patternById,
-    pick.bulletById,
-    pick.vesselById,
+  const preview: Preview = rolledPreview(
+    await createPreview(
+      playerTexture(),
+      droneTexture(),
+      (id: string | null) =>
+        rollById(creations, "background", pick.backgroundById(id)),
+      (id: string | null) => rollById(creations, "sigil", pick.sigilById(id)),
+      (id: string | null) => rollById(creations, "spell", pick.spellById(id)),
+      (id: string | null) =>
+        rollById(creations, "pattern", pick.patternById(id)),
+      (id: string | null) => rollById(creations, "bullet", pick.bulletById(id)),
+      (id: string | null) => rollById(creations, "vessel", pick.vesselById(id)),
+      (id: string | null) => rollById(creations, "effect", pick.effectById(id)),
+    ),
   );
   const ticks: Clock = createClock();
-  const kit: Kit = createKit(changed, refresh, browseCards);
+  const kit: Kit = createKit(
+    changed,
+    refresh,
+    browseCards,
+    creations,
+    (): Item => {
+      const shown: Tab | undefined = tab as Tab | undefined;
+
+      return shown?.items()[shown.selected] ?? { id: "", name: "" };
+    },
+  );
+
+  function rolledPreview(base: Preview): Preview {
+    const setBackground: Preview["setBackground"] = base.setBackground;
+    const setPattern: Preview["setPattern"] = base.setPattern;
+    const setEnemy: Preview["setEnemy"] = base.setEnemy;
+    const setSigil: Preview["setSigil"] = base.setSigil;
+    const setSpell: Preview["setSpell"] = base.setSpell;
+    const setStage: Preview["setStage"] = base.setStage;
+
+    return {
+      ...base,
+      setBackground: (value: Background | null) =>
+        setBackground(rollById(creations, "background", value)),
+      setPattern: (value: Pattern | null) =>
+        setPattern(rollById(creations, "pattern", value)),
+      setEnemy: (value: Enemy | null, bar: number | null) =>
+        setEnemy(rollById(creations, "enemy", value), bar),
+      setSigil: (value: Sigil | null) =>
+        setSigil(rollById(creations, "sigil", value)),
+      setSpell: (value: Spell | null, attack: Pattern | null) =>
+        setSpell(
+          rollById(creations, "spell", value),
+          rollById(creations, "pattern", attack),
+        ),
+      setStage: (
+        value: Stage | null,
+        resolve: (spawn: Spawn) => Enemy | null,
+      ) =>
+        setStage(rollById(creations, "stage", value), (spawn: Spawn) =>
+          rollById(creations, "enemy", resolve(spawn)),
+        ),
+    };
+  }
   const browser: Browser = createBrowser(app, () => creations);
   const script: Script = createScript(app);
   const painter: Painter = createPainter(
@@ -213,6 +279,10 @@ async function createMaker(app: Application): Promise<PageContent> {
     pause: () => transport.pause(),
     buildMarkers: () => markers.build(),
     placeMarkers: () => markers.place(),
+    openCard: (kind: Kind, index: number) => {
+      saveCreations(creations);
+      showItem(kind, index);
+    },
     paintVessel: () => {
       const vessel: Vessel = pick.vessel();
 
@@ -222,6 +292,7 @@ async function createMaker(app: Application): Promise<PageContent> {
         read: (pixels: Pixels) => readVessel(vessel, pixels),
         write: (code: string) => {
           vessel.pixels = code;
+          vessel.look = "drawn";
           vesselTexture(vessel);
         },
         drawDefault: drawVesselFallback,
@@ -271,24 +342,28 @@ async function createMaker(app: Application): Promise<PageContent> {
 
   function browseCards<T>(
     name: string,
-    kind: Kind,
+    kind: Kind | Array<Kind>,
     options: Array<Option<T>>,
     current: T,
     choose: (value: T) => void,
   ): void {
-    const list: Array<Item> = listOf(creations, kind);
+    const kinds: Array<Kind> = Array.isArray(kind) ? kind : [kind];
     const cards: Array<Card> = options.map((option: Option<T>) => {
-      const index: number = list.findIndex(
-        (item: Item) => (item.id as unknown) === option.value,
-      );
+      for (const value of kinds) {
+        const list: Array<Item> = listOf(creations, value);
+        const index: number = list.findIndex(
+          (item: Item) => (item.id as unknown) === option.value,
+        );
 
-      return {
-        label: index < 0 ? option.label : list[index]!.name,
-        entry:
-          index < 0
-            ? null
-            : { kind: kind, index: index, item: list[index] as Creation },
-      };
+        if (index >= 0) {
+          return {
+            label: list[index]!.name,
+            entry: { kind: value, index: index, item: list[index] as Creation },
+          };
+        }
+      }
+
+      return { label: option.label, entry: null };
     });
 
     transport.stopTyping();
@@ -334,6 +409,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   }
 
   function changed(): void {
+    if (isRolling()) {
+      return;
+    }
+
     saveCreations(creations);
     paintLook();
 
@@ -414,6 +493,7 @@ async function createMaker(app: Application): Promise<PageContent> {
     panel.y = 0;
     panel.visible = false;
     rows.content.addChild(panel);
+    registerTab(name, kit.claimSections());
     tabs.push({
       name: name,
       items: items,
@@ -438,6 +518,7 @@ async function createMaker(app: Application): Promise<PageContent> {
   const soundTab: SoundTab = addSoundTab(studio);
 
   addOstTab(studio);
+  addEffectTab(studio);
   addCutsceneTab(studio);
   addCharacterTab(studio);
   addRunTab(studio);
@@ -462,6 +543,10 @@ async function createMaker(app: Application): Promise<PageContent> {
   controls.addChild(itemBar, rows.view);
 
   function refresh(): void {
+    if (isRolling()) {
+      return;
+    }
+
     if (tab.items()[tab.selected] === undefined) {
       return;
     }

@@ -9,6 +9,7 @@ import type {
   Wallpaper,
   Bullet,
   Vessel,
+  Build,
   Palette,
   Ring,
   Sigil,
@@ -26,12 +27,16 @@ import type {
   Ost,
   Difficulty,
   Creations,
+  Effect,
+  EffectDrop,
+  Modifier,
 } from "./types";
 import { createPixels, encodePixels, type Pixels } from "../editor/pixels";
 import { spriteSize } from "../editor/drawings";
 import { drawBulletDefault, drawVesselDefault } from "../editor/default";
 import { defaultScore } from "./arrange";
 import { defaultAmbience } from "./ambience";
+import { buildPixels, defaultBuild, repairBuild } from "./hangar";
 
 function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -82,6 +87,7 @@ function defaultEnemy(pattern: string | null): Enemy {
     theme: null,
     defeatSound: effectSound("defeat"),
     drops: rankDrops("regular"),
+    effects: new Array(),
     bars: [defaultBar(20)],
   };
 }
@@ -185,11 +191,15 @@ function defaultVesselPixels(): string {
 }
 
 function defaultVessel(): Vessel {
+  const build: Build = defaultBuild();
+
   return {
     id: createId(),
     name: "Wasp",
     scale: 1,
-    pixels: defaultVesselPixels(),
+    pixels: buildPixels(build, spriteSize),
+    look: "built",
+    build: build,
   };
 }
 
@@ -197,6 +207,8 @@ function repairVessel(vessel: Vessel): void {
   const stale: Vessel & Record<string, unknown> = vessel;
 
   vessel.scale = vessel.scale ?? 1;
+  vessel.look = vessel.look === "built" ? "built" : "drawn";
+  vessel.build = repairBuild(vessel.build);
 
   if (
     !vesselScales.includes(vessel.scale) ||
@@ -234,8 +246,40 @@ function repairEnemy(enemy: Enemy): void {
   const stale: Enemy & { sprite?: unknown; ship?: string | null } = enemy;
 
   enemy.vessel = enemy.vessel ?? stale.ship ?? null;
+  enemy.effects = (enemy.effects ?? new Array()).map((drop: EffectDrop) => ({
+    effect: drop.effect ?? null,
+    chance: drop.chance ?? 0,
+  }));
   delete stale.sprite;
   delete stale.ship;
+}
+
+function defaultEffect(): Effect {
+  return {
+    id: createId(),
+    name: "Effect",
+    target: "player",
+    color: "#7ae38f",
+    duration: 10,
+    modifiers: [{ stat: "fireRate", amount: 50 }],
+    pickupSound: effectSound("power"),
+  };
+}
+
+function repairEffect(effect: Effect): void {
+  effect.target = effect.target ?? "player";
+  effect.color = effect.color ?? "#7ae38f";
+  effect.duration = effect.duration ?? 10;
+  effect.modifiers = (effect.modifiers ?? new Array()).map(
+    (modifier: Modifier) => ({
+      stat: modifier.stat ?? "fireRate",
+      amount: modifier.amount ?? 0,
+    }),
+  );
+
+  if (effect.pickupSound === undefined) {
+    effect.pickupSound = effectSound("power");
+  }
 }
 
 function defaultPalette(): Palette {
@@ -549,6 +593,29 @@ function defaultGameSounds(): GameSounds {
   };
 }
 
+function emptyCreations(): Creations {
+  return {
+    stages: new Array(),
+    runs: new Array(),
+    games: new Array(),
+    patterns: new Array(),
+    enemies: new Array(),
+    backgrounds: new Array(),
+    wallpapers: new Array(),
+    bullets: new Array(),
+    vessels: new Array(),
+    palettes: new Array(),
+    sigils: new Array(),
+    spells: new Array(),
+    sounds: new Array(),
+    osts: new Array(),
+    characters: new Array(),
+    cutscenes: new Array(),
+    effects: new Array(),
+    dice: {},
+  };
+}
+
 function defaultOst(tracks: Array<string>): Ost {
   return {
     id: createId(),
@@ -564,6 +631,7 @@ function defaultOst(tracks: Array<string>): Ost {
 }
 
 export {
+  emptyCreations,
   effectSound,
   defaultGameSounds,
   bulletSide,
@@ -583,6 +651,8 @@ export {
   defaultVessel,
   repairVessel,
   repairEnemy,
+  defaultEffect,
+  repairEffect,
   repairWallpaper,
   defaultPalette,
   defaultRing,

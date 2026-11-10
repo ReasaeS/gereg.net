@@ -82,70 +82,80 @@ function addSigilTab(studio: Studio): void {
           (value: number) => selectRing(value),
         ),
       ]),
-      ...section("Shape", [
-        slider(
-          "Radius",
-          ringMin,
-          ringMax,
-          5,
-          () => ring().radius,
-          (value: number) => {
-            ring().radius = value;
-          },
-        ),
-        slider(
-          "Points",
-          0,
-          12,
-          1,
-          () => ring().points,
-          (value: number) => {
-            ring().points = value;
-          },
-        ),
-        slider(
-          "Step",
-          1,
-          5,
-          1,
-          () => ring().step,
-          (value: number) => {
-            ring().step = value;
-          },
-        ),
-        slider(
-          "Ticks",
-          0,
-          72,
-          2,
-          () => ring().ticks,
-          (value: number) => {
-            ring().ticks = value;
-          },
-        ),
-        slider(
-          "Orbs",
-          0,
-          0.2,
-          0.01,
-          () => ring().orb,
-          (value: number) => {
-            ring().orb = value;
-          },
-        ),
-      ]),
-      ...section("Motion", [
-        slider(
-          "Spin",
-          -spinLimit,
-          spinLimit,
-          5,
-          () => ring().spin,
-          (value: number) => {
-            ring().spin = value;
-          },
-        ),
-      ]),
+      ...section(
+        "Shape",
+        [
+          slider(
+            "Radius",
+            ringMin,
+            ringMax,
+            5,
+            () => ring().radius,
+            (value: number) => {
+              ring().radius = value;
+            },
+          ),
+          slider(
+            "Points",
+            0,
+            12,
+            1,
+            () => ring().points,
+            (value: number) => {
+              ring().points = value;
+            },
+          ),
+          slider(
+            "Step",
+            1,
+            5,
+            1,
+            () => ring().step,
+            (value: number) => {
+              ring().step = value;
+            },
+          ),
+          slider(
+            "Ticks",
+            0,
+            72,
+            2,
+            () => ring().ticks,
+            (value: number) => {
+              ring().ticks = value;
+            },
+          ),
+          slider(
+            "Orbs",
+            0,
+            0.2,
+            0.01,
+            () => ring().orb,
+            (value: number) => {
+              ring().orb = value;
+            },
+          ),
+        ],
+        () => true,
+        false,
+      ),
+      ...section(
+        "Motion",
+        [
+          slider(
+            "Spin",
+            -spinLimit,
+            spinLimit,
+            5,
+            () => ring().spin,
+            (value: number) => {
+              ring().spin = value;
+            },
+          ),
+        ],
+        () => true,
+        false,
+      ),
     ],
     () => {
       preview.setBackground(null);

@@ -6,6 +6,7 @@ import {
   type Texture,
 } from "pixi.js";
 import { getTexture } from "../images";
+import { layerKey, layerTexture } from "../scenery";
 import type { Background, Parallax } from "../types";
 import { previewHeight, previewWidth } from "./bounds";
 
@@ -54,9 +55,7 @@ function skyKey(background: Background | null): string {
         background.top +
         background.bottom +
         background.layers
-          .map(
-            (layer: Parallax) => spriteKey(layer.sprite) + ":" + layer.opacity,
-          )
+          .map((layer: Parallax) => layerKey(layer) + ":" + layer.opacity)
           .join(",");
 }
 
@@ -84,7 +83,7 @@ function paintLayers(sky: Sky): void {
   sky.layers = new Array();
 
   for (const parallax of sky.background?.layers ?? []) {
-    const texture: Texture | null = getTexture(parallax.sprite);
+    const texture: Texture | null = layerTexture(parallax);
 
     if (texture === null) {
       continue;

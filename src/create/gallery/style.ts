@@ -1,12 +1,15 @@
+import { fieldHeight, fieldWidth } from "../../game/field";
 import { Color, Text, type ColorSource, type Graphics } from "pixi.js";
 import { getTheme } from "../../theme/theme";
 
 const tileWidth: number = 190; // px
-const tileHeight: number = 300; // px
+const tileHeight: number = 330; // px
 const tileRadius: number = 10; // px
 const artInset: number = 16; // px
 const artTop: number = 18; // px
-const artHeight: number = 140; // px
+const artHeight: number = Math.round(
+  ((tileWidth - artInset * 2) * fieldHeight) / fieldWidth,
+); // px
 const nameMargin: number = 14; // px
 const diamondSize: number = 5; // px
 const trim: string = getTheme().highlight;

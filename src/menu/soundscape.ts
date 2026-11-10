@@ -35,6 +35,7 @@ type Layer = {
   source: AudioBufferSourceNode | null;
   gain: GainNode | null;
   token: number;
+  loudness: number;
 };
 
 const blend: number = 0.6; // s
@@ -44,6 +45,23 @@ const deepLevel: number = 0.6;
 const settle: number = 0.001;
 const swellTime: number = 5; // s
 const swellStart: number = 0.2;
+const loudnessStride: number = 64;
+
+function loudnessOf(buffer: AudioBuffer): number {
+  let total: number = 0;
+  let count: number = 0;
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data: Float32Array = buffer.getChannelData(channel);
+
+    for (let index = 0; index < data.length; index += loudnessStride) {
+      total += data[index]! * data[index]!;
+      count++;
+    }
+  }
+
+  return count === 0 ? 0 : Math.sqrt(total / count);
+}
 
 function loadMenuSound(name: string): Promise<Sound | null> {
   return loadSoundCard("menu/" + name.replace(".geregnet.json", ""));
@@ -77,6 +95,7 @@ async function createSoundscape(): Promise<Soundscape> {
     source: null,
     gain: null,
     token: 0,
+    loudness: 0,
   }));
   const shown: Mix = {
     intro: -1,
@@ -99,8 +118,33 @@ async function createSoundscape(): Promise<Soundscape> {
   let swell: GainNode | null = null;
   let swelled: boolean = false;
 
+  function layerOf(slot: MenuSlot): Layer {
+    return layers.find((layer: Layer) => layer.slot === slot)!;
+  }
+
   function levelOf(layer: Layer): number {
+    const music: Layer = layerOf("music");
+
+    if (
+      layer.slot === "intro" &&
+      layer.loudness > 0 &&
+      music.loudness > 0 &&
+      music.sound !== null
+    ) {
+      return (
+        (wanted.intro * music.sound.volume * music.loudness) / layer.loudness
+      );
+    }
+
     return wanted[layer.slot] * (layer.sound?.volume ?? 0);
+  }
+
+  function matchIntro(): void {
+    const intro: Layer = layerOf("intro");
+
+    if (intro.source !== null && intro.gain !== null) {
+      glide(intro.gain.gain, levelOf(intro));
+    }
   }
 
   function glide(param: AudioParam, value: number): void {
@@ -152,6 +196,7 @@ async function createSoundscape(): Promise<Soundscape> {
     const sound: Sound | null = layer.sound;
 
     layer.buffer = null;
+    layer.loudness = 0;
     fade(layer);
 
     if (sound === null || master === null) {
@@ -164,9 +209,14 @@ async function createSoundscape(): Promise<Soundscape> {
       }
 
       layer.buffer = buffer;
+      layer.loudness = loudnessOf(buffer);
 
       if (!layer.restart || wanted[layer.slot] > settle) {
         begin(layer);
+      }
+
+      if (layer.slot === "music") {
+        matchIntro();
       }
     });
   }

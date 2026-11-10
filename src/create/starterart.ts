@@ -6,6 +6,7 @@ import {
   type Pixels,
 } from "../editor/pixels";
 import { spriteSize } from "../editor/drawings";
+import { defaultBuild } from "./hangar";
 
 type Colors = Record<string, string>;
 
@@ -223,6 +224,8 @@ function vessel(
     name: name,
     scale: scale,
     pixels: paint(spriteSize * scale, mirrored(half, scale), vesselColors),
+    look: "drawn",
+    build: defaultBuild(),
   };
 }
 

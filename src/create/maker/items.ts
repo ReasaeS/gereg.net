@@ -1,5 +1,6 @@
 import type {
   Creations,
+  Effect,
   Enemy,
   GameEffect,
   Pattern,
@@ -30,6 +31,7 @@ const kindWords: Map<Kind, string> = new Map([
   ["ost", "OST"],
   ["character", "Character"],
   ["cutscene", "Cutscene"],
+  ["effect", "Effect"],
 ]);
 
 function listOf(creations: Creations, kind: Kind): Array<Item> {
@@ -50,6 +52,7 @@ function listOf(creations: Creations, kind: Kind): Array<Item> {
     ost: creations.osts,
     character: creations.characters,
     cutscene: creations.cutscenes,
+    effect: creations.effects,
   };
 
   return lists[kind];
@@ -64,7 +67,9 @@ function rarityKey(kind: Kind, item: Item): string {
         ? (item as Enemy).rank
         : kind === "pattern"
           ? (item as Pattern).frame
-          : kind;
+          : kind === "effect"
+            ? (item as Effect).target
+            : kind;
 }
 
 function freshName(creations: Creations, kind: Kind, item: Item): string {
@@ -230,6 +235,22 @@ function forgetBullet(creations: Creations, id: string): void {
   }
 }
 
+function forgetEffect(creations: Creations, id: string): void {
+  for (const enemyItem of creations.enemies) {
+    for (const drop of enemyItem.effects) {
+      if (drop.effect === id) {
+        drop.effect = null;
+      }
+    }
+  }
+
+  for (const effectItem of creations.effects) {
+    if (effectItem.pickupSound === id) {
+      effectItem.pickupSound = null;
+    }
+  }
+}
+
 function forgetVessel(creations: Creations, id: string): void {
   for (const enemyItem of creations.enemies) {
     if (enemyItem.vessel === id) {
@@ -268,6 +289,8 @@ function deleteEntry(creations: Creations, kind: Kind, index: number): void {
   forgetSpawns(creations, item.id);
   forgetBullet(creations, item.id);
   forgetVessel(creations, item.id);
+  forgetEffect(creations, item.id);
+  delete creations.dice[item.id];
 }
 
 function createEntry(creations: Creations, deal: Deal): Kind {
@@ -299,6 +322,10 @@ function duplicateEntry(
   const suffix: string = " copy";
 
   copy.id = createId();
+
+  if (creations.dice[item.id] !== undefined) {
+    creations.dice[copy.id] = structuredClone(creations.dice[item.id]!);
+  }
   copy.name = defaultName.test(item.name)
     ? freshName(creations, kind, copy)
     : item.name.slice(0, nameLength - suffix.length) + suffix;

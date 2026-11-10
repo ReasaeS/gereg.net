@@ -9,6 +9,7 @@ import type { Squad } from "../../game/drones";
 import type {
   Background,
   Bullet,
+  Effect,
   Vessel,
   Enemy,
   Pattern,
@@ -43,6 +44,7 @@ import { rumble } from "../../game/gamepad";
 import { createAutopilot, type Autopilot, type Decision } from "./autopilot";
 import { maxPower, minPower } from "../../game/drones";
 import { cue, hush } from "../../game/sfx";
+import { combineFactors, neutralFactors, type Factors } from "../effects";
 
 type Resolve = (spawn: Spawn) => Enemy | null;
 
@@ -98,6 +100,11 @@ type Arrival = {
 type Cue = {
   time: number; // s
   cutscene: string;
+};
+
+type Boost = {
+  effect: Effect;
+  left: number; // s
 };
 
 const emitterX: number = previewWidth / 2; // units
@@ -158,6 +165,11 @@ const bgmFade: number = 0.6; // s
 const bgmSlide: number = 30; // units
 const bgmSize: number = 10; // units
 const bgmMargin: number = 6; // units
+const boostSize: number = 10; // units
+const boostGap: number = 13; // units
+const boostLimit: number = 6;
+const boostWarning: number = 3; // s
+const boostBlink: number = 6; // Hz
 
 async function createPreview(
   playerTexture: Texture,
@@ -168,6 +180,7 @@ async function createPreview(
   findPattern: (id: string | null) => Pattern | null,
   findBullet: (id: string | null) => Bullet | null,
   findVessel: (id: string | null) => Vessel | null,
+  findEffect: (id: string | null) => Effect | null,
 ): Promise<Preview> {
   const view: Container = new Container();
   const base: Sky = createSky();
@@ -205,6 +218,7 @@ async function createPreview(
       spell: findSpell,
       pattern: findPattern,
       vessel: findVessel,
+      effect: findEffect,
     },
     bullets,
   );
@@ -260,6 +274,11 @@ async function createPreview(
     .fill({ color: "#ffffff", alpha: 0.7 });
   const bgm: Text = createShadowText("", bgmSize, "#ffffff", "#020b30", 2);
   let bgmLeft: number = 0;
+  const boostList: Container = new Container();
+  const boostTexts: Array<Text> = new Array();
+  let boosts: Array<Boost> = new Array();
+  let factors: Factors = neutralFactors();
+  let boostClock: number = 0;
   let lifeGains: number = 0;
   let lifePieces: number = 0;
   let bombPieces: number = 0;
@@ -312,6 +331,17 @@ async function createPreview(
   bgm.anchor.set(1, 1);
   bgm.position.set(previewWidth - bgmMargin, previewHeight - bgmMargin);
   bgm.visible = false;
+
+  for (let index = 0; index < boostLimit; index++) {
+    const line: Text = createShadowText("", boostSize, "#ffffff", "#020b30", 2);
+
+    line.anchor.set(0, 1);
+    line.position.set(bgmMargin, previewHeight - bgmMargin - index * boostGap);
+    line.visible = false;
+    boostList.addChild(line);
+    boostTexts.push(line);
+  }
+
   pilot.reset(playerX, playerY);
   squad.view.visible = false;
   sigil.position.set(previewWidth / 2, previewHeight / 2);
@@ -336,6 +366,7 @@ async function createPreview(
     callout,
     title,
     bgm,
+    boostList,
     overlay,
     mask,
   );
@@ -711,6 +742,8 @@ async function createPreview(
       cue("item");
     }
 
+    gainBoosts(haul.effects, delta);
+
     if (haul.power > 0) {
       const before: number = power;
 
@@ -720,6 +753,68 @@ async function createPreview(
         cue("power");
       }
     }
+  }
+
+  function applyFactors(): void {
+    factors = combineFactors(boosts.map((boost: Boost) => boost.effect));
+    squad.setTempo(factors.fireRate);
+    pilot.setPace(factors.moveSpeed);
+    bullets.setTempo(factors.enemyFireRate);
+    bullets.setPace(factors.bulletSpeed);
+  }
+
+  function gainBoosts(effects: Array<Effect>, delta: number): void {
+    for (const effect of effects) {
+      const held: Boost | undefined = boosts.find(
+        (boost: Boost) => boost.effect.id === effect.id,
+      );
+
+      if (held === undefined) {
+        boosts.push({ effect: effect, left: effect.duration });
+      } else {
+        held.left = effect.duration;
+      }
+
+      cue("pickup", effect.pickupSound);
+    }
+
+    for (const boost of boosts) {
+      boost.left -= delta;
+    }
+
+    boosts = boosts.filter((boost: Boost) => boost.left > 0);
+    applyFactors();
+    paintBoosts(delta);
+  }
+
+  function paintBoosts(delta: number): void {
+    boostClock += delta;
+
+    for (let index = 0; index < boostTexts.length; index++) {
+      const line: Text = boostTexts[index]!;
+      const boost: Boost | undefined = boosts[index];
+
+      line.visible = boost !== undefined;
+
+      if (boost === undefined) {
+        continue;
+      }
+
+      line.text =
+        boost.effect.name.toUpperCase() + "  " + Math.ceil(boost.left) + "s";
+      line.tint = boost.effect.color;
+      line.alpha =
+        boost.left < boostWarning &&
+        Math.floor(boostClock * boostBlink) % 2 === 0
+          ? 0.4
+          : 1;
+    }
+  }
+
+  function clearBoosts(): void {
+    boosts = new Array();
+    applyFactors();
+    paintBoosts(0);
   }
 
   function placeDeclaration(): void {
@@ -762,6 +857,7 @@ async function createPreview(
     bombPieces = 0;
     items.clear();
     actors.defeats();
+    clearBoosts();
     setPower(maxPower);
     hitCount = 0;
     grazeCount = 0;
@@ -836,7 +932,7 @@ async function createPreview(
     placeBgm(delta);
 
     if (playtest) {
-      actors.shoot(squad);
+      actors.shoot(squad, factors.shotDamage);
       actors.bomb(bomb, delta);
       collide();
       collect(delta);

@@ -4,6 +4,7 @@ import {
   Graphics,
   Sprite,
   Text,
+  TilingSprite,
   type Texture,
 } from "pixi.js";
 import type {
@@ -14,6 +15,7 @@ import type {
   Creations,
   Cutscene,
   Difficulty,
+  Effect,
   Enemy,
   Game,
   Keyframe,
@@ -32,6 +34,7 @@ import type {
 } from "../types";
 import { placeAlong, solidSpans, wallAngle } from "../geometry";
 import { getTexture } from "../images";
+import { layerTexture } from "../scenery";
 import { getTheme } from "../../theme/theme";
 import { drawVessel, drawBody } from "../vessel";
 import { drawSigil, sigilRadius } from "../sigil";
@@ -51,6 +54,7 @@ import {
   runStages,
 } from "../packs";
 import { blend, createSerif } from "./style";
+import { describeModifier } from "../effects";
 
 const wallpaperScale: number = 0.6;
 const dotLimit: number = 24;
@@ -167,6 +171,24 @@ function drawBackground(
     image.mask = mask;
     art.addChild(image, mask);
   }
+
+  for (const layer of background.layers) {
+    const tile: Texture | null = layerTexture(layer);
+
+    if (tile === null) {
+      continue;
+    }
+
+    const tiles: TilingSprite = new TilingSprite({
+      texture: tile,
+      width: width,
+      height: height,
+    });
+
+    tiles.tileScale.set(width / tile.width);
+    tiles.alpha = layer.opacity;
+    art.addChild(tiles);
+  }
 }
 
 function drawPattern(
@@ -273,6 +295,37 @@ function drawSigilArt(
   graphics.scale.set((Math.min(width, height) * 0.45) / sigilRadius(sigil));
   graphics.position.set(width / 2, height / 2);
   art.addChild(graphics);
+}
+
+function drawEffectArt(
+  art: Container,
+  effect: Effect,
+  width: number,
+  height: number,
+): void {
+  const graphics: Graphics = new Graphics();
+  const radius: number = Math.min(width, height) * 0.22;
+  const centerY: number = height * 0.4;
+
+  graphics
+    .circle(width / 2, centerY, radius * 1.6)
+    .fill({ color: effect.color, alpha: 0.12 })
+    .circle(width / 2, centerY, radius)
+    .fill({ color: effect.color, alpha: 0.85 })
+    .stroke({ color: "#ffffff", width: 2 })
+    .circle(width / 2, centerY, radius * 0.35)
+    .fill({ color: "#ffffff", alpha: 0.9 });
+  art.addChild(graphics);
+
+  for (let index = 0; index < Math.min(effect.modifiers.length, 2); index++) {
+    const line: Text = createSerif(10, "#ffffff");
+
+    line.text = describeModifier(effect.modifiers[index]!).toUpperCase();
+    line.anchor.set(0.5);
+    line.scale.set(Math.min((width * 0.9) / Math.max(line.width, 1), 1));
+    line.position.set(width / 2, height * 0.78 + index * 13);
+    art.addChild(line);
+  }
 }
 
 function drawSoundArt(
@@ -690,6 +743,16 @@ function drawEntry(
     drawBackground(art, null, width, height);
     drawPalette(art, item as Palette, width, height);
     detail = "4 colours";
+  } else if (entry.kind === "effect") {
+    const effect: Effect = item as Effect;
+
+    drawBackground(art, null, width, height);
+    drawEffectArt(art, effect, width, height);
+    detail =
+      effect.duration +
+      "s  ·  " +
+      effect.modifiers.length +
+      (effect.modifiers.length === 1 ? " modifier" : " modifiers");
   } else {
     drawBackground(art, item as Background, width, height);
     detail = "Scroll " + (item as Background).scroll;

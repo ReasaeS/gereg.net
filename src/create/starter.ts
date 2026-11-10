@@ -854,6 +854,7 @@ function foeCard(foe: Foe, wild: boolean): Enemy {
     theme: foe.theme,
     defeatSound: effectSound("defeat"),
     drops: rankDrops(foe.rank),
+    effects: new Array(),
     bars: foe.bars.map(
       ([health, time, spell]: BarPlan, index: number): Bar => ({
         id: "lamp-bar-" + foe.key + suffix + "-" + index,
@@ -1442,6 +1443,8 @@ function defaultCreations(): Creations {
     osts: [starterOst()],
     characters: starterCharacters(),
     cutscenes: starterCutscenes(),
+    effects: new Array(),
+    dice: {},
   };
 }
 

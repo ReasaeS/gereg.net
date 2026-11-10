@@ -4,6 +4,7 @@ import {
   defaultBullet,
   defaultCharacter,
   defaultCutscene,
+  defaultEffect,
   defaultEnemy,
   defaultGame,
   defaultOst,
@@ -122,6 +123,10 @@ function blankEntry(
 
   if (kind === "cutscene") {
     return defaultCutscene(creations.characters);
+  }
+
+  if (kind === "effect") {
+    return { ...defaultEffect(), target: deal.target ?? "player" };
   }
 
   return defaultBackground();

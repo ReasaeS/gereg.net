@@ -4,7 +4,7 @@ import { defaultGameSounds, effectSound } from "../create/defaults";
 
 type PlayerEffect = "shot" | "hit" | "bomb";
 
-type CardEffect = "fire" | "defeat" | "declare";
+type CardEffect = "fire" | "defeat" | "declare" | "pickup";
 
 type Effect = PlayerEffect | CardEffect | GameEffect;
 
@@ -19,6 +19,7 @@ const gaps: Record<Effect, number> = {
   fire: 0.05,
   defeat: 0.04,
   declare: 0.3,
+  pickup: 0.2,
   graze: 0.04,
   item: 0.03,
   power: 0.5,
@@ -116,6 +117,10 @@ function idOf(effect: Effect, card: string | null | undefined): string | null {
 
   if (effect === "fire" || effect === "defeat" || effect === "declare") {
     return effectSound(effect);
+  }
+
+  if (effect === "pickup") {
+    return effectSound("power");
   }
 
   return gameSounds[effect];

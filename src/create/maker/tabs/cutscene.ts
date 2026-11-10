@@ -37,33 +37,38 @@ function addCutsceneTab(studio: Studio): void {
           "background",
         ),
       ]),
-      ...section("Transcript", [
-        buttonRow("Edit transcript", () =>
-          editTranscript(
-            formatTranscript(
-              cutscene(),
-              creations.characters,
-              creations.sounds,
-            ),
-            (text: string) => {
-              const problem: string | null = applyTranscript(
+      ...section(
+        "Transcript",
+        [
+          buttonRow("Edit transcript", () =>
+            editTranscript(
+              formatTranscript(
                 cutscene(),
                 creations.characters,
                 creations.sounds,
-                text,
-              );
+              ),
+              (text: string) => {
+                const problem: string | null = applyTranscript(
+                  cutscene(),
+                  creations.characters,
+                  creations.sounds,
+                  text,
+                );
 
-              if (problem === null) {
-                changed();
-                refresh();
-              }
+                if (problem === null) {
+                  changed();
+                  refresh();
+                }
 
-              return problem;
-            },
-            creations.sounds.map((value: Sound) => value.name),
+                return problem;
+              },
+              creations.sounds.map((value: Sound) => value.name),
+            ),
           ),
-        ),
-      ]),
+        ],
+        () => true,
+        false,
+      ),
     ],
     () => {
       preview.setBackground(backgroundById(cutscene().background));

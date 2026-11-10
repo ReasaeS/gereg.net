@@ -13,6 +13,7 @@ import {
   rowHeight,
   rowWidth,
   type Control,
+  type DiceToggle,
 } from "./widgets";
 
 type Rows = {
@@ -32,7 +33,7 @@ const scrollBarGap: number = 3; // units
 const scrollBarMinimum: number = 12; // units
 
 function rowSpacing(control: Control): number {
-  return control.header === true ? headerHeight : rowHeight;
+  return control.height ?? (control.header === true ? headerHeight : rowHeight);
 }
 
 function createSection(
@@ -41,8 +42,9 @@ function createSection(
   open: () => boolean,
   toggle: () => void,
   visible: () => boolean = () => true,
+  dice?: DiceToggle,
 ): Array<Control> {
-  const header: Control = createHeader(name, open, toggle);
+  const header: Control = createHeader(name, open, toggle, dice);
 
   return [
     { ...header, shown: visible },

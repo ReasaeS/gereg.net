@@ -89,53 +89,58 @@ function addOstTab(studio: Studio): void {
           (value: number) => selectTrack(value),
         ),
       ]),
-      ...section("Track", [
-        choice(
-          "Song",
-          () => [
-            { value: null, label: "None" },
-            ...songs().map((value: Sound) => ({
-              value: value.id as string | null,
-              label: value.name,
-            })),
-          ],
-          () => track().sound,
-          (value: string | null) => {
-            track().sound = value;
-          },
-          "sound",
-        ),
-        choice(
-          "Background",
-          () => [
-            { value: null, label: "None" },
-            ...creations.backgrounds.map((value: Background) => ({
-              value: value.id as string | null,
-              label: value.name,
-            })),
-          ],
-          () => track().background,
-          (value: string | null) => {
-            track().background = value;
-          },
-          "background",
-        ),
-        choice(
-          "Wallpaper",
-          () => [
-            { value: null, label: "None" },
-            ...creations.wallpapers.map((value: Wallpaper) => ({
-              value: value.id as string | null,
-              label: value.name,
-            })),
-          ],
-          () => track().wallpaper,
-          (value: string | null) => {
-            track().wallpaper = value;
-          },
-          "wallpaper",
-        ),
-      ]),
+      ...section(
+        "Track",
+        [
+          choice(
+            "Song",
+            () => [
+              { value: null, label: "None" },
+              ...songs().map((value: Sound) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => track().sound,
+            (value: string | null) => {
+              track().sound = value;
+            },
+            "sound",
+          ),
+          choice(
+            "Background",
+            () => [
+              { value: null, label: "None" },
+              ...creations.backgrounds.map((value: Background) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => track().background,
+            (value: string | null) => {
+              track().background = value;
+            },
+            "background",
+          ),
+          choice(
+            "Wallpaper",
+            () => [
+              { value: null, label: "None" },
+              ...creations.wallpapers.map((value: Wallpaper) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => track().wallpaper,
+            (value: string | null) => {
+              track().wallpaper = value;
+            },
+            "wallpaper",
+          ),
+        ],
+        () => true,
+        false,
+      ),
     ],
     () => {
       preview.setBackground(backgroundById(track().background));

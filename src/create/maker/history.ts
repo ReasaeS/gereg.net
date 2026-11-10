@@ -87,6 +87,15 @@ function createHistory(creations: Creations, place: () => Place): History {
     index = target;
 
     for (const key of Object.keys(creations) as Array<keyof Creations>) {
+      if (key === "dice") {
+        for (const id of Object.keys(creations.dice)) {
+          delete creations.dice[id];
+        }
+
+        Object.assign(creations.dice, parsed.dice ?? {});
+        continue;
+      }
+
       const list: Array<unknown> = creations[key] as Array<unknown>;
 
       list.splice(0, list.length, ...(parsed[key] as Array<unknown>));

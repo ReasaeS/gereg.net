@@ -4,7 +4,7 @@ import {
   ColorMatrixFilter,
   Sprite,
   type Application,
-  type ColorSource,
+  type FillInput,
   type Graphics,
   type Texture,
 } from "pixi.js";
@@ -84,7 +84,7 @@ function tintedLogo(app: Application): Texture | null {
   return texture;
 }
 
-function drawCover(cover: Graphics, fill: ColorSource): void {
+function drawCover(cover: Graphics, fill: FillInput): void {
   const centerY: number = tileHeight / 2;
 
   cover

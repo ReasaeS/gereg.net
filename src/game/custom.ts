@@ -1,3 +1,4 @@
+import { rollCreations } from "../create/dice";
 import { Container, type Texture } from "pixi.js";
 import { createPreview, type Preview } from "../create/preview/preview";
 import { onDim } from "../settings/settings";
@@ -11,6 +12,7 @@ import type {
   Background,
   Bullet,
   Vessel,
+  Effect,
   Creations,
   Cutscene,
   Line,
@@ -172,7 +174,7 @@ async function createCustom(
   playerTexture: Texture,
   droneTexture: Texture,
 ): Promise<Custom> {
-  let creations: Creations = loadCreations();
+  let creations: Creations = rollCreations(loadCreations());
   let entries: Array<Entry> = new Array();
   const favourites: Set<string> = loadFavourites();
   let plan: Plan | null = null;
@@ -207,6 +209,7 @@ async function createCustom(
     (id: string | null) => byId<Pattern>(creations.patterns, id),
     (id: string | null) => byId<Bullet>(creations.bullets, id),
     (id: string | null) => byId<Vessel>(creations.vessels, id),
+    (id: string | null) => byId<Effect>(creations.effects, id),
   );
 
   const scene: Scene = createScene(
@@ -320,7 +323,7 @@ async function createCustom(
   }
 
   function choices(): Array<Choice> {
-    creations = loadCreations();
+    creations = rollCreations(loadCreations());
     entries = [
       ...creations.games
         .filter((game: GameCard) => gameDifficulties(game).length > 0)
@@ -643,7 +646,7 @@ async function createCustom(
   }
 
   function watch(): Promise<Leg | null> {
-    creations = loadCreations();
+    creations = rollCreations(loadCreations());
 
     return begin(watchPlan(), "watch");
   }

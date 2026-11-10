@@ -268,87 +268,98 @@ function addStageTab(studio: Studio): StageTab {
           },
         ),
       ]),
-      ...section("Keyframes", [
-        actionRow(
-          "Add frame",
-          () => {
-            const time: number =
-              Math.round(Math.min(preview.stageTime(), stage().length) * 2) / 2;
+      ...section(
+        "Keyframes",
+        [
+          actionRow(
+            "Add frame",
+            () => {
+              const time: number =
+                Math.round(Math.min(preview.stageTime(), stage().length) * 2) /
+                2;
 
-            stage().keyframes.push(
-              defaultKeyframe(time, [{ ...spawn(), id: createId() }]),
-            );
-            saveCreations(creations);
-            selectKeyframe(stage().keyframes.length - 1);
-          },
-          "Add cutscene",
-          () => {
-            const first: Cutscene | undefined = creations.cutscenes[0];
+              stage().keyframes.push(
+                defaultKeyframe(time, [{ ...spawn(), id: createId() }]),
+              );
+              saveCreations(creations);
+              selectKeyframe(stage().keyframes.length - 1);
+            },
+            "Add cutscene",
+            () => {
+              const first: Cutscene | undefined = creations.cutscenes[0];
 
-            if (first === undefined) {
+              if (first === undefined) {
+                return;
+              }
+
+              const time: number =
+                Math.round(Math.min(preview.stageTime(), stage().length) * 2) /
+                2;
+
+              stage().keyframes.push(
+                defaultKeyframe(
+                  time,
+                  [{ ...spawn(), id: createId() }],
+                  first.id,
+                ),
+              );
+              saveCreations(creations);
+              selectKeyframe(stage().keyframes.length - 1);
+            },
+          ),
+          actionRow("Remove frame", () => {
+            if (stage().keyframes.length <= 1) {
               return;
             }
 
-            const time: number =
-              Math.round(Math.min(preview.stageTime(), stage().length) * 2) / 2;
-
-            stage().keyframes.push(
-              defaultKeyframe(time, [{ ...spawn(), id: createId() }], first.id),
-            );
+            stage().keyframes.splice(cursor.keyframe, 1);
             saveCreations(creations);
-            selectKeyframe(stage().keyframes.length - 1);
-          },
-        ),
-        actionRow("Remove frame", () => {
-          if (stage().keyframes.length <= 1) {
-            return;
-          }
-
-          stage().keyframes.splice(cursor.keyframe, 1);
-          saveCreations(creations);
-          selectKeyframe(Math.max(cursor.keyframe - 1, 0));
-        }),
-        choice(
-          "Keyframe",
-          () =>
-            stage()
-              .keyframes.map((value: Keyframe, index: number) => ({
-                value: index,
-                label: keyframeLabel(value),
-                time: value.time,
-              }))
-              .sort((first, second) => first.time - second.time),
-          () => cursor.keyframe,
-          (value: number) => selectKeyframe(value),
-        ),
-        slider(
-          "Time",
-          0,
-          () => stage().length,
-          0.5,
-          () => keyframe().time,
-          (value: number) => {
-            keyframe().time = value;
-            preview.seek(value);
-          },
-        ),
-        choice(
-          "Cutscene",
-          () => [
-            { value: null, label: "None, enemies" },
-            ...creations.cutscenes.map((value: Cutscene) => ({
-              value: value.id as string | null,
-              label: value.name,
-            })),
-          ],
-          () => keyframe().cutscene,
-          (value: string | null) => {
-            keyframe().cutscene = value;
-            buildMarkers();
-          },
-          "cutscene",
-        ),
-      ]),
+            selectKeyframe(Math.max(cursor.keyframe - 1, 0));
+          }),
+          choice(
+            "Keyframe",
+            () =>
+              stage()
+                .keyframes.map((value: Keyframe, index: number) => ({
+                  value: index,
+                  label: keyframeLabel(value),
+                  time: value.time,
+                }))
+                .sort((first, second) => first.time - second.time),
+            () => cursor.keyframe,
+            (value: number) => selectKeyframe(value),
+          ),
+          slider(
+            "Time",
+            0,
+            () => stage().length,
+            0.5,
+            () => keyframe().time,
+            (value: number) => {
+              keyframe().time = value;
+              preview.seek(value);
+            },
+          ),
+          choice(
+            "Cutscene",
+            () => [
+              { value: null, label: "None, enemies" },
+              ...creations.cutscenes.map((value: Cutscene) => ({
+                value: value.id as string | null,
+                label: value.name,
+              })),
+            ],
+            () => keyframe().cutscene,
+            (value: string | null) => {
+              keyframe().cutscene = value;
+              buildMarkers();
+            },
+            "cutscene",
+          ),
+        ],
+        () => true,
+        false,
+      ),
       ...section(
         "Enemy",
         [
@@ -423,6 +434,7 @@ function addStageTab(studio: Studio): StageTab {
           ),
         ],
         enemyFrame,
+        false,
       ),
       ...section(
         "Movement",
@@ -489,6 +501,7 @@ function addStageTab(studio: Studio): StageTab {
           ),
         ],
         enemyFrame,
+        false,
       ),
     ],
     () => {

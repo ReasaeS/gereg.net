@@ -12,12 +12,25 @@ import type { Vector } from "../create/types";
 import { createText } from "./text";
 import { createGlide, mix, type Glide } from "./motion";
 import { createRetype, type Retype } from "./retype";
+import { onTyping } from "./typing";
 
 type Control = {
   view: Container;
   refresh: () => void;
   shown?: () => boolean;
   header?: boolean;
+  height?: number;
+};
+
+type DiceToggle = {
+  on: () => boolean;
+  toggle: () => void;
+};
+
+type Cell = {
+  text: () => string;
+  step?: (direction: number) => void;
+  tap?: () => void;
 };
 
 type Name = string | (() => string);
@@ -69,6 +82,19 @@ const chevronSize: number = 3.5; // units
 const thumbnailSize: number = 18; // units
 const choiceSlide: number = 10; // units
 const browseIcon: number = 5; // units
+const tableColumns: Array<number> = [0, 96, 148, rowWidth]; // units
+const tableHeadHeight: number = 16; // units
+const tableLineHeight: number = 17; // units
+const tableTextSize: number = 9; // units
+const tableInset: number = 5; // units
+const tableStripe: number = 0.06;
+const tableGrid: number = 0.25;
+const tableBar: number = 0.45;
+const scrubGap: number = 8; // px
+const dieSize: number = 11; // units
+const dieInset: number = 4; // units
+const dieRound: number = 2.5; // units
+const diePip: number = 1.1; // units
 const fieldColor: string = "#01040f";
 const fieldAlpha: number = 0.85;
 
@@ -407,6 +433,306 @@ function createPick(
   return { view: view, refresh: refresh };
 }
 
+function createNumberField(
+  name: Name,
+  get: () => number,
+  set: (value: number) => void,
+  max: number,
+): Control {
+  const row: Row = createRow(name);
+  const view: Container = row.view;
+  const value: Text = createText(valueSize, "#ffffff");
+  const field: Graphics = new Graphics();
+  const digits: number = String(max).length;
+  let draft: string | null = null;
+  let hovered: number = 0;
+  const hover: Glide = createGlide(0, (lit: number) => {
+    hovered = lit;
+    paint();
+  });
+
+  function paint(): void {
+    drawField(field, rowWidth, chipHeight, draft === null ? hovered : 1);
+  }
+
+  function refresh(): void {
+    row.refresh();
+    value.text = draft === null ? String(get()) : draft + "_";
+    paint();
+  }
+
+  function finish(apply: boolean): void {
+    const typed: number = Number(draft);
+
+    if (apply && draft !== null && draft !== "" && Number.isFinite(typed)) {
+      draft = null;
+      set(Math.min(typed, max));
+    }
+
+    draft = null;
+    refresh();
+  }
+
+  function key(event: KeyboardEvent): void {
+    if (draft === null) {
+      return;
+    }
+
+    if (!onScreen(view)) {
+      finish(false);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (event.key >= "0" && event.key <= "9" && draft.length < digits) {
+      draft += event.key;
+    } else if (event.key === "Backspace") {
+      draft = draft.slice(0, -1);
+    } else if (event.key === "Enter") {
+      finish(true);
+      return;
+    } else if (event.key === "Escape") {
+      finish(false);
+      return;
+    }
+
+    refresh();
+  }
+
+  field.position.set(0, controlY - chipHeight / 2);
+  value.anchor.set(0.5);
+  value.position.set(rowWidth / 2, controlY);
+  field.eventMode = "static";
+  field.cursor = "text";
+  field.hitArea = new Rectangle(
+    0,
+    chipHeight / 2 - controlY,
+    rowWidth,
+    rowHeight,
+  );
+  field.on("pointerover", () => hover.set(1));
+  field.on("pointerout", () => hover.set(0));
+  field.on("pointertap", () => {
+    if (draft === null) {
+      draft = "";
+      refresh();
+    } else {
+      finish(true);
+    }
+  });
+  window.addEventListener("keydown", key);
+  onTyping(() => draft !== null);
+  view.addChild(field, value);
+  paint();
+
+  return { view: view, refresh: refresh };
+}
+
+function createTableHead(columns: Array<string>): Control {
+  const view: Container = new Container();
+  const line: Graphics = new Graphics();
+
+  columns.forEach((column: string, index: number) => {
+    const label: Text = createText(labelSize, labelColor);
+
+    label.text = column.toUpperCase();
+    label.anchor.set(0, 0.5);
+    label.position.set(
+      tableColumns[index]! + tableInset,
+      tableHeadHeight / 2 + 1,
+    );
+    view.addChild(label);
+  });
+
+  line
+    .rect(0, tableHeadHeight - 1, rowWidth, 1)
+    .fill({ color: getTheme().accent, alpha: 0.8 });
+  view.addChild(line);
+
+  return { view: view, refresh: () => undefined, height: tableHeadHeight };
+}
+
+function createTableCell(
+  cell: Cell,
+  left: number,
+  right: number,
+  refresh: () => void,
+): Container {
+  const view: Container = new Container();
+  const back: Graphics = new Graphics();
+  const width: number = right - left;
+  let startX: number = 0;
+  let applied: number = 0;
+  let dragging: boolean = false;
+  const hover: Glide = createGlide(0, (lit: number) => {
+    back
+      .clear()
+      .rect(0, 0, width, tableLineHeight)
+      .fill({ color: 0xffffff, alpha: lit * hoverAlpha * 0.4 });
+  });
+
+  view.position.set(left, 0);
+  view.addChild(back);
+
+  if (cell.tap !== undefined) {
+    const tap: () => void = cell.tap;
+
+    view.eventMode = "static";
+    view.cursor = "pointer";
+    view.hitArea = new Rectangle(0, 0, width, tableLineHeight);
+    view.on("pointerover", () => hover.set(1));
+    view.on("pointerout", () => hover.set(0));
+    view.on("pointertap", () => tap());
+
+    return view;
+  }
+
+  if (cell.step === undefined) {
+    return view;
+  }
+
+  const step: (direction: number) => void = cell.step;
+  const arrows: Array<Text> = ["<", ">"].map((glyph: string, index: number) => {
+    const arrow: Text = createText(tableTextSize, "#ffffff");
+
+    arrow.text = glyph;
+    arrow.anchor.set(0.5);
+    arrow.alpha = 0.5;
+    arrow.position.set(
+      index === 0 ? tableInset : width - tableInset,
+      tableLineHeight / 2,
+    );
+    view.addChild(arrow);
+
+    return arrow;
+  });
+
+  view.eventMode = "static";
+  view.cursor = "ew-resize";
+  view.hitArea = new Rectangle(0, 0, width, tableLineHeight);
+  view.on("pointerover", () => {
+    hover.set(1);
+    arrows.forEach((arrow: Text) => (arrow.alpha = 1));
+  });
+  view.on("pointerout", () => {
+    hover.set(0);
+    arrows.forEach((arrow: Text) => (arrow.alpha = 0.5));
+  });
+  view.on("pointerdown", (event: FederatedPointerEvent) => {
+    dragging = true;
+    startX = event.global.x;
+    applied = 0;
+  });
+  view.on("globalpointermove", (event: FederatedPointerEvent) => {
+    if (!dragging) {
+      return;
+    }
+
+    const steps: number = Math.round((event.global.x - startX) / scrubGap);
+
+    if (steps !== applied) {
+      step(steps - applied);
+      applied = steps;
+      refresh();
+    }
+  });
+  view.on("pointerup", (event: FederatedPointerEvent) => {
+    if (dragging && applied === 0) {
+      const local: number = view.toLocal(event.global).x;
+
+      if (local < width / 3 || local > (width * 2) / 3) {
+        step(local < width / 2 ? -1 : 1);
+        refresh();
+      }
+    }
+
+    dragging = false;
+  });
+  view.on("pointerupoutside", () => {
+    dragging = false;
+  });
+
+  return view;
+}
+
+function createTableLine(
+  cells: Array<Cell>,
+  share: () => number,
+  striped: boolean,
+): Control {
+  const view: Container = new Container();
+  const grid: Graphics = new Graphics();
+  const bar: Graphics = new Graphics();
+  const texts: Array<Text> = new Array();
+  const chance: Text = createText(tableTextSize, "#ffffff");
+  const barLeft: number = tableColumns[cells.length]!;
+  const barWidth: number = rowWidth - barLeft;
+  let placed: boolean = false;
+  const amount: Glide = createGlide(0, (value: number) => {
+    bar
+      .clear()
+      .rect(
+        barLeft + 1,
+        2,
+        Math.max((barWidth - 2) * value, 0),
+        tableLineHeight - 4,
+      )
+      .fill({ color: getTheme().accent, alpha: tableBar });
+  });
+
+  function refresh(): void {
+    cells.forEach((cell: Cell, index: number) => {
+      texts[index]!.text = cell.text().toUpperCase();
+    });
+
+    const value: number = share();
+
+    chance.text = Math.round(value * 100) + "%";
+
+    if (placed) {
+      amount.set(value);
+    } else {
+      placed = true;
+      amount.snap(value);
+    }
+  }
+
+  grid
+    .rect(0, 0, rowWidth, tableLineHeight)
+    .fill({ color: 0xffffff, alpha: striped ? tableStripe : 0 })
+    .rect(0, tableLineHeight - 1, rowWidth, 1)
+    .fill({ color: getTheme().accent, alpha: tableGrid });
+
+  for (let index = 1; index < tableColumns.length - 1; index++) {
+    grid
+      .rect(tableColumns[index]!, 0, 1, tableLineHeight)
+      .fill({ color: getTheme().accent, alpha: tableGrid });
+  }
+
+  view.addChild(grid, bar);
+
+  cells.forEach((cell: Cell, index: number) => {
+    const left: number = tableColumns[index]!;
+    const right: number = tableColumns[index + 1]!;
+    const text: Text = createText(tableTextSize, "#ffffff");
+
+    view.addChild(createTableCell(cell, left, right, refresh));
+    text.anchor.set(0.5);
+    text.position.set((left + right) / 2, tableLineHeight / 2);
+    text.eventMode = "none";
+    view.addChild(text);
+    texts.push(text);
+  });
+
+  chance.anchor.set(0.5);
+  chance.position.set(barLeft + barWidth / 2, tableLineHeight / 2);
+  view.addChild(chance);
+
+  return { view: view, refresh: refresh, height: tableLineHeight };
+}
+
 function createChoice<T>(
   name: Name,
   options: () => Array<Option<T>>,
@@ -566,10 +892,38 @@ function createColors(
   return { view: view, refresh: refresh };
 }
 
+function drawDie(die: Graphics, lit: number, hovered: number): void {
+  const pipColor: number = mix(0xffffff, fieldColor, lit);
+  const offset: number = dieSize * 0.27;
+  const center: number = dieSize / 2;
+
+  die
+    .clear()
+    .roundRect(0, 0, dieSize, dieSize, dieRound)
+    .fill({ color: getTheme().highlight, alpha: lit })
+    .roundRect(0, 0, dieSize, dieSize, dieRound)
+    .stroke({
+      color: 0xffffff,
+      width: 1,
+      alpha: 0.55 + 0.45 * Math.max(lit, hovered),
+    });
+
+  for (const [x, y] of [
+    [center - offset, center - offset],
+    [center + offset, center - offset],
+    [center, center],
+    [center - offset, center + offset],
+    [center + offset, center + offset],
+  ]) {
+    die.circle(x!, y!, diePip).fill(pipColor);
+  }
+}
+
 function createHeader(
   name: string,
   open: () => boolean,
   toggle: () => void,
+  dice?: DiceToggle,
 ): Control {
   const view: Container = new Container();
   const back: Graphics = new Graphics();
@@ -630,7 +984,46 @@ function createHeader(
   view.on("pointerout", () => hover.set(0));
   draw();
 
-  return { view: view, refresh: refresh, header: true };
+  if (dice === undefined) {
+    return { view: view, refresh: refresh, header: true };
+  }
+
+  const die: Graphics = new Graphics();
+  let lit: number = dice.on() ? 1 : 0;
+  let hovered: number = 0;
+  const litGlide: Glide = createGlide(lit, (value: number) => {
+    lit = value;
+    drawDie(die, lit, hovered);
+  });
+  const hoverGlide: Glide = createGlide(0, (value: number) => {
+    hovered = value;
+    drawDie(die, lit, hovered);
+  });
+
+  die.position.set(
+    rowWidth - headerSlant - dieInset - dieSize,
+    (headerHeight - headerBar - dieSize) / 2,
+  );
+  die.eventMode = "static";
+  die.cursor = "pointer";
+  die.hitArea = new Rectangle(-3, -3, dieSize + 6, dieSize + 6);
+  die.on("pointertap", (event: FederatedPointerEvent) => {
+    event.stopPropagation();
+    dice.toggle();
+  });
+  die.on("pointerover", () => hoverGlide.set(1));
+  die.on("pointerout", () => hoverGlide.set(0));
+  drawDie(die, lit, hovered);
+  view.addChild(die);
+
+  return {
+    view: view,
+    refresh: () => {
+      refresh();
+      litGlide.set(dice.on() ? 1 : 0);
+    },
+    header: true,
+  };
 }
 
 function drawField(
@@ -711,6 +1104,9 @@ function createSpriteRow(
 }
 
 export {
+  createTableHead,
+  createTableLine,
+  createNumberField,
   rowHeight,
   rowWidth,
   chipHeight,
@@ -728,4 +1124,4 @@ export {
   drawField,
   createSpriteRow,
 };
-export type { Control, Chip, Option, Name, Track };
+export type { Cell, Control, DiceToggle, Chip, Option, Name, Track };

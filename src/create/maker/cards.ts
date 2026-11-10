@@ -42,12 +42,15 @@ async function createCards(
     pick.patternById,
     pick.bulletById,
     pick.vesselById,
+    pick.effectById,
   );
   const cardTicks: Clock = createClock();
 
   function show(kind: Kind, index: number): Container | null {
     const item: Item | undefined = listOf(creations, kind)[index];
 
+    cardPreview.setAutopilot(false);
+    cardPreview.setPlaytest(false);
     cardPreview.clear();
     cardPreview.overlay.visible = false;
     cardPreview.setBackground(null);
@@ -57,37 +60,47 @@ async function createCards(
       return null;
     }
 
-    if (kind === "cutscene") {
-      cardScene.play(item as Cutscene, 0);
+    let shownKind: Kind = kind;
+    let shown: Item = item;
+    let packed: Array<Stage> | null = null;
+
+    if (shownKind === "cutscene") {
+      cardScene.play(shown as Cutscene, 0);
       return cardScene.view;
     }
 
-    if (kind === "pattern") {
-      cardPreview.setPattern(item as Pattern);
-    } else if (kind === "enemy") {
-      const value: Enemy = item as Enemy;
+    if (shownKind === "pattern") {
+      cardPreview.setPattern(shown as Pattern);
+    } else if (shownKind === "enemy") {
+      const value: Enemy = shown as Enemy;
 
       cardPreview.setEnemy(value, null);
-    } else if (kind === "sigil") {
-      cardPreview.setSigil(item as Sigil);
-    } else if (kind === "spell") {
-      const value: Spell = item as Spell;
+    } else if (shownKind === "sigil") {
+      cardPreview.setSigil(shown as Sigil);
+    } else if (shownKind === "spell") {
+      const value: Spell = shown as Spell;
 
       cardPreview.setSpell(value, pick.patternById(value.pattern));
-    } else if (kind === "bullet") {
-      cardPreview.setPattern(bulletDemo(item.id));
-    } else if (kind === "vessel") {
-      cardPreview.setEnemy(vesselDemo(item.id), null);
-    } else if (kind === "background") {
-      cardPreview.setBackground(item as Background);
+    } else if (shownKind === "bullet") {
+      cardPreview.setPattern(bulletDemo(shown.id));
+    } else if (shownKind === "vessel") {
+      cardPreview.setEnemy(vesselDemo(shown.id), null);
+    } else if (shownKind === "background") {
+      cardPreview.setBackground(shown as Background);
       cardPreview.setPattern(null);
-    } else if (kind === "stage" || kind === "run" || kind === "game") {
+    } else if (
+      shownKind === "stage" ||
+      shownKind === "run" ||
+      shownKind === "game"
+    ) {
       const value: Stage | null =
-        kind === "stage"
-          ? (item as Stage)
-          : ((kind === "run"
-              ? runStages(creations, item as Run)
-              : gameStages(creations, item as Game))[0] ?? null);
+        shownKind === "stage" && packed === null
+          ? (shown as Stage)
+          : ((packed !== null
+              ? packed
+              : shownKind === "run"
+                ? runStages(creations, shown as Run)
+                : gameStages(creations, shown as Game))[0] ?? null);
 
       if (value === null) {
         return null;
@@ -97,6 +110,8 @@ async function createCards(
       cardPreview.setPlayerVisible(true);
       cardPreview.setStage(null, pick.resolve);
       cardPreview.setStage(value, pick.resolve);
+      cardPreview.setPlaytest(true);
+      cardPreview.setAutopilot(true);
     } else {
       return null;
     }

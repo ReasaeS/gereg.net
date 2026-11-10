@@ -1,6 +1,7 @@
 import {
   Color,
   Container,
+  FillGradient,
   Graphics,
   Rectangle,
   Sprite,
@@ -11,7 +12,7 @@ import {
 import { approach } from "../../effects/tween/tween";
 import { getTheme } from "../../theme/theme";
 import { createGlide, mix, type Glide } from "../../ui/motion";
-import type { Rarity } from "../rarity";
+import { gameRarity, type Rarity } from "../rarity";
 import type { Action } from "./kinds";
 import {
   artHeight,
@@ -65,6 +66,7 @@ type Tile = {
   rain: Graphics;
   drops: Array<Raindrop>;
   coverFill: number;
+  prismPhase: number;
   coverRank: Text;
   gems: Graphics;
   rank: Text;
@@ -98,7 +100,10 @@ const nameSize: number = 17; // px
 const detailSize: number = 12; // px
 const coverNameGap: number = 30; // px
 const rankSize: number = 10; // px
-const rankTop: number = 60; // px
+const nameTop: number = 24; // px
+const nameRaised: number = 12; // px
+const detailGap: number = 4; // px
+const rankTop: number = 50; // px
 const rankGap: number = 22; // px
 const gemSize: number = 5; // px
 const gemSpacing: number = 13; // px
@@ -112,6 +117,79 @@ const packScale: number = 0.93;
 const packShift: number = 6; // px
 const layerStep: number = 5; // px
 const layerFan: number = 0.7;
+const prismSteps: number = 12;
+const prismFrames: number = 96;
+const prismCycle: number = 6; // s
+const prism: Array<string> = [
+  "#ff5a5a",
+  "#ffb347",
+  "#fff27a",
+  "#7ae38f",
+  "#7ad8ff",
+  "#b48cff",
+  "#ff6fd8",
+];
+const prismFills: Map<number, FillGradient> = new Map();
+
+function prismPhase(): number {
+  return (
+    Math.floor((performance.now() / 1000 / prismCycle) * prismFrames) %
+    prismFrames
+  );
+}
+
+function prismColor(position: number, depth: number): number {
+  const scaled: number = (((position % 1) + 1) % 1) * prism.length;
+  const index: number = Math.floor(scaled);
+
+  return blend(
+    blend(
+      prism[index % prism.length]!,
+      prism[(index + 1) % prism.length]!,
+      scaled - index,
+    ),
+    "#000000",
+    depth,
+  );
+}
+
+function prismFill(depth: number, phase: number): FillGradient {
+  const step: number = Math.round(depth * prismSteps);
+  const key: number = step * prismFrames + phase;
+  const cached: FillGradient | undefined = prismFills.get(key);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const shift: number = phase / prismFrames;
+  const shade: number = step / prismSteps;
+  const stops: Array<{ offset: number; color: number }> = [
+    { offset: 0, color: prismColor(shift, shade) },
+  ];
+
+  for (let index = 1; index <= prism.length; index++) {
+    const offset: number = index / prism.length - (shift % (1 / prism.length));
+
+    if (offset > 0 && offset < 1) {
+      stops.push({ offset: offset, color: prismColor(offset + shift, shade) });
+    }
+  }
+
+  stops.push({ offset: 1, color: prismColor(1 + shift, shade) });
+
+  const fill: FillGradient = new FillGradient({
+    type: "linear",
+    start: { x: 0, y: 0 },
+    end: { x: tileWidth, y: tileHeight },
+    textureSpace: "global",
+    colorStops: stops,
+  });
+
+  prismFills.set(key, fill);
+
+  return fill;
+}
 
 function isFaceUp(angle: number): boolean {
   return Math.round(angle / Math.PI) % 2 === 1;
@@ -223,6 +301,8 @@ function paintStack(tile: Tile): void {
 function paintTile(tile: Tile, gems: boolean): void {
   const lit: number = tile.lit;
   const tone: string | null = tile.rarity?.color ?? null;
+  const prismatic: boolean = tile.rarity === gameRarity;
+  const phase: number = prismPhase();
   const border: number = blend(trim, trimLit, lit);
   const body: number =
     tone === null
@@ -233,9 +313,11 @@ function paintTile(tile: Tile, gems: boolean): void {
       ? blend(cardFace, getTheme().skyTop, lit)
       : blend(body, tone, rarityLit * lit);
 
-  if (tile.coverFill !== body) {
-    tile.coverFill = body;
-    drawCover(tile.coverArt, body);
+  tile.prismPhase = phase;
+
+  if (tile.coverFill !== (prismatic ? -1 - phase : body)) {
+    tile.coverFill = prismatic ? -1 - phase : body;
+    drawCover(tile.coverArt, prismatic ? prismFill(rarityDepth, phase) : body);
   }
 
   tile.back
@@ -243,7 +325,9 @@ function paintTile(tile: Tile, gems: boolean): void {
     .roundRect(-6, -6, tileWidth + 12, tileHeight + 12, tileRadius + 6)
     .stroke({ color: trimLit, width: 6, alpha: 0.3 * lit })
     .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
-    .fill(face)
+    .fill(
+      prismatic ? prismFill(rarityDepth * (1 - rarityLit * lit), phase) : face,
+    )
     .roundRect(0, 0, tileWidth, tileHeight, tileRadius)
     .stroke({ color: border, width: 2, alignment: 1 })
     .roundRect(5, 5, tileWidth - 10, tileHeight - 10, tileRadius - 4)
@@ -272,7 +356,11 @@ function paintTile(tile: Tile, gems: boolean): void {
     for (const graphics of [tile.back, tile.gems]) {
       graphics
         .roundRect(8, 8, tileWidth - 16, tileHeight - 16, tileRadius - 5)
-        .stroke({ color: color, width: 1, alpha: 0.8 });
+        .stroke(
+          prismatic
+            ? { fill: prismFill(0, phase), width: 1, alpha: 0.8 }
+            : { color: color, width: 1, alpha: 0.8 },
+        );
 
       if (!gems) {
         continue;
@@ -285,9 +373,17 @@ function paintTile(tile: Tile, gems: boolean): void {
           0,
           gemSize,
         );
+
+        if (prismatic) {
+          graphics
+            .fill(prismColor(gem / tier + phase / prismFrames, 0))
+            .stroke({ color: cardBack, width: 1.5 });
+        }
       }
 
-      graphics.fill(color).stroke({ color: cardBack, width: 1.5 });
+      if (!prismatic) {
+        graphics.fill(color).stroke({ color: cardBack, width: 1.5 });
+      }
     }
 
     tile.rank.tint = color;
@@ -303,6 +399,13 @@ function paintTile(tile: Tile, gems: boolean): void {
   for (const button of tile.buttons) {
     paintAction(button);
   }
+}
+
+function placeName(tile: Tile): void {
+  const below: number = artTop + artHeight;
+
+  tile.name.y = below + (tile.detail.text === "" ? nameTop : nameRaised);
+  tile.detail.y = below + nameRaised + nameSize + detailGap;
 }
 
 function stepTile(
@@ -328,7 +431,7 @@ function stepTile(
   }
 
   if (tile.lit === goal && tile.turnProgress >= 1) {
-    return false;
+    return tile.rarity === gameRarity && tile.prismPhase !== prismPhase();
   }
 
   tile.lit = approach(tile.lit, goal, delta / selectDuration);
@@ -401,7 +504,7 @@ function createTile(
   art.position.set(artInset, artTop);
   art.mask = artMask;
   name.anchor.set(0.5, 0);
-  name.position.set(tileWidth / 2, artTop + artHeight + 16);
+  name.position.set(tileWidth / 2, artTop + artHeight + nameTop);
   detail.anchor.set(0.5, 0);
   detail.position.set(tileWidth / 2, artTop + artHeight + 22 + nameSize);
   const row: Container = new Container();
@@ -484,6 +587,7 @@ function createTile(
     rain: rain,
     drops: drops,
     coverFill: new Color(cardBack).toNumber(),
+    prismPhase: -1,
     coverRank: coverRank,
     gems: gems,
     rank: rank,
@@ -501,5 +605,12 @@ function createTile(
   };
 }
 
-export { createTile, paintTile, applyTransform, stepTile, setDeletable };
+export {
+  createTile,
+  paintTile,
+  applyTransform,
+  stepTile,
+  setDeletable,
+  placeName,
+};
 export type { Tile };

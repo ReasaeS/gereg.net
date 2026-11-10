@@ -6,6 +6,7 @@ import type {
   Character,
   Creations,
   Cutscene,
+  Effect,
   Emotion,
   Enemy,
   Game,
@@ -54,6 +55,7 @@ type Cursor = {
 };
 
 type Selection = {
+  withItem: (name: string, item: Item, action: () => void) => void;
   current: () => Item;
   stage: () => Stage;
   run: () => Run;
@@ -70,6 +72,7 @@ type Selection = {
   sigil: () => Sigil;
   spell: () => Spell;
   cutscene: () => Cutscene;
+  effect: () => Effect;
   character: () => Character;
   emotion: () => Emotion;
   bar: () => Bar;
@@ -85,6 +88,7 @@ type Selection = {
   spellById: (id: string | null) => Spell | null;
   sigilById: (id: string | null) => Sigil | null;
   soundById: (id: string | null) => Sound | null;
+  effectById: (id: string | null) => Effect | null;
   resolve: (spawn: Spawn) => Enemy | null;
 };
 
@@ -119,6 +123,7 @@ type Studio = {
   buildMarkers: () => void;
   placeMarkers: () => void;
   paintVessel: () => void;
+  openCard: (kind: Kind, index: number) => void;
   paintBullet: () => void;
   composeSong: () => void;
   editTranscript: (

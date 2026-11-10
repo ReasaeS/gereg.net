@@ -11,6 +11,7 @@ import {
 } from "../editor/pixels";
 import { spriteSize } from "../editor/drawings";
 import { drawVesselDefault } from "../editor/default";
+import { buildPixels } from "./hangar";
 
 type Look = {
   code: string;
@@ -34,7 +35,19 @@ function readVessel(vessel: Vessel, pixels: Pixels): void {
   }
 }
 
+function rebuildVessel(vessel: Vessel): void {
+  if (vessel.look === "built") {
+    vessel.pixels = buildPixels(vessel.build, vesselSide(vessel));
+  }
+}
+
 function rescaleVessel(vessel: Vessel, scale: number): void {
+  if (vessel.look === "built") {
+    vessel.scale = scale;
+    rebuildVessel(vessel);
+    return;
+  }
+
   const from: Pixels = createPixels(vesselSide(vessel));
 
   readVessel(vessel, from);
@@ -102,4 +115,5 @@ export {
   vesselTexture,
   readVessel,
   rescaleVessel,
+  rebuildVessel,
 };

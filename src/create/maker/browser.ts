@@ -11,7 +11,13 @@ import { getTheme } from "../../theme/theme";
 import { createText } from "../../ui/text";
 import { createGlide, type Glide } from "../../ui/motion";
 import { smoothDamp, type Spring } from "../../effects/tween/tween";
-import { createTile, paintTile, stepTile, type Tile } from "../gallery/tile";
+import {
+  createTile,
+  paintTile,
+  placeName,
+  stepTile,
+  type Tile,
+} from "../gallery/tile";
 import { drawEntry } from "../gallery/art";
 import {
   categoryOf,
@@ -23,7 +29,7 @@ import {
 } from "../gallery/kinds";
 import { createSearchBar, type SearchBar } from "../gallery/search";
 import { gameLayers, runLayers } from "../packs";
-import type { Game, Run } from "../types";
+import type { Run } from "../types";
 import {
   artHeight,
   artInset,
@@ -81,7 +87,7 @@ const titleSize: number = 20; // px
 const countSize: number = 13; // px
 const cardScale: number = 1;
 const cardGap: number = 26; // px
-const listInset: number = 22; // px
+const listInset: number = 26; // px
 const cornerSize: number = 6; // px
 const fadeSmoothing: number = 0.12; // s
 const scrollSmoothing: number = 0.12; // s
@@ -344,19 +350,15 @@ function createBrowser(app: Application, creations: () => Creations): Browser {
         entry.kind === "run"
           ? runLayers(creations(), entry.item as Run)
           : entry.kind === "game"
-            ? gameLayers(creations(), entry.item as Game)
+            ? gameLayers()
             : new Array();
-      tile.detail.text = drawEntry(
-        tile.art,
-        entry,
-        creations(),
-        width,
-        artHeight,
-      );
+      drawEntry(tile.art, entry, creations(), width, artHeight);
+      tile.detail.text = "";
     }
 
     fit(tile.name);
     fit(tile.detail);
+    placeName(tile);
     tile.coverName.text = tile.name.text;
     fit(tile.coverName);
     tile.coverRank.text = tile.rank.text;

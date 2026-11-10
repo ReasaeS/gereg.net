@@ -4,6 +4,8 @@ import type {
   Character,
   Creations,
   Cutscene,
+  Effect,
+  EffectTarget,
   Enemy,
   Frame,
   Game,
@@ -24,6 +26,7 @@ import {
   audio,
   cosmetics,
   difficulties,
+  effectTargets,
   story,
   visuals,
   attacks,
@@ -53,9 +56,11 @@ type Kind =
   | "sound"
   | "ost"
   | "character"
-  | "cutscene";
+  | "cutscene"
+  | "effect";
 
-type Category = "stage" | "enemy" | "pattern" | "visual" | "audio" | "story";
+type Category =
+  "stage" | "enemy" | "pattern" | "effect" | "visual" | "audio" | "story";
 
 type Action = "rename" | "duplicate" | "export" | "delete";
 
@@ -75,7 +80,8 @@ type Creation =
   | Sound
   | Ost
   | Character
-  | Cutscene;
+  | Cutscene
+  | Effect;
 
 type Entry = {
   kind: Kind;
@@ -88,6 +94,7 @@ type Deal = {
   frame: Frame | null;
   rank: Rank | null;
   source: SoundSource | null;
+  target: EffectTarget | null;
   rarity: Rarity<unknown>;
   text: string;
 };
@@ -105,6 +112,7 @@ const categoryList: Array<Category> = [
   "stage",
   "enemy",
   "pattern",
+  "effect",
   "visual",
   "audio",
   "story",
@@ -113,6 +121,7 @@ const categoryNames: Map<Category, string> = new Map([
   ["stage", "stages"],
   ["enemy", "enemies"],
   ["pattern", "patterns"],
+  ["effect", "effects"],
   ["visual", "visuals"],
   ["audio", "audio"],
   ["story", "story"],
@@ -121,6 +130,7 @@ const itemNames: Map<Category, string> = new Map([
   ["stage", "stage"],
   ["enemy", "enemy"],
   ["pattern", "pattern"],
+  ["effect", "effect"],
   ["visual", "visual"],
   ["audio", "audio"],
   ["story", "story"],
@@ -151,6 +161,9 @@ const dealTexts: Map<string, string> = new Map([
   ["ost", "Songs for a game"],
   ["cutscene", "A conversation"],
   ["character", "A speaker"],
+  ["player", "Buffs or debuffs you"],
+  ["field", "Changes the enemies"],
+  ["both", "Affects everyone"],
 ]);
 
 const soundSources: Array<[Cosmetic, SoundSource]> = [
@@ -182,6 +195,10 @@ function categoryOf(kind: Kind): Category {
     return "story";
   }
 
+  if (kind === "effect") {
+    return "effect";
+  }
+
   return "visual";
 }
 
@@ -196,6 +213,10 @@ function categoryTypes(category: Category): Array<Rarity<unknown>> {
 
   if (category === "pattern") {
     return attacks;
+  }
+
+  if (category === "effect") {
+    return effectTargets;
   }
 
   return cosmeticTypes(category);
@@ -226,6 +247,7 @@ function categoryDeals(category: Category): Array<Deal> {
       frame: frame,
       rank: rank,
       source: source,
+      target: null,
       rarity: rarity,
       text:
         dealTexts.get(
@@ -255,6 +277,15 @@ function categoryDeals(category: Category): Array<Deal> {
     return ranks.map((rank: Rarity<Rank>) =>
       deal("enemy", null, rank, rank.value),
     );
+  }
+
+  if (category === "effect") {
+    return effectTargets.map((target: Rarity<EffectTarget>) => ({
+      ...deal("effect", null, target),
+      target: target.value,
+      text:
+        dealTexts.get(target.value === "stage" ? "field" : target.value) ?? "",
+    }));
   }
 
   if (category === "audio") {
@@ -301,6 +332,10 @@ function entryRarity(entry: Entry): Rarity<unknown> {
 
   if (entry.kind === "spell") {
     return rarityOf(attacks, "spell");
+  }
+
+  if (entry.kind === "effect") {
+    return rarityOf(effectTargets, (entry.item as Effect).target);
   }
 
   if (entry.kind === "sound") {
@@ -384,6 +419,8 @@ function listEntries(source: Creations, category: Category): Array<Entry> {
   } else if (category === "story") {
     add("cutscene", source.cutscenes);
     add("character", source.characters);
+  } else if (category === "effect") {
+    add("effect", source.effects);
   } else {
     add("background", source.backgrounds);
     add("wallpaper", source.wallpapers);

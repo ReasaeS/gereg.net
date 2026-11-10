@@ -9,7 +9,7 @@ import {
 } from "pixi.js";
 import { createGlide, type Glide } from "../../ui/motion";
 import { downKeys, leftKeys, rightKeys, upKeys } from "../../game/input";
-import type { Creations, Game, Run } from "../types";
+import type { Creations, Run } from "../types";
 import { blankEntry } from "../blank";
 import { gameLayers, runLayers } from "../packs";
 import { itemNames, type Category, type Creation, type Deal } from "./kinds";
@@ -28,6 +28,7 @@ import {
   applyTransform,
   createTile,
   paintTile,
+  placeName,
   stepTile,
   type Tile,
 } from "./tile";
@@ -135,7 +136,7 @@ function createDealer(
       deal.kind === "run"
         ? runLayers(creations(), sample as Run)
         : deal.kind === "game"
-          ? gameLayers(creations(), sample as Game)
+          ? gameLayers()
           : new Array();
     drawEntry(
       tile.art,
@@ -146,6 +147,7 @@ function createDealer(
     );
     tile.detail.text = deal.text;
     fit(tile.detail);
+    placeName(tile);
   }
 
   function clear(): void {

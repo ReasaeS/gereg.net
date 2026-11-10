@@ -8,7 +8,7 @@ import type {
   Sound,
   Stage,
 } from "./types";
-import { difficulties, gameRarity, rarityOf, type Rarity } from "./rarity";
+import { difficulties, rarityOf, type Rarity } from "./rarity";
 import { canPlay } from "./sound";
 
 const runLimit: number = 8;
@@ -71,16 +71,10 @@ function runLayers(creations: Creations, run: Run): Array<string> {
   return new Array(count).fill(color);
 }
 
-function gameLayers(creations: Creations, game: Game): Array<string> {
-  const colors: Array<string> = gameRuns(creations, game).map(
-    (run: Run) => rarityOf(difficulties, run.difficulty).color,
-  );
-
-  while (colors.length < layerMinimum) {
-    colors.push(gameRarity.color);
-  }
-
-  return colors.slice(0, layerLimit);
+function gameLayers(): Array<string> {
+  return difficulties
+    .map((difficulty: Rarity<Difficulty>) => difficulty.color)
+    .reverse();
 }
 
 export {

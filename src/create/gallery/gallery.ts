@@ -11,7 +11,7 @@ import {
 import { smoothDamp, type Spring } from "../../effects/tween/tween";
 import { createGlide, type Glide } from "../../ui/motion";
 import { downKeys, leftKeys, rightKeys, upKeys } from "../../game/input";
-import type { Creations, Game, Run } from "../types";
+import type { Creations, Run } from "../types";
 import { gameLayers, runLayers } from "../packs";
 import { previewHeight, previewWidth } from "../preview/preview";
 import {
@@ -42,6 +42,7 @@ import {
   applyTransform,
   createTile,
   paintTile,
+  placeName,
   setDeletable,
   stepTile,
   type Tile,
@@ -92,14 +93,14 @@ const appearDuration: number = 0.45; // s
 const appearStagger: number = 0.05; // s
 const appearDistance: number = 40; // px
 const staggerLimit: number = 16;
-const liftMargin: number = 14; // px
+const liftMargin: number = 30; // px
 const searchTop: number = 52; // px
-const searchGap: number = 36; // px
+const searchGap: number = 52; // px
 const slideSmoothing: number = 0.12; // s
 const fadeSmoothing: number = 0.08; // s
 const fadeLimit: number = 0.01;
 const emptySize: number = 14; // px
-const framePadding: number = 20; // px
+const framePadding: number = 36; // px
 const frameInset: number = 6; // px
 const frameRadius: number = 14; // px
 const frameAlpha: number = 0.55;
@@ -452,6 +453,7 @@ function createGallery(
       tile.coverName.text = tile.name.text;
       fit(tile.coverName);
       tile.detail.text = "";
+      placeName(tile);
       return;
     }
 
@@ -462,7 +464,7 @@ function createGallery(
       entry.kind === "run"
         ? runLayers(creations(), entry.item as Run)
         : entry.kind === "game"
-          ? gameLayers(creations(), entry.item as Game)
+          ? gameLayers()
           : new Array();
     tile.rank.text = tile.rarity.label.toUpperCase();
     tile.coverRank.text = tile.rank.text;
@@ -474,10 +476,10 @@ function createGallery(
     const locked: boolean = entry.kind === "sound" && isLocked(entry.item.id);
 
     setDeletable(tile, !locked);
-    tile.detail.text =
-      (locked ? "Locked  ·  " : "") +
-      drawEntry(tile.art, entry, creations(), width, artHeight);
+    drawEntry(tile.art, entry, creations(), width, artHeight);
+    tile.detail.text = locked ? "Locked" : "";
     fit(tile.detail);
+    placeName(tile);
   }
 
   function arrange(): void {
@@ -667,7 +669,7 @@ function createGallery(
         -liftMargin,
         -liftMargin,
         width + liftMargin * 2,
-        visibleHeight + liftMargin,
+        visibleHeight + liftMargin * 2,
       )
       .fill(0xffffff);
     frame

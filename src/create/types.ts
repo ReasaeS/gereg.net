@@ -27,6 +27,31 @@ type Drops = Record<Drop, number>;
 
 type Difficulty = "easy" | "normal" | "hard" | "lunatic";
 
+type EffectTarget = "player" | "stage" | "both";
+
+type Stat =
+  "fireRate" | "shotDamage" | "moveSpeed" | "enemyFireRate" | "bulletSpeed";
+
+type Modifier = {
+  stat: Stat;
+  amount: number; // %
+};
+
+type Effect = {
+  id: string;
+  name: string;
+  target: EffectTarget;
+  color: string;
+  duration: number; // s
+  modifiers: Array<Modifier>;
+  pickupSound: string | null;
+};
+
+type EffectDrop = {
+  effect: string | null;
+  chance: number; // %
+};
+
 type Pattern = {
   id: string;
   name: string;
@@ -75,11 +100,53 @@ type Bullet = {
   length: number; // of width
 };
 
+type VesselLook = "built" | "drawn";
+
+type Hull = "dart" | "pod" | "block" | "manta" | "needle" | "orb";
+
+type Wings =
+  "none" | "swept" | "delta" | "straight" | "twin" | "ring" | "blade";
+
+type Engines = "none" | "nozzle" | "nacelle" | "booster";
+
+type Guns = "none" | "cannons" | "spike" | "prongs" | "array";
+
+type Fins = "none" | "tail" | "spines" | "horns" | "ridge";
+
+type Core = "none" | "eye" | "slit" | "cross" | "twin";
+
+type Livery = "plain" | "stripe" | "bands" | "panels" | "twotone";
+
+type Build = {
+  hull: Hull;
+  length: number; // %
+  width: number; // %
+  wings: Wings;
+  span: number; // %
+  sweep: number; // %
+  wingSpot: number; // %
+  engines: Engines;
+  engineCount: number;
+  engineSize: number; // %
+  guns: Guns;
+  gunLength: number; // %
+  fins: Fins;
+  core: Core;
+  coreSpot: number; // %
+  livery: Livery;
+  hullColor: string;
+  trimColor: string;
+  metalColor: string;
+  glowColor: string;
+};
+
 type Vessel = {
   id: string;
   name: string;
   scale: number;
   pixels: string;
+  look: VesselLook;
+  build: Build;
 };
 
 type Enemy = {
@@ -93,6 +160,7 @@ type Enemy = {
   theme: string | null;
   defeatSound: string | null;
   drops: Drops;
+  effects: Array<EffectDrop>;
   bars: Array<Bar>;
 };
 
@@ -291,8 +359,29 @@ type Background = {
   layers: Array<Parallax>;
 };
 
+type SceneKind =
+  | "stars"
+  | "clouds"
+  | "rain"
+  | "motes"
+  | "waves"
+  | "islands"
+  | "city"
+  | "nebula"
+  | "grid";
+
+type Scenery = {
+  kind: SceneKind;
+  color: string;
+  accent: string;
+  density: number; // %
+  size: number; // %
+  seed: number;
+};
+
 type Parallax = {
   sprite: string | null;
+  scene: Scenery | null;
   scroll: number; // units/s
   drift: number; // units/s
   opacity: number;
@@ -394,6 +483,31 @@ type Ost = {
   tracks: Array<OstTrack>;
 };
 
+type Recipe = "ring" | "fan" | "spiral" | "stream" | "rain";
+
+type Motion = "dive" | "cross" | "swoop" | "hover" | "weave";
+
+type Weighted = {
+  value: number;
+  weight: number;
+};
+
+type CardPick = {
+  card: string | null;
+  weight: number;
+};
+
+type DiceTable = {
+  weights: Record<string, number>;
+  entries: Array<Weighted>;
+  cards: Array<CardPick>;
+};
+
+type Dice = {
+  seed: number;
+  sections: Record<string, Record<string, DiceTable>>;
+};
+
 type Creations = {
   stages: Array<Stage>;
   runs: Array<Run>;
@@ -411,6 +525,8 @@ type Creations = {
   osts: Array<Ost>;
   characters: Array<Character>;
   cutscenes: Array<Cutscene>;
+  effects: Array<Effect>;
+  dice: Record<string, Dice>;
 };
 
 export type {
@@ -425,12 +541,28 @@ export type {
   Drop,
   Drops,
   Parallax,
+  SceneKind,
+  Scenery,
   Difficulty,
+  EffectTarget,
+  Stat,
+  Modifier,
+  Effect,
+  EffectDrop,
   Vector,
   Pattern,
   Look,
   Shape,
   Bullet,
+  VesselLook,
+  Hull,
+  Wings,
+  Engines,
+  Guns,
+  Fins,
+  Core,
+  Livery,
+  Build,
   Vessel,
   Enemy,
   Bar,
@@ -466,6 +598,12 @@ export type {
   Game,
   Ost,
   OstTrack,
+  Recipe,
+  Motion,
+  Weighted,
+  CardPick,
+  DiceTable,
+  Dice,
   Creations,
   Side,
 };

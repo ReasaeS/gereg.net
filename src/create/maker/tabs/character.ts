@@ -87,37 +87,47 @@ function addCharacterTab(studio: Studio): void {
           },
         ),
       ]),
-      ...section("Emotions", [
-        actionRow("Add emotion", addEmotion, "Remove emotion", removeEmotion),
-        choice(
-          "Emotion",
-          () =>
-            character().emotions.map((value: Emotion, index: number) => ({
-              value: index,
-              label: value.name,
-            })),
-          () => cursor.emotion,
-          (value: number) => {
-            cursor.emotion = value;
-          },
-        ),
-        buttonRow("Rename emotion", () =>
-          promptText("Emotion", emotion().name, nameLength, (value: string) => {
-            emotion().name = value;
-          }),
-        ),
-        createSpriteRow(
-          "Sprite",
-          () => getTexture(emotion().sprite),
-          () => pickImage(),
-          () => {
-            emotion().sprite = null;
-            changed();
-            refresh();
-            cleanup();
-          },
-        ),
-      ]),
+      ...section(
+        "Emotions",
+        [
+          actionRow("Add emotion", addEmotion, "Remove emotion", removeEmotion),
+          choice(
+            "Emotion",
+            () =>
+              character().emotions.map((value: Emotion, index: number) => ({
+                value: index,
+                label: value.name,
+              })),
+            () => cursor.emotion,
+            (value: number) => {
+              cursor.emotion = value;
+            },
+          ),
+          buttonRow("Rename emotion", () =>
+            promptText(
+              "Emotion",
+              emotion().name,
+              nameLength,
+              (value: string) => {
+                emotion().name = value;
+              },
+            ),
+          ),
+          createSpriteRow(
+            "Sprite",
+            () => getTexture(emotion().sprite),
+            () => pickImage(),
+            () => {
+              emotion().sprite = null;
+              changed();
+              refresh();
+              cleanup();
+            },
+          ),
+        ],
+        () => true,
+        false,
+      ),
     ],
     () => {
       preview.setBackground(null);

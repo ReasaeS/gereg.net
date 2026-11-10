@@ -4,6 +4,7 @@ import type {
   Bullet,
   Character,
   Creations,
+  Effect,
   Emotion,
   Enemy,
   Game,
@@ -28,15 +29,37 @@ function createSelection(
   tab: () => Tab,
   cursor: Cursor,
 ): Selection {
+  const overrides: Map<string, Item> = new Map();
+
+  function chosen<T>(name: string, list: Array<T>): T {
+    return (overrides.get(name) as T | undefined) ?? list[selection(name)]!;
+  }
+
+  function withItem(name: string, item: Item, action: () => void): void {
+    const previous: Item | undefined = overrides.get(name);
+
+    overrides.set(name, item);
+
+    try {
+      action();
+    } finally {
+      if (previous === undefined) {
+        overrides.delete(name);
+      } else {
+        overrides.set(name, previous);
+      }
+    }
+  }
+
   function selection(name: string): number {
     return tabs.find((value: Tab) => value.name === name)?.selected ?? 0;
   }
 
   function byId<T extends { id: string }>(
-    list: Array<T>,
+    select: (source: Creations) => Array<T>,
     id: string | null,
   ): T | null {
-    return list.find((value: T) => value.id === id) ?? null;
+    return select(creations).find((value: T) => value.id === id) ?? null;
   }
 
   function current(): Item {
@@ -44,19 +67,19 @@ function createSelection(
   }
 
   function stage(): Stage {
-    return creations.stages[selection("stage")]!;
+    return chosen("stage", creations.stages);
   }
 
   function enemy(): Enemy {
-    return creations.enemies[selection("enemy")]!;
+    return chosen("enemy", creations.enemies);
   }
 
   function sigil(): Sigil {
-    return creations.sigils[selection("sigil")]!;
+    return chosen("sigil", creations.sigils);
   }
 
   function character(): Character {
-    return creations.characters[selection("character")]!;
+    return chosen("character", creations.characters);
   }
 
   function emotion(): Emotion {
@@ -93,43 +116,53 @@ function createSelection(
   }
 
   function enemyById(id: string | null): Enemy | null {
-    return byId(creations.enemies, id);
+    return byId((source: Creations) => source.enemies, id);
   }
 
   return {
+    withItem: withItem,
     current: current,
     stage: stage,
-    run: (): Run => creations.runs[selection("run")]!,
-    game: (): Game => creations.games[selection("game")]!,
-    pattern: () => creations.patterns[selection("pattern")]!,
+    run: (): Run => chosen("run", creations.runs),
+    game: (): Game => chosen("game", creations.games),
+    pattern: () => chosen("pattern", creations.patterns),
     enemy: enemy,
-    background: () => creations.backgrounds[selection("background")]!,
-    wallpaper: () => creations.wallpapers[selection("wallpaper")]!,
-    bullet: () => creations.bullets[selection("bullet")]!,
-    vessel: () => creations.vessels[selection("vessel")]!,
-    palette: () => creations.palettes[selection("palette")]!,
-    sound: () => creations.sounds[selection("sound")]!,
-    ost: (): Ost => creations.osts[selection("ost")]!,
+    background: () => chosen("background", creations.backgrounds),
+    wallpaper: () => chosen("wallpaper", creations.wallpapers),
+    bullet: () => chosen("bullet", creations.bullets),
+    vessel: () => chosen("vessel", creations.vessels),
+    palette: () => chosen("palette", creations.palettes),
+    sound: () => chosen("sound", creations.sounds),
+    ost: (): Ost => chosen("ost", creations.osts),
     sigil: sigil,
-    spell: () => creations.spells[selection("spell")]!,
-    cutscene: () => creations.cutscenes[selection("cutscene")]!,
+    spell: () => chosen("spell", creations.spells),
+    cutscene: () => chosen("cutscene", creations.cutscenes),
+    effect: (): Effect => chosen("effect", creations.effects),
     character: character,
     emotion: emotion,
     bar: bar,
     ring: ring,
     keyframe: keyframe,
     spawn: spawn,
-    patternById: (id: string | null) => byId<Pattern>(creations.patterns, id),
+    patternById: (id: string | null) =>
+      byId<Pattern>((source: Creations) => source.patterns, id),
     enemyById: enemyById,
     backgroundById: (id: string | null) =>
-      byId<Background>(creations.backgrounds, id),
+      byId<Background>((source: Creations) => source.backgrounds, id),
     wallpaperById: (id: string | null) =>
-      byId<Wallpaper>(creations.wallpapers, id),
-    bulletById: (id: string | null) => byId<Bullet>(creations.bullets, id),
-    vesselById: (id: string | null) => byId<Vessel>(creations.vessels, id),
-    spellById: (id: string | null) => byId<Spell>(creations.spells, id),
-    sigilById: (id: string | null) => byId<Sigil>(creations.sigils, id),
-    soundById: (id: string | null) => byId<Sound>(creations.sounds, id),
+      byId<Wallpaper>((source: Creations) => source.wallpapers, id),
+    bulletById: (id: string | null) =>
+      byId<Bullet>((source: Creations) => source.bullets, id),
+    vesselById: (id: string | null) =>
+      byId<Vessel>((source: Creations) => source.vessels, id),
+    spellById: (id: string | null) =>
+      byId<Spell>((source: Creations) => source.spells, id),
+    sigilById: (id: string | null) =>
+      byId<Sigil>((source: Creations) => source.sigils, id),
+    soundById: (id: string | null) =>
+      byId<Sound>((source: Creations) => source.sounds, id),
+    effectById: (id: string | null) =>
+      byId<Effect>((source: Creations) => source.effects, id),
     resolve: (value: Spawn) => enemyById(value.enemy),
   };
 }

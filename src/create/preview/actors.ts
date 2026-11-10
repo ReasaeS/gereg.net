@@ -1,5 +1,15 @@
 import { Container, Graphics } from "pixi.js";
-import type { Bar, Enemy, Pattern, Rank, Vessel, Sigil, Spell } from "../types";
+import type {
+  Bar,
+  Effect,
+  EffectDrop,
+  Enemy,
+  Pattern,
+  Rank,
+  Vessel,
+  Sigil,
+  Spell,
+} from "../types";
 import { drawSigil } from "../sigil";
 import { drawBody } from "../vessel";
 import { motion, velocity, type Path } from "../kinematics";
@@ -60,6 +70,7 @@ type Lookups = {
   spell: (id: string | null) => Spell | null;
   pattern: (id: string | null) => Pattern | null;
   vessel: (id: string | null) => Vessel | null;
+  effect: (id: string | null) => Effect | null;
 };
 
 type Actors = {
@@ -77,7 +88,7 @@ type Actors = {
   clear: () => void;
   move: (delta: number) => void;
   targets: () => Array<Target>;
-  shoot: (squad: Squad) => void;
+  shoot: (squad: Squad, strength: number) => void;
   bomb: (bomb: Bomb, delta: number) => void;
   points: () => number;
   resetPoints: () => void;
@@ -215,6 +226,20 @@ function createActors(
     arm(actor, next < barCount(actor.enemy) ? next : nextBar(actor, 0));
   }
 
+  function rollEffects(enemy: Enemy): Array<Effect> {
+    const rolled: Array<Effect> = new Array();
+
+    for (const drop of enemy.effects as Array<EffectDrop>) {
+      const found: Effect | null = find.effect(drop.effect);
+
+      if (found !== null && Math.random() * 100 < drop.chance) {
+        rolled.push(found);
+      }
+    }
+
+    return rolled;
+  }
+
   function reward(actor: Actor, bonus: number): void {
     points += defeatPoints.get(actor.enemy.rank) ?? 0;
 
@@ -229,6 +254,7 @@ function createActors(
       x: actor.view.x,
       y: actor.view.y,
       drops: actor.enemy.drops,
+      effects: rollEffects(actor.enemy),
     });
     finishBar(actor);
   }
@@ -284,7 +310,7 @@ function createActors(
       .map((actor: Actor) => ({ x: actor.view.x, y: actor.view.y }));
   }
 
-  function shoot(squad: Squad): void {
+  function shoot(squad: Squad, strength: number): void {
     for (const shot of squad.shots) {
       if (shot.spent) {
         continue;
@@ -307,7 +333,7 @@ function createActors(
 
         shot.spent = true;
         cue("hit");
-        damage(actor, shot.damage);
+        damage(actor, shot.damage * strength);
         break;
       }
     }

@@ -21,6 +21,7 @@ type Pilot = {
   ) => boolean;
   reset: (x: number, y: number) => void;
   redraw: () => void;
+  setPace: (value: number) => void;
 };
 
 const idleHitboxAlpha: number = 0.6;
@@ -36,6 +37,7 @@ function createPilot(
   const squad: Squad = createSquad(droneTexture, width, height);
   const bomb: Bomb = createBomb(width, height);
   let bombHeld: boolean = false;
+  let pace: number = 1;
 
   function update(
     delta: number,
@@ -48,7 +50,7 @@ function createPilot(
     const bombed: boolean =
       bombing && !bombHeld && bomb.trigger(player.x, player.y);
 
-    movePlayer(player, input, focused, delta, width, height);
+    movePlayer(player, input, focused, delta * pace, width, height);
     hitbox.position.copyFrom(player.position);
     hitbox.visible = focused || getHitbox();
     hitbox.alpha = focused ? 1 : idleHitboxAlpha;
@@ -81,6 +83,9 @@ function createPilot(
     update: update,
     reset: reset,
     redraw: () => drawHitbox(hitbox),
+    setPace: (value: number) => {
+      pace = value;
+    },
   };
 }
 

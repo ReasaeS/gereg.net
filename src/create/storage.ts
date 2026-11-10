@@ -17,6 +17,8 @@ import type {
   OstTrack,
   Sound,
 } from "./types";
+import { repairScenery } from "./scenery";
+import { repairDice } from "./dice";
 import {
   createId,
   defaultBar,
@@ -25,6 +27,7 @@ import {
   rankDrops,
   effectSound,
   repairSpells,
+  repairEffect,
   limitBars,
   defaultEmotion,
   defaultCharacter,
@@ -275,6 +278,10 @@ function seedCreations(creations: Creations, fresh: Creations): boolean {
   }
 
   for (const key of Object.keys(fresh) as Array<keyof Creations>) {
+    if (key === "dice") {
+      continue;
+    }
+
     const list: Array<{ id: string }> = creations[key];
 
     for (const item of fresh[key] as Array<{ id: string }>) {
@@ -327,6 +334,8 @@ function readCreations(): Creations {
         parsed.characters ??
         (parsed.cutscenes === undefined ? fallback.characters : new Array()),
       cutscenes: parsed.cutscenes ?? fallback.cutscenes,
+      effects: parsed.effects ?? new Array(),
+      dice: parsed.dice ?? {},
     };
 
     const seeded: boolean = seedCreations(creations, fallback);
@@ -422,11 +431,18 @@ function readCreations(): Creations {
       repairVessel(vessel);
     }
 
+    for (const effect of creations.effects) {
+      repairEffect(effect);
+    }
+
+    repairDice(creations);
+
     for (const background of creations.backgrounds) {
       background.sprite = background.sprite ?? null;
       background.layers = (background.layers ?? new Array()).map(
         (layer: Parallax) => ({
           sprite: layer.sprite ?? null,
+          scene: repairScenery(layer.scene),
           scroll: layer.scroll ?? 0,
           drift: layer.drift ?? 0,
           opacity: layer.opacity ?? 1,

@@ -251,7 +251,7 @@ function createTransport(
     if (value || playtesting) {
       useEffects(
         value ? studio.creations.sounds : null,
-        value && tab().name === "game" ? game() : null,
+        !value ? null : tab().name === "game" ? game() : null,
       );
     }
 
@@ -443,7 +443,10 @@ function createTransport(
     }
 
     patternBar.visible = tab().name === "pattern";
-    playtestBar.visible = tab().name !== "palette" && tab().name !== "ost";
+    playtestBar.visible =
+      tab().name !== "palette" &&
+      tab().name !== "ost" &&
+      tab().name !== "effect";
     fieldFocus.set(typing !== null ? 1 : 0);
     drawField(clockBox, clockWidth, chipHeight, fieldFocus.value());
 

@@ -1,9 +1,12 @@
 import { Graphics, type Container } from "pixi.js";
-import type { Drop, Drops, Vector } from "../types";
+import type { Drop, Drops, Effect, Vector } from "../types";
 import { previewHeight, previewWidth } from "./bounds";
 
+type Pickup = Drop | "effect";
+
 type Item = {
-  kind: Drop;
+  kind: Pickup;
+  effect: Effect | null;
   x: number; // units
   y: number; // units
   vx: number; // units/s
@@ -15,6 +18,7 @@ type Defeat = {
   x: number; // units
   y: number; // units
   drops: Drops;
+  effects: Array<Effect>;
 };
 
 type Haul = {
@@ -25,6 +29,7 @@ type Haul = {
   lifePieces: number;
   bombs: number;
   bombPieces: number;
+  effects: Array<Effect>;
 };
 
 type Items = {
@@ -70,6 +75,7 @@ const itemColor: Map<Drop, string> = new Map([
   ["bomb", "#7ae38f"],
   ["bombpiece", "#7ae38f"],
 ]);
+const effectSize: number = 8; // units
 const pointBase: number = 300;
 const pointBonus: number = 1700;
 const popSpeed: number = 140; // units/s
@@ -95,6 +101,7 @@ function createItems(layer: Container): Items {
       for (let index = 0; index < count; index++) {
         items.push({
           kind: kind,
+          effect: null,
           x: defeat.x + (Math.random() - 0.5) * (count > 1 ? 30 : 0),
           y: defeat.y,
           vx: (Math.random() - 0.5) * popSpread * (count > 1 ? 1 : 0.3),
@@ -103,12 +110,52 @@ function createItems(layer: Container): Items {
         });
       }
     }
+
+    for (const effect of defeat.effects) {
+      items.push({
+        kind: "effect",
+        effect: effect,
+        x: defeat.x + (Math.random() - 0.5) * 20,
+        y: defeat.y,
+        vx: (Math.random() - 0.5) * popSpread * 0.5,
+        vy: -popSpeed * (0.8 + Math.random() * 0.4),
+        spin: Math.random() * Math.PI,
+      });
+    }
+  }
+
+  function drawEffect(item: Item): void {
+    const color: string = item.effect?.color ?? "#ffffff";
+    const corners: Array<number> = new Array();
+
+    for (let corner = 0; corner < 4; corner++) {
+      const angle: number = -item.spin + (corner * Math.PI) / 2;
+
+      corners.push(
+        item.x + Math.cos(angle) * effectSize * 0.45,
+        item.y + Math.sin(angle) * effectSize * 0.45,
+      );
+    }
+
+    graphics
+      .circle(item.x, item.y, effectSize * 1.6)
+      .fill({ color: color, alpha: 0.18 })
+      .circle(item.x, item.y, effectSize)
+      .fill({ color: color, alpha: 0.9 })
+      .stroke({ color: "#ffffff", width: 1.25 })
+      .poly(corners)
+      .fill({ color: "#ffffff", alpha: 0.95 });
   }
 
   function draw(): void {
     graphics.clear();
 
     for (const item of items) {
+      if (item.kind === "effect") {
+        drawEffect(item);
+        continue;
+      }
+
       const size: number = itemSize.get(item.kind)!;
       const color: string = itemColor.get(item.kind)!;
       const corners: Array<number> = new Array();
@@ -145,6 +192,7 @@ function createItems(layer: Container): Items {
       lifePieces: 0,
       bombs: 0,
       bombPieces: 0,
+      effects: new Array(),
     };
     const pulled: boolean = alive && y < previewHeight * collectLine;
     let write: number = 0;
@@ -169,7 +217,11 @@ function createItems(layer: Container): Items {
       item.spin += spinSpeed * delta;
 
       if (alive && Math.hypot(x - item.x, y - item.y) < collectRange) {
-        haul.power += powerValue.get(item.kind)!;
+        if (item.effect !== null) {
+          haul.effects.push(item.effect);
+        }
+
+        haul.power += item.kind === "effect" ? 0 : powerValue.get(item.kind)!;
         haul.count++;
         haul.lives += item.kind === "life" ? 1 : 0;
         haul.lifePieces += item.kind === "lifepiece" ? 1 : 0;

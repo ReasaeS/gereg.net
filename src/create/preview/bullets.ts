@@ -56,6 +56,8 @@ type Bullets = {
   collide: (x: number, y: number, bomb: Bomb, vulnerable: boolean) => boolean;
   graze: (x: number, y: number) => number;
   threats: () => ReadonlyArray<Threat>;
+  setTempo: (value: number) => void;
+  setPace: (value: number) => void;
 };
 
 const bulletPath: string = "./sprites/bullets/orb.png";
@@ -95,6 +97,8 @@ async function createBullets(
   const bullets: Array<Round> = new Array();
   const layers: BulletLayers = await loadBullet();
   let retired: number = 0;
+  let tempo: number = 1;
+  let pace: number = 1;
 
   function clear(): void {
     for (let index = 0; index < bullets.length; index++) {
@@ -252,7 +256,7 @@ async function createBullets(
     state.time += delta;
     state.timer += delta;
 
-    const interval: number = 1 / Math.max(source.rate, 0.01);
+    const interval: number = 1 / Math.max(source.rate * tempo, 0.01);
     let fired: boolean = false;
 
     while (state.timer >= interval) {
@@ -383,7 +387,7 @@ async function createBullets(
       const fromX: number = bullet.shownX;
       const fromY: number = bullet.shownY;
 
-      advance(bullet, delta);
+      advance(bullet, delta * pace);
       render(bullet);
 
       if (delta > 0) {
@@ -471,6 +475,12 @@ async function createBullets(
     collide: collide,
     graze: graze,
     threats: () => bullets,
+    setTempo: (value: number) => {
+      tempo = value;
+    },
+    setPace: (value: number) => {
+      pace = value;
+    },
   };
 }
 

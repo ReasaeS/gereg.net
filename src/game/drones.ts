@@ -47,6 +47,7 @@ type Squad = {
   shots: Array<Shot>;
   setPower: (value: number) => void;
   setDrones: (shown: boolean) => void;
+  setTempo: (value: number) => void;
   update: (
     delta: number,
     x: number,
@@ -185,6 +186,7 @@ function createSquad(
   const drones: Array<Drone> = new Array();
   let mainTimer: number = 0;
   let droneTimer: number = 0;
+  let tempo: number = 1;
   let spin: number = 0;
   let power: number = maxPower;
   let dronesShown: boolean = true;
@@ -277,8 +279,8 @@ function createSquad(
     shooting: boolean,
   ): void {
     const style: Archetype = archetype();
-    const mainInterval: number = 1 / mainRate;
-    const droneInterval: number = 1 / style.droneRate;
+    const mainInterval: number = 1 / (mainRate * tempo);
+    const droneInterval: number = 1 / (style.droneRate * tempo);
 
     if (!shooting) {
       mainTimer = mainInterval;
@@ -421,6 +423,9 @@ function createSquad(
     setPower: setPower,
     setDrones: (shown: boolean) => {
       dronesShown = shown;
+    },
+    setTempo: (value: number) => {
+      tempo = value;
     },
     update: update,
     clear: clear,
