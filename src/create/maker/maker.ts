@@ -1140,6 +1140,14 @@ async function createMaker(app: Application): Promise<PageContent> {
     leaveTime: () => (editing ? 0 : gallery.disappearTime()),
     back: back,
     topic: () => (editing ? "editor" : "gallery"),
+    subject: () =>
+      !editing
+        ? "gallery." + gallery.subject()
+        : composer.shown()
+          ? "editor.composer"
+          : painter.shown()
+            ? "editor.painter"
+            : "editor." + tab.name,
   };
 }
 

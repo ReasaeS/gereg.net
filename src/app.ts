@@ -113,6 +113,7 @@ const revealEasing: Easing = cubicBezier(0.3, 0, 0.25, 1);
 const peekSmoothing: number = 0.12; // s
 const terminalStorm: number = 0.35;
 const beamCard: string = "beam.geregnet.json";
+const voiceCard: string = "voice.geregnet.json";
 const portalShore: number = 0.6;
 const diveDuration: number = 850; // ms
 const diveEasing: Easing = cubicBezier(0.55, 0, 0.25, 1);
@@ -138,7 +139,7 @@ const tips: Array<string> = [
   "PRESS G IN THE CUSTOMISE MENU TO TOGGLE THE GRID.",
   "PRESS P IN THE CREATE MENU TO PLAYTEST.",
   "PRESS ESC DURING A RUN TO PAUSE.",
-  "PRESS SEMICOLON ON ANY SCREEN TO SEE ITS CONTROLS.",
+  "PRESS F1 ON ANY SCREEN AND PLIP WILL EXPLAIN IT.",
   "EXPORT A CARD TO SHARE IT. DROP A CARD FILE ON THE CREATE MENU TO IMPORT IT.",
   "PRESS / IN THE CREATE MENU TO SEARCH YOUR CARDS.",
 ];
@@ -561,7 +562,7 @@ function play(): void {
   );
 }
 
-const help: Help = createHelp(app);
+const help: Help = createHelp(app, await loadMenuSound(voiceCard));
 const toast: Toast = createToast(app);
 
 onUnlock((achievement: Achievement) =>
@@ -676,6 +677,18 @@ function helpTopic(): Topic | null {
   return null;
 }
 
+function helpSubject(topic: Topic): string {
+  if (screen === "playing") {
+    return playfield.subject();
+  }
+
+  if (screen === "page" && currentPage !== null) {
+    return currentPage.content?.subject?.() ?? topic;
+  }
+
+  return topic;
+}
+
 window.addEventListener(
   "keydown",
   (event: KeyboardEvent) => {
@@ -685,13 +698,22 @@ window.addEventListener(
       !event.ctrlKey &&
       !event.metaKey &&
       !event.altKey;
+    const topic: Topic | null = helpTopic();
 
     if (help.shown()) {
       if (asked || event.key === "Escape") {
-        help.toggle(null);
+        help.close();
+      } else if (!help.key(event)) {
+        return;
       }
-    } else if (asked && helpTopic() !== null) {
-      help.toggle(helpTopic());
+    } else if (asked && topic !== null) {
+      const subject: string = helpSubject(topic);
+
+      if (screen === "playing") {
+        playfield.hold();
+      }
+
+      help.open(topic, subject);
     } else {
       return;
     }

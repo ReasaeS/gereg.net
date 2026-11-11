@@ -80,6 +80,7 @@ type Gallery = {
   disappearTime: () => number;
   setActive: (active: boolean) => void;
   focus: (kind: Kind, index: number) => void;
+  subject: () => string;
 };
 
 const tileGap: number = 26; // px
@@ -511,8 +512,8 @@ function createGallery(
 
       tile.view.alpha = Math.min(progress * 3, 1) * place.fade.value;
       tile.view.visible =
-        y + tileHeight + tileGap > scroll.value &&
-        y - tileGap < scroll.value + visibleHeight;
+        y + tileHeight > scroll.value &&
+        y - tileHeight < scroll.value + visibleHeight;
       applyTransform(tile);
       tile.view.position.set(place.x.value, y);
     }
@@ -890,6 +891,7 @@ function createGallery(
     disappearTime: () => Math.min(appearTime, appearEnd()) * 1000,
     setActive: setActive,
     focus: focus,
+    subject: () => (dealer.shown() ? "deal" : category),
   };
 }
 

@@ -14,6 +14,7 @@ type PageContent = {
   leave?: () => Promise<void>;
   leaveTime?: () => number;
   topic?: () => Topic;
+  subject?: () => string;
 };
 
 type Page = {

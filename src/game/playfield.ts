@@ -68,6 +68,8 @@ type Playfield = {
   hide: () => Promise<void>;
   hideDuration: () => number;
   back: () => boolean;
+  subject: () => string;
+  hold: () => void;
 };
 
 const fieldColor: string = "#01040f";
@@ -1277,12 +1279,52 @@ async function createPlayfield(
       });
   }
 
+  const menuSubjects: Map<Menu, string> = new Map([
+    [modesMenu, "modes"],
+    [stagesMenu, "stages"],
+    [customMenu, "custom"],
+    [difficultyMenu, "difficulty"],
+    [startMenu, "start"],
+    [zenMenu, "zen-menu"],
+    [multiplayerMenu, "multiplayer"],
+    [continueMenu, "continue"],
+    [pauseMenu, "paused"],
+  ]);
+
+  function subject(): string {
+    if (watching) {
+      return "play.watch";
+    }
+
+    if (results.shown()) {
+      return "play.results";
+    }
+
+    if (paused) {
+      return "play.paused";
+    }
+
+    if (active) {
+      return zenning ? "play.zen" : "play.run";
+    }
+
+    return "play." + (menuSubjects.get(menu) ?? "modes");
+  }
+
+  function hold(): void {
+    if (active && !rolling && !watching) {
+      pause();
+    }
+  }
+
   return {
     view: view,
     show: show,
     hide: hide,
     hideDuration: () => doorTime() + leaveDuration,
     back: goBack,
+    subject: subject,
+    hold: hold,
   };
 }
 
