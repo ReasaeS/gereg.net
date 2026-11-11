@@ -15,12 +15,21 @@ type Mascot = {
 
 const mascotName: string = "PLIP";
 const bodyRadius: number = 62; // px
-const tipHeight: number = 112; // px
 const outlineWidth: number = 5; // px
 const outlineColor: string = "#020b30";
 const bodyColor: string = "#8fdcff";
-const shadeColor: string = "#5cb4f0";
-const cheekColor: string = "#ff8fb1";
+const rimColor: string = "#cdf1ff";
+const coreColor: string = "#ffffff";
+const haloShare: number = 1.14;
+const haloAlpha: number = 0.3;
+const rimShare: number = 0.84;
+const coreShare: number = 0.71;
+const scuffLines: number = 3;
+const scuffY: number = 14; // px
+const scuffGap: number = 5; // px
+const scuffLength: number = 12; // px
+const scuffWidth: number = 2.5; // px
+const scuffAlpha: number = 0.35;
 const eyeX: number = 23; // px
 const eyeY: number = -10; // px
 const eyeWidth: number = 9; // px
@@ -31,9 +40,7 @@ const handY: number = 14; // px
 const canopyRadius: number = 92; // px
 const canopyHeight: number = 54; // px
 const stickLength: number = 150; // px
-const shadeStart: number = 0.25; // rad
-const shadeEnd: number = 2.5; // rad
-const umbrellaTilt: number = 0.4; // rad
+const umbrellaTilt: number = -0.4; // rad
 const bobHeight: number = 7; // px
 const bobSpeed: number = 0.6; // Hz
 const swaySpeed: number = 0.45; // Hz
@@ -59,9 +66,9 @@ function createMascot(): Mascot {
   const face: Container = new Container();
   const eyes: Graphics = new Graphics();
   const mouth: Graphics = new Graphics();
-  const leftHand: Graphics = new Graphics();
-  const rightHand: Container = new Container();
-  const rightPalm: Graphics = new Graphics();
+  const holdHand: Graphics = new Graphics();
+  const waveHand: Container = new Container();
+  const wavePalm: Graphics = new Graphics();
   let time: number = 0;
   let blinkLeft: number = blinkMax;
   let blinking: number = 0;
@@ -73,46 +80,40 @@ function createMascot(): Mascot {
   let eyesShut: boolean | null = null;
   let eyesMood: Mood | null = null;
 
-  function drawBody(): void {
-    const top: number = -tipHeight;
-
-    body
+  function drawOrb(graphics: Graphics, radius: number): Graphics {
+    return graphics
       .clear()
-      .moveTo(0, top)
-      .bezierCurveTo(
-        bodyRadius * 0.35,
-        top * 0.6,
-        bodyRadius,
-        -bodyRadius * 0.55,
-        bodyRadius,
-        0,
-      )
-      .arc(0, 0, bodyRadius, 0, Math.PI)
-      .bezierCurveTo(
-        -bodyRadius,
-        -bodyRadius * 0.55,
-        -bodyRadius * 0.35,
-        top * 0.6,
-        0,
-        top,
-      )
-      .closePath()
+      .circle(0, 0, radius * haloShare)
+      .fill({ color: bodyColor, alpha: haloAlpha })
+      .circle(0, 0, radius)
       .fill(bodyColor)
-      .stroke({ color: outlineColor, width: outlineWidth, join: "round" })
-      .moveTo(
-        Math.cos(shadeStart) * bodyRadius * 0.82,
-        Math.sin(shadeStart) * bodyRadius * 0.82,
-      )
-      .arc(0, 0, bodyRadius * 0.82, shadeStart, shadeEnd)
-      .stroke({ color: shadeColor, width: 9, cap: "round" })
-      .ellipse(-bodyRadius * 0.48, -bodyRadius * 0.62, 9, 17)
-      .fill({ color: "#ffffff", alpha: 0.75 })
-      .circle(-bodyRadius * 0.6, -bodyRadius * 0.18, 5)
-      .fill({ color: "#ffffff", alpha: 0.75 })
-      .ellipse(-eyeX - 17, 14, 11, 7)
-      .fill({ color: cheekColor, alpha: 0.65 })
-      .ellipse(eyeX + 17, 14, 11, 7)
-      .fill({ color: cheekColor, alpha: 0.65 });
+      .circle(0, 0, radius * rimShare)
+      .fill(rimColor)
+      .circle(0, 0, radius * coreShare)
+      .fill(coreColor);
+  }
+
+  function drawBody(): void {
+    drawOrb(body, bodyRadius);
+
+    for (const side of [-1, 1]) {
+      const x: number = side * (eyeX + 17);
+
+      for (let index = 0; index < scuffLines; index++) {
+        const offset: number = (index - (scuffLines - 1) / 2) * scuffGap;
+        const half: number = scuffLength / 2 - Math.abs(offset) * 0.3;
+
+        body
+          .moveTo(x + offset - side * half * 0.5, scuffY + half)
+          .lineTo(x + offset + side * half * 0.5, scuffY - half)
+          .stroke({
+            color: outlineColor,
+            width: scuffWidth,
+            alpha: scuffAlpha,
+            cap: "round",
+          });
+      }
+    }
   }
 
   function drawUmbrella(): void {
@@ -165,11 +166,7 @@ function createMascot(): Mascot {
   }
 
   function drawHand(graphics: Graphics): void {
-    graphics
-      .clear()
-      .circle(0, 0, handRadius)
-      .fill(bodyColor)
-      .stroke({ color: outlineColor, width: outlineWidth - 1 });
+    drawOrb(graphics, handRadius);
   }
 
   function drawEyes(shut: boolean): void {
@@ -216,11 +213,7 @@ function createMascot(): Mascot {
     mouth.clear();
 
     if (open) {
-      mouth
-        .ellipse(0, 18, 9, 8)
-        .fill(outlineColor)
-        .ellipse(0, 22, 5, 3)
-        .fill(cheekColor);
+      mouth.ellipse(0, 18, 9, 8).fill(outlineColor);
       return;
     }
 
@@ -233,8 +226,8 @@ function createMascot(): Mascot {
   function paint(): void {
     drawBody();
     drawUmbrella();
-    drawHand(leftHand);
-    drawHand(rightPalm);
+    drawHand(holdHand);
+    drawHand(wavePalm);
     shadow
       .clear()
       .ellipse(0, 0, bodyRadius * 0.9, 12)
@@ -262,35 +255,32 @@ function createMascot(): Mascot {
     const bob: number = Math.sin(time * bobSpeed * Math.PI * 2);
     const hopping: number = hopLeft / hopTime;
     const lift: number = Math.sin(hopping * Math.PI) * hopHeight;
-    const squash: number =
-      1 + 0.04 * bob + (hopping > 0.85 ? (hopping - 0.85) * 0.6 : 0);
     const waving: number = waveLeft / waveTime;
 
     figure.y = -bob * bobHeight - lift;
-    figure.scale.set(1 / Math.sqrt(squash), squash);
     shadow.scale.set(1 - (bob * 0.04 + lift / hopHeight) * 0.25);
     umbrella.rotation =
       umbrellaTilt + Math.sin(time * swaySpeed * Math.PI * 2) * swayAngle;
-    leftHand.y = handY + Math.sin(time * bobSpeed * Math.PI * 2 + 1) * 3;
-    rightHand.rotation =
+    holdHand.y = handY + Math.sin(time * bobSpeed * Math.PI * 2 + 1) * 3;
+    waveHand.rotation =
       waving > 0
-        ? waveAngle * 0.6 +
+        ? -waveAngle * 0.6 -
           Math.sin(time * waveSpeed * Math.PI * 2) * waveAngle * waving
         : 0;
-    rightPalm.y = waving > 0 ? -handRadius * 3 * Math.min(waving * 3, 1) : 0;
+    wavePalm.y = waving > 0 ? -handRadius * 3 * Math.min(waving * 3, 1) : 0;
     drawEyes(blinking > 0);
     drawMouth(talking && Math.sin(time * mouthRate * Math.PI * 2) > -0.2);
   }
 
-  drawBody();
   umbrella.pivot.set(0, stickLength);
-  umbrella.position.set(-handX + 10, handY);
+  umbrella.position.set(handX - 10, handY);
+  umbrella.scale.x = -1;
   umbrella.addChild(stick, canopy);
-  leftHand.position.set(-handX, handY);
-  rightHand.position.set(handX, handY);
-  rightHand.addChild(rightPalm);
+  holdHand.position.set(handX, handY);
+  waveHand.position.set(-handX, handY);
+  waveHand.addChild(wavePalm);
   face.addChild(eyes, mouth);
-  figure.addChild(umbrella, body, face, leftHand, rightHand);
+  figure.addChild(umbrella, body, face, holdHand, waveHand);
   shadow.y = bodyRadius + 22;
   view.addChild(shadow, figure);
   paint();

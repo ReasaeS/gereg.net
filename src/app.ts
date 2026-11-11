@@ -103,7 +103,6 @@ import { createHelp, type Help, type Topic } from "./menu/help";
 import { createToast, type Toast } from "./ui/toast";
 import { onUnlock, type Achievement } from "./game/achievements";
 import type { Option } from "./ui/widgets";
-import { typing } from "./ui/typing";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -121,6 +120,7 @@ const diveFlip: number = -Math.PI; // rad
 const transitionLead: number = 200; // ms
 const screenshotKey: string = "F8";
 const muteKey: string = "F7";
+const helpKey: string = "KeyH";
 const unmuteStorageKey: string = "geregnet.unmuted";
 const unmuteDefault: number = 0.8;
 const revokeDelay: number = 1000; // ms
@@ -139,7 +139,7 @@ const tips: Array<string> = [
   "PRESS G IN THE CUSTOMISE MENU TO TOGGLE THE GRID.",
   "PRESS P IN THE CREATE MENU TO PLAYTEST.",
   "PRESS ESC DURING A RUN TO PAUSE.",
-  "PRESS F1 ON ANY SCREEN AND PLIP WILL EXPLAIN IT.",
+  "PRESS ALT + H ON ANY SCREEN AND PLIP WILL EXPLAIN IT.",
   "EXPORT A CARD TO SHARE IT. DROP A CARD FILE ON THE CREATE MENU TO IMPORT IT.",
   "PRESS / IN THE CREATE MENU TO SEARCH YOUR CARDS.",
 ];
@@ -693,11 +693,11 @@ window.addEventListener(
   "keydown",
   (event: KeyboardEvent) => {
     const asked: boolean =
-      (event.key === ";" || event.code === "F1") &&
-      !typing() &&
+      event.code === helpKey &&
+      event.altKey &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.altKey;
+      !event.repeat;
     const topic: Topic | null = helpTopic();
 
     if (help.shown()) {

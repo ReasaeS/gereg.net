@@ -126,16 +126,23 @@ type Look = "energy" | "sprite";
 
 type Shape = "orb" | "rice" | "star" | "kunai" | "ring" | "heart" | "diamond";
 
+type Blend = "normal" | "light";
+
+type Glow = {
+  color: string;
+  size: number; // of body
+  opacity: number; // %
+  softness: number; // of body
+  blend: Blend;
+};
+
 type Bullet = {
   id: string;
   name: string;
   look: Look;
   pixels: string;
   shape: Shape;
-  glow: string;
-  core: string;
-  coreSize: number; // of body
-  glowSize: number; // of body
+  glows: Array<Glow>;
   length: number; // of width
 };
 
@@ -602,6 +609,8 @@ export type {
   Look,
   Shape,
   Bullet,
+  Blend,
+  Glow,
   VesselLook,
   Hull,
   Wings,

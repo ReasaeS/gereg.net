@@ -1,5 +1,5 @@
 import { BufferImageSource, Texture } from "pixi.js";
-import type { Bullet, Shape } from "./types";
+import type { Blend, Bullet, Glow, Shape } from "./types";
 import { bulletSide } from "./defaults";
 import { createPixels, decodePixels, type Pixels } from "../editor/pixels";
 import { drawBulletDefault } from "../editor/default";
@@ -79,34 +79,56 @@ function tracePath(
   context.closePath();
 }
 
+function blurOf(width: number, softness: number): number {
+  return (width / 2) * (softness / (1 + softness));
+}
+
 function paintLayer(
   bullet: Bullet,
   width: number,
   height: number,
-  scale: number,
-  color: string,
-  blur: number,
+  blend: Blend,
 ): Texture {
   const canvas: HTMLCanvasElement = document.createElement("canvas");
   const context: CanvasRenderingContext2D = canvas.getContext("2d")!;
-  const pad: number = (width / 2) * (bullet.glowSize / (1 + bullet.glowSize));
-  const a: number = (width / 2 - pad) * scale;
-  const b: number = (height / 2 - pad) * scale;
+  const pad: number = Math.max(
+    0,
+    ...bullet.glows.map((glow: Glow) => blurOf(width, glow.softness)),
+  );
+  const extent: Extent = extents[bullet.shape];
 
   canvas.width = width;
   canvas.height = height;
-  const extent: Extent = extents[bullet.shape];
-
   context.translate(width / 2, height / 2);
   context.scale(1 / extent.side, 2 / (extent.bottom - extent.top));
-  context.translate(0, (-(extent.top + extent.bottom) / 2) * b);
-  context.fillStyle = color;
-  context.shadowColor = color;
-  context.shadowBlur = blur;
-  tracePath(context, bullet.shape, a, b);
-  context.fill("evenodd");
-  context.shadowBlur = blur / 2;
-  context.fill("evenodd");
+
+  for (const glow of bullet.glows) {
+    if (glow.blend !== blend) {
+      continue;
+    }
+
+    const a: number = (width / 2 - pad) * glow.size;
+    const b: number = (height / 2 - pad) * glow.size;
+    const blur: number = blurOf(width, glow.softness);
+
+    context.save();
+    context.translate(0, (-(extent.top + extent.bottom) / 2) * b);
+    tracePath(context, bullet.shape, a, b);
+    context.clip("evenodd");
+    context.clearRect(-width, -height, width * 2, height * 2);
+    context.restore();
+    context.save();
+    context.translate(0, (-(extent.top + extent.bottom) / 2) * b);
+    context.globalAlpha = glow.opacity / 100;
+    context.fillStyle = glow.color;
+    context.shadowColor = glow.color;
+    context.shadowBlur = blur;
+    tracePath(context, bullet.shape, a, b);
+    context.fill("evenodd");
+    context.shadowBlur = blur / 2;
+    context.fill("evenodd");
+    context.restore();
+  }
 
   return Texture.from(canvas);
 }
@@ -140,10 +162,7 @@ function energyOf(bullet: Bullet): Energy {
     bullet.look,
     bullet.look === "sprite" ? bullet.pixels : "",
     bullet.shape,
-    bullet.glow,
-    bullet.core,
-    bullet.coreSize,
-    bullet.glowSize,
+    JSON.stringify(bullet.glows),
     bullet.length,
   ].join("|");
   const cached: Energy | undefined = cache.get(key);
@@ -162,17 +181,9 @@ function energyOf(bullet: Bullet): Energy {
 
   const width: number = energySize;
   const height: number = Math.round(energySize * Math.max(bullet.length, 1));
-  const blur: number = (width / 2) * (bullet.glowSize / (1 + bullet.glowSize));
   const energy: Energy = {
-    glow: paintLayer(bullet, width, height, 1, bullet.glow, blur),
-    core: paintLayer(
-      bullet,
-      width,
-      height,
-      bullet.coreSize,
-      bullet.core,
-      blur / 3,
-    ),
+    glow: paintLayer(bullet, width, height, "normal"),
+    core: paintLayer(bullet, width, height, "light"),
   };
 
   remember(key, energy);

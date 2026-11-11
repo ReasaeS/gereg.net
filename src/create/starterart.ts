@@ -7,6 +7,7 @@ import {
 } from "../editor/pixels";
 import { spriteSize } from "../editor/drawings";
 import { defaultBuild } from "./hangar";
+import { legacyGlows } from "./defaults";
 
 type Colors = Record<string, string>;
 
@@ -242,10 +243,7 @@ function energy(
     look: "energy",
     pixels: paint(bulletSide, raindropRows, dropColors),
     shape: shape,
-    glow: glow,
-    core: "#ffffff",
-    coreSize: 0.5,
-    glowSize: 0.4,
+    glows: legacyGlows(glow, "#ffffff", 0.5, 0.4),
     length: length,
   };
 }

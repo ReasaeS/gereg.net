@@ -406,7 +406,7 @@ function createDealer(
   window.addEventListener(
     "keydown",
     (event: KeyboardEvent) => {
-      if (!active || event.key === ";" || event.code === "F1") {
+      if (!active || (event.altKey && event.code === "KeyH")) {
         return;
       }
 

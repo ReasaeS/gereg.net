@@ -7,7 +7,9 @@ import type {
   Bar,
   Background,
   Wallpaper,
+  Blend,
   Bullet,
+  Glow,
   Vessel,
   Build,
   Palette,
@@ -39,6 +41,7 @@ import { defaultScore } from "./arrange";
 import { defaultAmbience } from "./ambience";
 import { buildPixels, defaultBuild, repairBuild } from "./hangar";
 import { repairStat } from "./effects";
+import { getTheme } from "../theme/theme";
 
 function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -143,6 +146,55 @@ function defaultWallpaper(): Wallpaper {
   };
 }
 
+const rainBands: Array<[number, number, number]> = [
+  [1, 16, 4],
+  [0.86, 45, 11],
+  [0.73, 80, 20],
+  [0.54, 32, 68],
+  [0.38, 0, 100],
+];
+
+function rainBand(blend: Blend, color: string, column: number): Array<Glow> {
+  return rainBands.map((entry: [number, number, number]) => ({
+    color: color,
+    size: entry[0],
+    opacity: entry[column]!,
+    softness: 0,
+    blend: blend,
+  }));
+}
+
+function rainGlows(): Array<Glow> {
+  return [
+    ...rainBand("normal", getTheme().bullets, 1),
+    ...rainBand("light", "#ffffff", 2),
+  ];
+}
+
+function legacyGlows(
+  glow: string,
+  core: string,
+  coreSize: number,
+  glowSize: number,
+): Array<Glow> {
+  return [
+    {
+      color: glow,
+      size: 1,
+      opacity: 100,
+      softness: glowSize,
+      blend: "normal",
+    },
+    {
+      color: core,
+      size: coreSize,
+      opacity: 100,
+      softness: glowSize / (3 + 2 * glowSize),
+      blend: "light",
+    },
+  ];
+}
+
 function defaultBullet(): Bullet {
   return {
     id: createId(),
@@ -150,10 +202,7 @@ function defaultBullet(): Bullet {
     look: "energy",
     pixels: defaultBulletPixels(),
     shape: "orb",
-    glow: "#ff3b3b",
-    core: "#ffffff",
-    coreSize: 0.5,
-    glowSize: 0.4,
+    glows: rainGlows(),
     length: 1,
   };
 }
@@ -174,6 +223,20 @@ function repairBullet(bullet: Bullet): void {
   bullet.look = bullet.look === "sprite" ? "sprite" : "energy";
   bullet.pixels =
     typeof bullet.pixels === "string" ? bullet.pixels : defaultBulletPixels();
+
+  if (!Array.isArray(bullet.glows)) {
+    bullet.glows = legacyGlows(
+      typeof stale["glow"] === "string" ? stale["glow"] : "#ff3b3b",
+      typeof stale["core"] === "string" ? stale["core"] : "#ffffff",
+      typeof stale["coreSize"] === "number" ? stale["coreSize"] : 0.5,
+      typeof stale["glowSize"] === "number" ? stale["glowSize"] : 0.4,
+    );
+  }
+
+  delete stale["glow"];
+  delete stale["core"];
+  delete stale["coreSize"];
+  delete stale["glowSize"];
   delete stale["spin"];
   delete stale["pulse"];
 }
@@ -678,6 +741,7 @@ export {
   defaultBackground,
   defaultWallpaper,
   defaultBullet,
+  legacyGlows,
   defaultVessel,
   repairVessel,
   repairEnemy,

@@ -2,7 +2,8 @@ const lessons: Map<string, Array<string>> = new Map([
   [
     "menu",
     [
-      "Hi, I'm Plip! I keep the rain company around here. Press F1 on any screen and I'll tell you what it's for.",
+      "Hi, I'm Plip! I used to be a bullet in a boss pattern, but I missed my target and decided I'd rather help than hurt.",
+      "The umbrella keeps the rest of the bullet storm off me. Press Alt + H on any screen and I'll tell you what it's for.",
       "PLAY is where you fly. CUSTOMISE lets you draw your own ship. CREATE is where you build stages, enemies, music and more.",
       "STATS keeps your records and achievements, CONFIG holds the settings, and CREDITS rolls the names behind all this.",
     ],
@@ -53,9 +54,9 @@ const lessons: Map<string, Array<string>> = new Map([
   [
     "play.run",
     [
-      "I paused the run for you. Dodge the bullets and shoot the enemies. Your real hitbox is tiny, much smaller than your ship.",
+      "I paused the run for you. Dodge the bullets and shoot the enemies. Take it from an old bullet: your real hitbox is tiny, much smaller than your ship.",
       "Hold focus to slow down and see that hitbox, perfect for squeezing through tight gaps.",
-      "Brushing past bullets without getting hit is a graze, and every graze adds to your score.",
+      "Brushing past bullets without getting hit is a graze, and every graze adds to your score. We bullets hate that.",
       "Bombs clear the screen. If you bomb right as you get hit, you're saved, but the window is very short!",
       "Getting hit costs a life and some power. Power sets how many drones fly with you, so collect the power items enemies drop.",
       "Point items add to your score. Score enough and some games give you an extra life.",
@@ -85,7 +86,7 @@ const lessons: Map<string, Array<string>> = new Map([
   [
     "play.continue",
     [
-      "Out of lives! Continuing keeps you in the run, but your score goes back to zero. Giving up ends the run with the score you have.",
+      "Out of lives! My old friends got you. Continuing keeps you in the run, but your score goes back to zero. Giving up ends the run with the score you have.",
     ],
   ],
   [
@@ -128,7 +129,7 @@ const lessons: Map<string, Array<string>> = new Map([
   [
     "gallery.pattern",
     [
-      "Patterns are how enemies shoot. Objective patterns fire at the field, subjective ones fire from the enemy itself.",
+      "Patterns are how enemies shoot. I was born in one! Objective patterns fire at the field, subjective ones fire from the enemy itself.",
       "Spells are boss attacks: a pattern dressed up with its own sigil, sky and declare sound.",
     ],
   ],
@@ -203,7 +204,7 @@ const lessons: Map<string, Array<string>> = new Map([
     "editor.pattern",
     [
       "Build a pattern from top to bottom: what the bullets look like, where they aim, how they spread, where the gaps are and how fast they fire.",
-      "Gaps leave holes in a volley. Without them some patterns are impossible to dodge!",
+      "Gaps leave holes in a volley. Without them some patterns are impossible to dodge! A gap is how I got away.",
     ],
   ],
   [
@@ -235,7 +236,7 @@ const lessons: Map<string, Array<string>> = new Map([
   [
     "editor.bullet",
     [
-      "Shape an energy shot: its outline, length, glow and core. Patterns pick a bullet to fire.",
+      "Shape an energy shot: its outline, length, glow and core. Patterns pick a bullet to fire. Make them cute, they might turn out like me.",
     ],
   ],
   [

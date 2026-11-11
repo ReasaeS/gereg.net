@@ -23,6 +23,7 @@ import type {
 import {
   createId,
   defaultBullet,
+  legacyGlows,
   defaultEnemy,
   defaultPalette,
   defaultPattern,
@@ -182,7 +183,7 @@ function makeBullet(made: Made): string {
     name: shape.charAt(0).toUpperCase() + shape.slice(1) + " Shot",
     look: "energy",
     shape: shape,
-    glow: pick(brights, made.random),
+    glows: legacyGlows(pick(brights, made.random), "#ffffff", 0.5, 0.4),
     length: shape === "rice" || shape === "kunai" ? 2 : 1,
   };
 

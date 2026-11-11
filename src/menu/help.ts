@@ -60,6 +60,7 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Esc", "Back to the title"],
       ["Alt + R", "Reset everything"],
       ["Alt + P", "Go to any menu"],
+      ["Alt + H", "Ask Plip about this screen"],
       ["F7", "Mute or unmute"],
       ["Alt + Enter", "Fullscreen"],
       ["F8", "Save a screenshot"],
