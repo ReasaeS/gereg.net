@@ -63,7 +63,7 @@ type Vivid = {
   setLighthouseHovered: (hovered: boolean) => void;
   lighthouseBounds: () => Rectangle;
   lighthouseDoor: () => Point;
-  setLighthouseShown: (shown: boolean) => void;
+  setSceneryOnly: (only: boolean) => void;
   view: Container;
   scene: Container;
   setDepth: (depth: number) => void;
@@ -302,6 +302,7 @@ function createVivid(app: Application): Vivid {
     witchFade,
   );
   let scenery: Scenery = sceneries.get("config")!;
+  let hidden: [boolean, boolean, boolean] | null = null;
   const sceneryGlow: Sprite = new Sprite(glowTexture);
   const sceneSigils: Sigils = createSigils(app);
   const sceneArmy: Army = createArmy(app);
@@ -748,9 +749,21 @@ function createVivid(app: Application): Vivid {
     setLighthouseHovered: lighthouse.setHovered,
     lighthouseBounds: lighthouse.bounds,
     lighthouseDoor: lighthouse.door,
-    setLighthouseShown: (shown: boolean) => {
-      lighthouse.view.visible = shown;
-      lighthouse.beam.visible = shown;
+    setSceneryOnly: (only: boolean) => {
+      if (only) {
+        hidden = [
+          lighthouse.view.visible,
+          lighthouse.beam.visible,
+          witchLayer.visible,
+        ];
+        lighthouse.view.visible = false;
+        lighthouse.beam.visible = false;
+        witchLayer.visible = false;
+      } else if (hidden !== null) {
+        [lighthouse.view.visible, lighthouse.beam.visible, witchLayer.visible] =
+          hidden;
+        hidden = null;
+      }
     },
     setHoverBlocker: (blocker: (point: Point) => boolean) => {
       hoverBlocker = blocker;

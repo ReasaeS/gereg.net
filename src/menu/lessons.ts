@@ -306,7 +306,7 @@ const lessons: Map<string, Array<string>> = new Map([
   [
     "lighthouse.lamp",
     [
-      "This is the lamp room at the top of the tower. The big lamp sweeps its light out over the storm.",
+      "This is the lamp room at the top of the tower, with glass all the way around.",
       "This is where I stay. Look through the telescope, read the keeper's log, or take the stairs back down.",
     ],
   ],

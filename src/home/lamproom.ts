@@ -1,17 +1,22 @@
 import { Container, FillGradient, Graphics, Rectangle } from "pixi.js";
 import { getTheme, type Theme } from "../theme/theme";
-import { createDrizzle, type Drizzle } from "./weather";
 import type { Room, Spot } from "./room";
 import {
   arcSteps,
   createCurve,
+  drawPole,
   drawSolid,
+  drawSpiral,
   frustum,
+  poleRadius,
   project,
   sideShade,
   type Curve,
   type Placement,
   type Solid,
+  type Spiral,
+  stepCount,
+  stepRise,
 } from "./shapes";
 
 const wallColor: string = "#0d2260";
@@ -28,37 +33,19 @@ const floorX: number = 800; // units
 const floorY: number = 900; // units
 const floorRadiusX: number = 1150; // units
 const floorRadiusY: number = 330; // units
-const lampX: number = 800; // units
-const lampY: number = 700; // units
-const lensBottom: number = -110; // units
-const lensBands: number = 9;
-const bandHeight: number = 29; // units
-const lensCenter: number = -240; // units
-const capY: number = -371; // units
-const beamY: number = 460; // units
-const beamReach: number = 1700; // units
-const beamSpread: number = 90; // units
-const beamAlpha: number = 0.22;
-const spinSpeed: number = 0.6; // rad/s
-const spinBoost: number = 5; // rad/s
-const boostDecay: number = 1.4; // per s
-const glintSharpness: number = 14;
 const scopeX: number = 1180; // units
 const scopeY: number = 690; // units
 const deskX: number = 445; // units
 const deskY: number = 650; // units
 const hatchX: number = 1330; // units
 const hatchY: number = 765; // units
+const wellRadius: number = 145; // units
+const wellSteps: number = 5;
+const wellDepth: number = 400; // units
+const wellShade: number = 0.25;
+const poleAbove: number = 70; // units
 const squash: number = floorRadiusY / floorRadiusX;
-const lensWaist: number = 60; // units
-const lensBulge: number = 30; // units
-const prismCount: number = 12;
-const prismSamples: number = 12;
-const prismReach: number = 0.9;
-const bullseyeRadius: number = 50; // units
-const domeHeight: number = 80; // units
 const eyeY: number = 250; // units
-const skyTop: number = -300; // units
 const seaBottom: number = 800; // units
 const rafterGap: number = 200; // units
 const postGap: number = 100; // units
@@ -88,36 +75,22 @@ function facingCenter(x: number, y: number): number {
   return -Math.atan2(floorX - x, (floorY - y) / squash);
 }
 
-function lensRadius(along: number): number {
-  return lensWaist + lensBulge * Math.sin(Math.PI * along);
-}
-
-function lensY(along: number): number {
-  return lensBottom - along * lensBands * bandHeight;
-}
-
 function createLampRoom(): Room {
   const back: Container = new Container();
   const front: Container = new Container();
   const walls: Graphics = new Graphics();
-  const drizzle: Drizzle = createDrizzle(
-    new Rectangle(-1000, skyTop, 3600, seaBottom - skyTop),
-    0,
-  );
   const frame: Graphics = new Graphics();
-  const beams: Graphics = new Graphics();
-  const lamp: Container = new Container();
-  const lampArt: Graphics = new Graphics();
-  const prisms: Graphics = new Graphics();
   const scope: Container = new Container();
   const scopeArt: Graphics = new Graphics();
   const tube: Graphics = new Graphics();
   const desk: Container = new Container();
   const deskArt: Graphics = new Graphics();
-  const rail: Container = new Container();
-  const railArt: Graphics = new Graphics();
-  let angle: number = 0;
-  let boost: number = 0;
+  const well: Graphics = new Graphics();
+  const wellMask: Graphics = new Graphics();
+  const steps: Graphics = new Graphics();
+  const rim: Graphics = new Graphics();
+  const pole: Container = new Container();
+  const poleArt: Graphics = new Graphics();
 
   function drawWalls(theme: Theme): void {
     walls.clear().rect(-1000, -2000, 3600, 1401).fill(ceilingColor);
@@ -174,8 +147,8 @@ function createLampRoom(): Room {
       frame.ellipse(floorX, floorY, floorRadiusX * share, floorRadiusY * share);
     }
 
-    for (let index = 1; index < 16; index++) {
-      const turn: number = Math.PI + (index * Math.PI) / 16;
+    for (let index = 0; index < 32; index++) {
+      const turn: number = (index * Math.PI) / 16;
 
       frame
         .moveTo(floorX, floorY)
@@ -188,173 +161,7 @@ function createLampRoom(): Room {
     frame
       .stroke({ color: floorLine, width: 4, alpha: 0.8 })
       .ellipse(floorX, floorY, floorRadiusX, floorRadiusY)
-      .stroke({ color: inkColor, width: 16, alpha: 0.45 })
-      .ellipse(hatchX, hatchY, 110, 34)
-      .fill(inkColor)
-      .ellipse(hatchX, hatchY, 110, 34)
-      .stroke({ color: trimColor, width: 4 })
-      .moveTo(hatchX - 70, hatchY - 6)
-      .lineTo(hatchX + 20, hatchY - 6)
-      .moveTo(hatchX - 40, hatchY + 10)
-      .lineTo(hatchX + 50, hatchY + 10)
-      .stroke({ color: trimColor, width: 3, alpha: 0.4 });
-  }
-
-  function drawLamp(theme: Theme): void {
-    const round: FillGradient = new FillGradient({
-      type: "linear",
-      start: { x: 0, y: 0 },
-      end: { x: 1, y: 0 },
-      colorStops: [
-        { offset: 0, color: "rgba(2, 11, 48, 0.45)" },
-        { offset: 0.35, color: "rgba(2, 11, 48, 0)" },
-        { offset: 1, color: "rgba(2, 11, 48, 0.6)" },
-      ],
-    });
-
-    function solid(
-      bottomRadius: number,
-      topRadius: number,
-      bottom: number,
-      top: number,
-      color: string,
-      alpha: number,
-      line: number,
-    ): void {
-      const points: Array<number> = frustum(
-        lampArt,
-        bottomRadius,
-        topRadius,
-        bottom,
-        top,
-        squash,
-      );
-
-      lampArt
-        .fill({ color: color, alpha: alpha })
-        .poly(points)
-        .fill(round)
-        .stroke({ color: inkColor, width: line, join: "round" });
-    }
-
-    lampArt
-      .clear()
-      .ellipse(0, 0, 170, 30)
-      .fill({ color: "#000000", alpha: 0.4 });
-    solid(120, 120, 0, -14, trimColor, 1, 3);
-    lampArt
-      .ellipse(0, -14, 120, 120 * squash)
-      .fill(trimColor)
-      .stroke({ color: inkColor, width: 3 });
-    solid(110, 80, -14, lensBottom, ceilingColor, 1, 4);
-    solid(96, 96, -60, -70, trimColor, 1, 2);
-
-    for (const [radius, alpha] of [
-      [190, 0.08],
-      [130, 0.12],
-      [80, 0.2],
-    ] as Array<[number, number]>) {
-      lampArt
-        .circle(0, lensCenter, radius)
-        .fill({ color: theme.light, alpha: alpha });
-    }
-
-    for (let index = 0; index < lensBands; index++) {
-      const from: number = index / lensBands;
-      const to: number = (index + 1) / lensBands;
-
-      solid(
-        lensRadius(from),
-        lensRadius(to),
-        lensY(from),
-        lensY(to),
-        index % 2 === 0 ? theme.light : "#dff7ff",
-        0.95,
-        2,
-      );
-    }
-
-    solid(90, 90, capY + 3, capY - 7, trimColor, 1, 3);
-    lampArt
-      .ellipse(0, capY - 7, 90, 90 * squash)
-      .fill(trimColor)
-      .stroke({ color: inkColor, width: 3 });
-
-    const dome: Array<number> = new Array();
-
-    for (let index = 0; index <= arcSteps; index++) {
-      const turn: number = Math.PI + (index / arcSteps) * Math.PI;
-
-      dome.push(Math.cos(turn) * 80, capY - 7 + Math.sin(turn) * domeHeight);
-    }
-
-    for (let index = 1; index < arcSteps; index++) {
-      const turn: number = (index / arcSteps) * Math.PI;
-
-      dome.push(Math.cos(turn) * 80, capY - 7 + Math.sin(turn) * 80 * squash);
-    }
-
-    lampArt
-      .poly(dome)
-      .fill(theme.accent)
-      .poly(dome)
-      .fill(round)
-      .stroke({ color: inkColor, width: 4, join: "round" })
-      .circle(0, capY - 99, 12)
-      .fill(theme.accent)
-      .circle(0, capY - 99, 12)
-      .fill(round)
-      .stroke({ color: inkColor, width: 3 })
-      .circle(-4, capY - 103, 4)
-      .fill({ color: trimColor, alpha: 0.6 });
-  }
-
-  function drawPrisms(glow: number): void {
-    prisms.clear();
-
-    for (let index = 0; index < prismCount; index++) {
-      const turn: number = angle + (index / prismCount) * Math.PI * 2;
-      const facing: number = Math.sin(turn);
-
-      if (facing <= 0) {
-        continue;
-      }
-
-      for (let sample = 0; sample <= prismSamples; sample++) {
-        const along: number = (sample / prismSamples) * prismReach;
-        const radius: number = lensRadius(along);
-        const x: number = Math.cos(turn) * radius;
-        const y: number = lensY(along) + facing * radius * squash;
-
-        if (sample === 0) {
-          prisms.moveTo(x, y);
-        } else {
-          prisms.lineTo(x, y);
-        }
-      }
-
-      prisms.stroke({ color: inkColor, width: 2, alpha: 0.3 * facing });
-    }
-
-    for (const side of [0, Math.PI]) {
-      const turn: number = angle + side;
-      const facing: number = Math.sin(turn);
-      const radius: number = lensRadius(0.5);
-
-      if (facing <= 0) {
-        continue;
-      }
-
-      const x: number = Math.cos(turn) * radius;
-      const y: number = lensCenter + facing * radius * squash;
-
-      prisms
-        .ellipse(x, y, bullseyeRadius * facing, bullseyeRadius)
-        .stroke({ color: trimColor, width: 3, alpha: 0.7 * facing })
-        .ellipse(x, y, 34 * facing, 34)
-        .fill({ color: "#ffffff", alpha: 0.6 + 0.4 * glow })
-        .stroke({ color: inkColor, width: 2, alpha: facing });
-    }
+      .stroke({ color: inkColor, width: 16, alpha: 0.45 });
   }
 
   function drawScope(): void {
@@ -367,10 +174,7 @@ function createLampRoom(): Room {
     legs.sort(
       (first: number, second: number) => Math.sin(first) - Math.sin(second),
     );
-    scopeArt
-      .clear()
-      .ellipse(0, 0, 60, 12)
-      .fill({ color: "#000000", alpha: 0.35 });
+    scopeArt.clear();
 
     for (const turn of legs) {
       const near: boolean = Math.sin(turn) > 0;
@@ -527,10 +331,7 @@ function createLampRoom(): Room {
       height: deskHeight,
     });
 
-    deskArt
-      .clear()
-      .ellipse(0, 0, 130, 18)
-      .fill({ color: "#000000", alpha: 0.35 });
+    deskArt.clear();
 
     for (const out of [-deskDepth / 2 + 6, deskDepth / 2 - 18]) {
       for (const along of [-deskWidth / 2 + 20, deskWidth / 2 - 20]) {
@@ -596,118 +397,80 @@ function createLampRoom(): Room {
       .stroke({ color: theme.accent, width: 5, cap: "round" });
   }
 
-  function drawRail(): void {
-    railArt.clear();
+  function drawWell(theme: Theme): void {
+    const spiral: Spiral = {
+      x: hatchX,
+      base: hatchY,
+      squash: squash,
+      lift: -(stepCount - 1) * stepRise,
+      from: stepCount - wellSteps,
+      to: stepCount - 1,
+      poleBottom: -wellDepth,
+      poleTop: 0,
+    };
 
-    for (let index = 0; index <= 8; index++) {
-      const turn: number = Math.PI + (index * Math.PI) / 8;
-      const x: number = Math.cos(turn) * 115;
-      const y: number = Math.sin(turn) * 36;
-
-      railArt.rect(x - 3, y - 60, 6, 60);
-    }
-
-    railArt.fill(trimColor).stroke({ color: inkColor, width: 2 });
-
-    for (let index = 0; index <= 8; index++) {
-      const turn: number = Math.PI + (index * Math.PI) / 8;
-      const x: number = Math.cos(turn) * 115;
-      const y: number = Math.sin(turn) * 36 - 60;
-
-      if (index === 0) {
-        railArt.moveTo(x, y);
-      } else {
-        railArt.lineTo(x, y);
-      }
-    }
-
-    railArt.stroke({ color: trimColor, width: 5, cap: "round" });
+    well
+      .clear()
+      .ellipse(hatchX, hatchY, wellRadius, wellRadius * squash)
+      .fill(inkColor);
+    wellMask
+      .clear()
+      .ellipse(hatchX, hatchY, wellRadius, wellRadius * squash)
+      .fill("#ffffff");
+    steps.clear();
+    drawSpiral(steps, spiral, theme.accent, ceilingColor);
+    steps
+      .ellipse(hatchX, hatchY, wellRadius, wellRadius * squash)
+      .fill({ color: inkColor, alpha: wellShade });
+    rim
+      .clear()
+      .ellipse(hatchX, hatchY, wellRadius, wellRadius * squash)
+      .stroke({ color: trimColor, width: 4 })
+      .ellipse(hatchX, hatchY, wellRadius + 4, (wellRadius + 4) * squash)
+      .stroke({ color: inkColor, width: 2 });
+    poleArt.clear();
+    drawPole(poleArt, { ...spiral, x: 0, base: 0 }, 0, poleAbove, ceilingColor);
+    poleArt
+      .circle(0, -poleAbove - poleRadius, poleRadius)
+      .fill(theme.accent)
+      .stroke({ color: inkColor, width: 3 });
   }
 
   function paint(): void {
     const theme: Theme = getTheme();
 
     drawWalls(theme);
-    drawLamp(theme);
     drawScope();
     drawTube(theme);
     drawDesk(theme);
-    drawRail();
+    drawWell(theme);
   }
 
-  function update(delta: number): void {
-    const theme: Theme = getTheme();
-
-    boost = Math.max(boost - boost * boostDecay * delta, 0);
-    angle += (spinSpeed + boost) * delta;
-    drizzle.update(delta);
-    beams.clear();
-
-    for (const side of [0, Math.PI]) {
-      const turn: number = angle + side;
-      const across: number = Math.cos(turn);
-      const reach: number = Math.abs(across);
-      const endX: number = lampX + across * beamReach;
-      const spread: number = beamSpread * (0.6 + 0.4 * (1 - reach));
-
-      beams
-        .poly([
-          lampX,
-          beamY - 6,
-          endX,
-          beamY - spread,
-          endX,
-          beamY + spread,
-          lampX,
-          beamY + 6,
-        ])
-        .fill({ color: theme.light, alpha: beamAlpha * Math.sqrt(reach) });
-    }
-
-    const facing: number = Math.max(Math.sin(angle), Math.sin(angle + Math.PI));
-    const glow: number = Math.pow(Math.max(facing, 0), glintSharpness);
-
-    drawPrisms(glow);
-  }
-
-  function poke(act: string): void {
-    if (act === "lamp") {
-      boost = spinBoost;
-    } else if (act === "telescope") {
-      drizzle.strike();
-    }
-  }
-
-  beams.blendMode = "add";
-  back.addChild(walls, drizzle.view, frame, beams);
-  lamp.addChild(lampArt, prisms);
-  lamp.position.set(lampX, lampY);
-  lamp.zIndex = lampY;
+  back.addChild(walls, frame, well, wellMask, steps, rim);
   scope.addChild(scopeArt, tube);
   scope.position.set(scopeX, scopeY);
   scope.zIndex = scopeY;
   desk.addChild(deskArt);
   desk.position.set(deskX, deskY);
   desk.zIndex = deskY;
-  rail.addChild(railArt);
-  rail.position.set(hatchX, hatchY);
-  rail.zIndex = hatchY - 30;
+  steps.mask = wellMask;
+  pole.addChild(poleArt);
+  pole.position.set(hatchX, hatchY);
+  pole.zIndex = hatchY;
   paint();
 
   const spots: Array<Spot> = [
     {
       name: "Stairs down",
       act: "downstairs",
-      area: new Rectangle(hatchX - 125, hatchY - 80, 250, 120),
+      area: new Rectangle(
+        hatchX - wellRadius,
+        hatchY - 110,
+        wellRadius * 2,
+        160,
+      ),
       stand: [hatchX - 140, hatchY + 5],
       tag: [hatchX, hatchY - 100],
-    },
-    {
-      name: "Lamp",
-      act: "lamp",
-      area: new Rectangle(lampX - 120, lampY + capY - 110, 240, -capY + 110),
-      stand: [lampX, 790],
-      tag: [lampX, lampY + capY - 130],
     },
     {
       name: "Telescope",
@@ -730,18 +493,17 @@ function createLampRoom(): Room {
     horizon: horizonY,
     back: back,
     front: front,
-    props: [lamp, scope, desk, rail],
+    props: [scope, desk, pole],
     floor: { x: 800, y: 790, rx: 620, ry: 150 },
     blockers: [
-      { x: lampX, y: lampY, rx: 150, ry: 45 },
-      { x: hatchX, y: hatchY, rx: 125, ry: 42 },
+      { x: hatchX, y: hatchY, rx: wellRadius, ry: wellRadius * squash },
       { x: scopeX, y: scopeY, rx: 60, ry: 22 },
       { x: deskX, y: deskY, rx: 130, ry: 30 },
     ],
     spots: spots,
     entries: new Map([["stairs", [hatchX - 140, hatchY + 5]]]),
-    update: update,
-    poke: poke,
+    update: () => {},
+    poke: () => {},
     paint: paint,
   };
 }

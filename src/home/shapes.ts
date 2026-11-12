@@ -17,6 +17,17 @@ type Solid = {
   height: number; // units
 };
 
+type Spiral = {
+  x: number; // units
+  base: number; // units
+  squash: number;
+  lift: number; // units
+  from: number;
+  to: number;
+  poleBottom: number; // units
+  poleTop: number; // units
+};
+
 type Curve = {
   wallY: (x: number, y: number) => number;
   squeeze: (x: number) => number;
@@ -32,6 +43,13 @@ const topShine: number = 0.15;
 const bandLeft: number = -1000; // units
 const bandRight: number = 2600; // units
 const bandStep: number = 20; // units
+const stepCount: number = 11;
+const stepRise: number = 58; // units
+const stepReach: number = 125; // units
+const stepTurn: number = 0.78; // rad
+const stepThick: number = 12; // units
+const poleRadius: number = 10; // units
+const treadSamples: number = 8;
 
 function frustum(
   graphics: Graphics,
@@ -168,6 +186,144 @@ function drawSolid(
   }
 }
 
+function drawSpiral(
+  graphics: Graphics,
+  spiral: Spiral,
+  accent: string,
+  far: string,
+): void {
+  const order: Array<number> = new Array();
+
+  function point(
+    angle: number,
+    radius: number,
+    height: number,
+  ): [number, number] {
+    return [
+      spiral.x + Math.sin(angle) * radius,
+      spiral.base + Math.cos(angle) * radius * spiral.squash - height,
+    ];
+  }
+
+  function tread(index: number): void {
+    const middle: number = index * stepTurn;
+    const from: number = middle - stepTurn / 2;
+    const to: number = middle + stepTurn / 2;
+    const height: number = spiral.lift + index * stepRise;
+    const near: boolean = Math.cos(middle) >= 0;
+    const edge: string = near ? accent : inkColor;
+    const angles: Array<number> = new Array();
+
+    for (let sample = 0; sample <= treadSamples; sample++) {
+      angles.push(from + (sample / treadSamples) * stepTurn);
+    }
+
+    const facing: Array<number> = angles.filter(
+      (angle: number) => Math.cos(angle) > 0,
+    );
+
+    if (facing.length >= 2) {
+      const band: Array<number> = new Array();
+
+      for (const angle of facing) {
+        band.push(...point(angle, stepReach, height));
+      }
+
+      for (const angle of [...facing].reverse()) {
+        band.push(...point(angle, stepReach, height - stepThick));
+      }
+
+      graphics.poly(band).fill(edge).stroke({ color: inkColor, width: 3 });
+    }
+
+    for (const [angle, facingY] of [
+      [from, Math.sin(from)],
+      [to, -Math.sin(to)],
+    ] as Array<[number, number]>) {
+      if (facingY <= 0) {
+        continue;
+      }
+
+      const riser: Array<number> = [
+        ...point(angle, poleRadius, height),
+        ...point(angle, stepReach, height),
+        ...point(angle, stepReach, height - stepThick),
+        ...point(angle, poleRadius, height - stepThick),
+      ];
+
+      graphics
+        .poly(riser)
+        .fill(edge)
+        .poly(riser)
+        .fill({ color: inkColor, alpha: sideShade })
+        .stroke({ color: inkColor, width: 3, join: "round" });
+    }
+
+    const top: Array<number> = [...point(from, poleRadius, height)];
+
+    for (const angle of angles) {
+      top.push(...point(angle, stepReach, height));
+    }
+
+    top.push(...point(to, poleRadius, height));
+
+    graphics
+      .poly(top)
+      .fill(near ? trimColor : far)
+      .stroke({ color: inkColor, width: 3, join: "round" });
+  }
+
+  for (let index = spiral.from; index <= spiral.to; index++) {
+    order.push(index);
+  }
+
+  order.sort(
+    (first: number, second: number) =>
+      Math.cos(first * stepTurn) - Math.cos(second * stepTurn),
+  );
+
+  for (const index of order) {
+    if (Math.cos(index * stepTurn) < 0) {
+      tread(index);
+    }
+  }
+
+  drawPole(graphics, spiral, spiral.poleBottom, spiral.poleTop, far);
+
+  for (const index of order) {
+    if (Math.cos(index * stepTurn) >= 0) {
+      tread(index);
+    }
+  }
+}
+
+function drawPole(
+  graphics: Graphics,
+  spiral: Spiral,
+  bottom: number,
+  top: number,
+  far: string,
+): void {
+  const height: number = top - bottom;
+  const y: number = spiral.base - top;
+
+  graphics
+    .ellipse(
+      spiral.x,
+      spiral.base - bottom,
+      poleRadius * 2,
+      poleRadius * 2 * spiral.squash,
+    )
+    .fill(far)
+    .stroke({ color: inkColor, width: 2 })
+    .rect(spiral.x - poleRadius, y, poleRadius * 2, height)
+    .fill(trimColor)
+    .rect(spiral.x + 2, y, poleRadius - 2, height)
+    .fill({ color: inkColor, alpha: sideShade })
+    .rect(spiral.x - poleRadius, y, poleRadius * 2, height)
+    .stroke({ color: inkColor, width: 3 });
+}
+
 function createCurve(
   centerX: number,
   centerY: number,
@@ -222,6 +378,12 @@ function createCurve(
 
 export {
   arcSteps,
+  stepCount,
+  stepRise,
+  stepReach,
+  poleRadius,
+  drawSpiral,
+  drawPole,
   sideShade,
   frustum,
   project,
@@ -229,4 +391,4 @@ export {
   drawSolid,
   createCurve,
 };
-export type { Placement, Solid, Curve };
+export type { Placement, Solid, Spiral, Curve };

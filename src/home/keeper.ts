@@ -1,13 +1,13 @@
 import { Circle, Container, FillGradient, Graphics, Rectangle } from "pixi.js";
 import { getTheme, type Theme } from "../theme/theme";
-import { createDrizzle, type Drizzle } from "./weather";
 import { drawEmote } from "./emotes";
 import type { Room, Spot } from "./room";
 import {
   drawSolid,
+  drawSpiral,
+  stepCount,
   faceMatrix,
   frustum,
-  sideShade,
   type Placement,
   type Solid,
 } from "./shapes";
@@ -58,15 +58,9 @@ const clockY: number = 230; // units
 const clockRadius: number = 46; // units
 const radioX: number = 1060; // units
 const stairsX: number = 1380; // units
-const stepCount: number = 11;
-const stepRise: number = 58; // units
-const stepReach: number = 125; // units
-const stepTurn: number = 0.78; // rad
 const stairsBase: number = 630; // units
 const firstTread: number = 40; // units
-const stepThick: number = 12; // units
-const poleRadius: number = 10; // units
-const treadSamples: number = 8;
+const stairsTop: number = 34; // units
 const lanternX: number = 600; // units
 const lanternY: number = 110; // units
 const lanternBars: number = 4;
@@ -251,12 +245,7 @@ function createKeeperRoom(): Room {
   const furniture: Graphics = new Graphics();
   const view: Container = new Container();
   const hole: Graphics = new Graphics();
-  const windowMask: Graphics = new Graphics();
   const frame: Graphics = new Graphics();
-  const drizzle: Drizzle = createDrizzle(
-    new Rectangle(-windowRadius - 20, -windowRadius - 20, 280, 280),
-    0,
-  );
   const hands: Graphics = new Graphics();
   const dial: Graphics = new Graphics();
   const shelfBody: Graphics = new Graphics();
@@ -349,8 +338,8 @@ function createKeeperRoom(): Room {
       walls.ellipse(floorX, floorY, floorRadiusX * share, floorRadiusY * share);
     }
 
-    for (let index = 1; index < 10; index++) {
-      const angle: number = Math.PI + (index * Math.PI) / 10;
+    for (let index = 0; index < 20; index++) {
+      const angle: number = (index * Math.PI) / 10;
 
       walls
         .moveTo(floorX, floorY)
@@ -494,10 +483,6 @@ function createKeeperRoom(): Room {
     const glass = (points: Array<number>): Array<number> =>
       bend(points, windowX, true, windowX, windowY);
 
-    windowMask
-      .clear()
-      .poly(glass(ring(0, 0, windowRadius)))
-      .fill("#ffffff");
     hole
       .clear()
       .poly(glass(ring(0, 0, windowRadius)))
@@ -636,123 +621,23 @@ function createKeeperRoom(): Room {
 
   function drawStairs(current: Theme): void {
     const squash: number = floorRadiusY / floorRadiusX;
-    const order: Array<number> = new Array();
 
-    function point(
-      angle: number,
-      radius: number,
-      height: number,
-    ): [number, number] {
-      return [
-        stairsX + Math.sin(angle) * radius,
-        stairsBase + Math.cos(angle) * radius * squash - height,
-      ];
-    }
-
-    function tread(index: number): void {
-      const middle: number = index * stepTurn;
-      const from: number = middle - stepTurn / 2;
-      const to: number = middle + stepTurn / 2;
-      const height: number = firstTread + index * stepRise;
-      const near: boolean = Math.cos(middle) >= 0;
-      const edge: string = near ? current.accent : inkColor;
-      const angles: Array<number> = new Array();
-
-      for (let sample = 0; sample <= treadSamples; sample++) {
-        angles.push(from + (sample / treadSamples) * stepTurn);
-      }
-
-      const facing: Array<number> = angles.filter(
-        (angle: number) => Math.cos(angle) > 0,
-      );
-
-      if (facing.length >= 2) {
-        const band: Array<number> = new Array();
-
-        for (const angle of facing) {
-          band.push(...point(angle, stepReach, height));
-        }
-
-        for (const angle of [...facing].reverse()) {
-          band.push(...point(angle, stepReach, height - stepThick));
-        }
-
-        stairs.poly(band).fill(edge).stroke({ color: inkColor, width: 3 });
-      }
-
-      for (const [angle, facingY] of [
-        [from, Math.sin(from)],
-        [to, -Math.sin(to)],
-      ] as Array<[number, number]>) {
-        if (facingY <= 0) {
-          continue;
-        }
-
-        const riser: Array<number> = [
-          ...point(angle, poleRadius, height),
-          ...point(angle, stepReach, height),
-          ...point(angle, stepReach, height - stepThick),
-          ...point(angle, poleRadius, height - stepThick),
-        ];
-
-        stairs
-          .poly(riser)
-          .fill(edge)
-          .poly(riser)
-          .fill({ color: inkColor, alpha: sideShade })
-          .stroke({ color: inkColor, width: 3, join: "round" });
-      }
-
-      const top: Array<number> = [...point(from, poleRadius, height)];
-
-      for (const angle of angles) {
-        top.push(...point(angle, stepReach, height));
-      }
-
-      top.push(...point(to, poleRadius, height));
-
-      stairs
-        .poly(top)
-        .fill(near ? trimColor : shelfColor)
-        .stroke({ color: inkColor, width: 3, join: "round" });
-    }
-
-    for (let index = 0; index < stepCount; index++) {
-      order.push(index);
-    }
-
-    order.sort(
-      (first: number, second: number) =>
-        Math.cos(first * stepTurn) - Math.cos(second * stepTurn),
+    stairs.clear();
+    drawSpiral(
+      stairs,
+      {
+        x: stairsX,
+        base: stairsBase,
+        squash: squash,
+        lift: firstTread,
+        from: 0,
+        to: stepCount - 1,
+        poleBottom: 0,
+        poleTop: stairsBase - stairsTop,
+      },
+      current.accent,
+      shelfColor,
     );
-    stairs.clear().ellipse(stairsX, 34, 150, 26).fill(inkColor);
-
-    for (const index of order) {
-      if (Math.cos(index * stepTurn) >= 0) {
-        continue;
-      }
-
-      tread(index);
-    }
-
-    stairs
-      .ellipse(stairsX, stairsBase, poleRadius * 2, poleRadius * 2 * squash)
-      .fill(shelfColor)
-      .stroke({ color: inkColor, width: 2 })
-      .rect(stairsX - poleRadius, 34, poleRadius * 2, stairsBase - 34)
-      .fill(trimColor)
-      .rect(stairsX + 2, 34, poleRadius - 2, stairsBase - 34)
-      .fill({ color: inkColor, alpha: sideShade })
-      .rect(stairsX - poleRadius, 34, poleRadius * 2, stairsBase - 34)
-      .stroke({ color: inkColor, width: 3 });
-
-    for (const index of order) {
-      if (Math.cos(index * stepTurn) < 0) {
-        continue;
-      }
-
-      tread(index);
-    }
   }
 
   function drawLantern(): void {
@@ -924,7 +809,6 @@ function createKeeperRoom(): Room {
 
   function update(delta: number): void {
     time += delta;
-    drizzle.update(delta);
     drawHands();
     lantern.rotation = Math.sin(time * sway * Math.PI * 2) * 0.03;
     drawGlass(Math.sin(time * twistRate * Math.PI * 2) * twistReach);
@@ -957,9 +841,7 @@ function createKeeperRoom(): Room {
   }
 
   function poke(act: string): void {
-    if (act === "window") {
-      drizzle.strike();
-    } else if (act === "radio:on" || act === "radio:off") {
+    if (act === "radio:on" || act === "radio:off") {
       radioOn = act === "radio:on";
       noteClock = 0;
       drawDial();
@@ -967,8 +849,7 @@ function createKeeperRoom(): Room {
   }
 
   view.position.set(windowX, windowY);
-  view.addChild(drizzle.view, windowMask, frame);
-  drizzle.view.mask = windowMask;
+  view.addChild(frame);
   hole.position.set(windowX, windowY);
   walls.setMask({ mask: hole, inverse: true });
   lantern.addChild(lanternFoot, lanternGlass, lanternArt);

@@ -2,6 +2,8 @@ import {
   Application,
   Container,
   Graphics,
+  Matrix,
+  RenderTexture,
   Text,
   Texture,
   UPDATE_PRIORITY,
@@ -594,6 +596,13 @@ const home: Home = createHome(
 const help: Help = createHelp(app, voiceSound);
 const toast: Toast = createToast(app);
 const lighthouseSpot: Container = new Container();
+const sceneryTexture: RenderTexture = RenderTexture.create({
+  width: app.screen.width,
+  height: app.screen.height,
+  resolution: app.renderer.resolution,
+});
+
+home.setScenery(sceneryTexture);
 
 function zoomWorld(amount: number, door: Point): void {
   world.pivot.set(door.x, door.y);
@@ -602,16 +611,6 @@ function zoomWorld(amount: number, door: Point): void {
     door.y + (app.screen.height / 2 - door.y) * amount,
   );
   world.scale.set(Math.pow(homeZoom, amount));
-}
-
-function placeWorld(): void {
-  world.pivot.set(0, 0);
-  world.scale.set(1);
-  world.position.set(
-    0,
-    (home.horizon() - app.screen.height * (1 - seaHeight / 100)) *
-      (1 - home.gaze()),
-  );
 }
 
 function resetWorld(): void {
@@ -639,8 +638,7 @@ function enterHome(): void {
     );
     indoors = progress > homeReveal;
   }).then(() => {
-    ocean.setLighthouseShown(false);
-    placeWorld();
+    world.visible = false;
     home.setActive(true);
     screen = "home";
   });
@@ -652,7 +650,7 @@ function leaveHome(): void {
   screen = "rising";
   indoors = false;
   home.setActive(false);
-  ocean.setLighthouseShown(true);
+  world.visible = true;
   Promise.all([
     tween(app.ticker, homeLeaveTime, (progress: number) => {
       zoomWorld(1 - homeEasing(progress), door);
@@ -670,6 +668,37 @@ function leaveHome(): void {
     navigate("menu");
     screen = "main";
   });
+}
+
+function captureScenery(): void {
+  const worldShown: boolean = world.visible;
+  const menuShown: boolean = menu.visible;
+  const landingShown: boolean = landing.visible;
+  const playShown: boolean = playfield.view.visible;
+
+  if (
+    sceneryTexture.width !== app.screen.width ||
+    sceneryTexture.height !== app.screen.height
+  ) {
+    sceneryTexture.resize(app.screen.width, app.screen.height);
+  }
+
+  world.visible = true;
+  menu.visible = false;
+  landing.visible = false;
+  playfield.view.visible = false;
+  ocean.setSceneryOnly(true);
+  app.renderer.render({
+    container: world,
+    target: sceneryTexture,
+    clear: true,
+    transform: new Matrix(),
+  });
+  ocean.setSceneryOnly(false);
+  world.visible = worldShown;
+  menu.visible = menuShown;
+  landing.visible = landingShown;
+  playfield.view.visible = playShown;
 }
 
 lighthouseSpot.eventMode = "static";
@@ -691,8 +720,8 @@ world.addChildAt(lighthouseSpot, world.getChildIndex(landing));
 app.ticker.add(() => {
   const open: boolean = screen === "main" && menuOpen;
 
-  if (screen === "home") {
-    placeWorld();
+  if (home.view.visible) {
+    captureScenery();
   }
 
   if (!open && lighthouseSpot.visible && doorHover && screen === "main") {

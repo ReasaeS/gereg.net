@@ -4,8 +4,10 @@ import {
   Graphics,
   Point,
   Rectangle,
+  Sprite,
   Text,
   type Application,
+  type Texture,
   type FederatedPointerEvent,
   type Ticker,
 } from "pixi.js";
@@ -28,6 +30,7 @@ import {
 } from "./room";
 import { createKeeperRoom } from "./keeper";
 import { createLampRoom } from "./lamproom";
+import { seaHeight } from "../worlds/vivid";
 import { createAvatar, type Avatar } from "./avatar";
 import { createWalker, type Walker } from "./walker";
 import { createBubble, type Bubble } from "./bubble";
@@ -46,8 +49,7 @@ type Home = {
   setShown: (amount: number) => void;
   back: () => boolean;
   subject: () => string;
-  horizon: () => number;
-  gaze: () => number;
+  setScenery: (texture: Texture) => void;
 };
 
 type Target = Spot | "plip";
@@ -76,7 +78,6 @@ const greetDelay: number = 0.9; // s
 const reactDelay: number = 0.4; // s
 const reactRange: number = 520; // units
 const moodTime: number = 2.2; // s
-const gazeSmoothing: number = 0.35; // s
 const interactRange: number = 230; // units
 const switchTime: number = 700; // ms
 const switchShift: number = 70; // units
@@ -109,11 +110,11 @@ const popPitch: number = 1.5;
 const replyPitch: number = 1.2;
 const firstGreeting: string =
   "Oh, a visitor! Come in, come in. Make yourself at home.";
-const returnGreeting: string = "Welcome back! I kept the lamp on for you.";
+const returnGreeting: string = "Welcome back! I saved you the best view.";
 const chatter: Array<string> = [
   "This is my lighthouse. Well, I found it empty and nobody told me to leave.",
   "On a clear night you can see the whole sea from up here. There are no clear nights.",
-  "I keep the lamp company. It's warm, and it never tells me to leave.",
+  "I like it up here. The rain sounds closest from the top.",
   "Press E to make a face at me. I'll make one back!",
   "The radio downstairs plays whatever the menu is playing. Click it if you'd rather listen to the rain.",
   "The bookshelf downstairs is full of tips. I've read them all twice.",
@@ -122,13 +123,8 @@ const chatter: Array<string> = [
 ];
 const windowLines: Array<string> = [
   "Rain, rain and more rain.",
-  "Lightning over the waves. The glass rattles a little.",
-  "The beam from upstairs sweeps across the water.",
-];
-const lampLines: Array<string> = [
-  "The lens spins faster for a moment, then settles.",
-  "Warm to the touch. It never goes out.",
-  "Its light reaches all the way to the horizon.",
+  "The waves roll in, one after another.",
+  "The glass is cold. The rain doesn't seem to mind.",
 ];
 const scopeLines: Array<string> = [
   "A witch on a broom, far out over the sea.",
@@ -161,6 +157,8 @@ function createHome(
   const hotLayer: Container = new Container();
   const overLayer: Container = new Container();
   const cover: Graphics = new Graphics();
+  const sceneryBack: Graphics = new Graphics();
+  const scenery: Sprite = new Sprite();
   const hud: Container = new Container();
   const keeper: Room = createKeeperRoom();
   const lamp: Room = createLampRoom();
@@ -212,16 +210,12 @@ function createHome(
   let hudScale: number = 0;
   let tagLabel: string = "";
   let gazing: Target | null = null;
-  const gaze: Glide = createGlide(
-    0,
-    (value: number) => {
-      stage.alpha = 1 - value;
-      hud.alpha = 1 - value;
-      stage.visible = value < 1;
-      hud.visible = value < 1;
-    },
-    gazeSmoothing,
-  );
+  const gaze: Glide = createGlide(0, (value: number) => {
+    stage.alpha = 1 - value;
+    hud.alpha = 1 - value;
+    stage.visible = value < 1;
+    hud.visible = value < 1;
+  });
 
   function ready(): boolean {
     return active && !switching && gazing === null;
@@ -234,16 +228,20 @@ function createHome(
     hovered = null;
     keyboard.clear();
     avatar.walker.stop();
-    gaze.set(1);
+    gaze.snap(1);
   }
 
   function stopGaze(): void {
     const target: Target | null = gazing;
 
-    gazing = null;
-    gaze.set(0);
+    if (target === null) {
+      return;
+    }
 
-    if (target !== null && target !== "plip") {
+    gazing = null;
+    gaze.snap(0);
+
+    if (target !== "plip") {
       caption(target, pick(scopeLines));
     }
   }
@@ -402,8 +400,6 @@ function createHome(
       switchRoom(lamp, "stairs");
     } else if (target.act === "downstairs") {
       switchRoom(keeper, "stairs");
-    } else if (target.act === "lamp") {
-      caption(target, pick(lampLines));
     } else if (target.act === "telescope") {
       startGaze(target);
     } else if (target.act === "log") {
@@ -702,6 +698,14 @@ function createHome(
     );
     wheel.position.copyFrom(emoteButton.position);
     cover.clear().rect(0, 0, width, height).fill("#000000");
+    sceneryBack.clear().rect(0, 0, width, height).fill(getTheme().seaMiddle);
+    scenery.setSize(width, height);
+    scenery.position.set(
+      0,
+      (stage.toGlobal(new Point(0, room.horizon)).y -
+        height * (1 - seaHeight / 100)) *
+        (1 - gaze.value()),
+    );
     view.hitArea = new Rectangle(0, 0, width, height);
 
     if (scale !== stageScale) {
@@ -829,7 +833,7 @@ function createHome(
   hud.addChild(wheel, emoteButton);
   cover.alpha = 0;
   cover.eventMode = "none";
-  view.addChild(stage, cover, hud);
+  view.addChild(sceneryBack, scenery, stage, cover, hud);
   view.visible = false;
   view.alpha = 0;
   view.eventMode = "none";
@@ -966,7 +970,7 @@ function createHome(
         closeWheel();
         hovered = null;
         gazing = null;
-        gaze.set(0);
+        gaze.snap(0);
       }
     },
     setShown: (amount: number) => {
@@ -987,8 +991,9 @@ function createHome(
       return false;
     },
     subject: () => room.subject,
-    horizon: () => stage.toGlobal(new Point(0, room.horizon)).y,
-    gaze: gaze.value,
+    setScenery: (texture: Texture) => {
+      scenery.texture = texture;
+    },
   };
 }
 
