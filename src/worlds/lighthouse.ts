@@ -2,13 +2,15 @@ import {
   Container,
   FillGradient,
   Graphics,
+  Point,
+  Rectangle,
   Sprite,
-  type Point,
   type Renderer,
   type Texture,
 } from "pixi.js";
-import { onTheme, type Theme } from "../theme/theme";
+import { getTheme, onTheme, type Theme } from "../theme/theme";
 import { springStep, type Spring } from "../effects/tween/tween";
+import { createGlide, mix, type Glide } from "../ui/motion";
 
 type Lighthouse = {
   view: Container;
@@ -22,6 +24,9 @@ type Lighthouse = {
   ) => void;
   reset: () => void;
   retract: () => void;
+  setHovered: (hovered: boolean) => void;
+  bounds: () => Rectangle;
+  door: () => Point;
 };
 
 const unitHeight: number = 100;
@@ -53,6 +58,12 @@ const flareMinAlpha: number = 0.25;
 const flareMaxAlpha: number = 0.9;
 const beamCutoffAngle: number = 0.26; // rad from vertical
 const beamFadeAngle: number = 0.6; // rad from vertical
+const doorBottom: number = -5; // units
+const doorHeight: number = 12; // units
+const doorWidth: number = 7; // units
+const doorGlowSize: number = 0.22; // of lighthouse height
+const doorGlowAlpha: number = 0.8;
+const doorSmoothing: number = 0.12; // s
 
 function createBeamTexture(renderer: Renderer): Texture {
   const shape: Graphics = new Graphics();
@@ -153,27 +164,65 @@ function drawTower(tower: Graphics, theme: Theme): void {
     .fill(theme.menuSelected);
 }
 
+function drawDoor(door: Graphics, lit: number): void {
+  const theme: Theme = getTheme();
+  const half: number = doorWidth / 2;
+  const top: number = doorBottom - doorHeight + half;
+
+  door
+    .clear()
+    .rect(-half - 1.5, doorBottom, doorWidth + 3, 1.5)
+    .fill(theme.menuSelected)
+    .moveTo(-half, doorBottom)
+    .lineTo(-half, top)
+    .arc(0, top, half, Math.PI, 0)
+    .lineTo(half, doorBottom)
+    .closePath()
+    .fill(mix(theme.menuSelected, windowColor, lit))
+    .stroke({ color: theme.menuSelected, width: 1.2 })
+    .circle(half * 0.45, doorBottom - doorHeight * 0.4, 0.7)
+    .fill(mix(windowColor, theme.menuSelected, lit));
+}
+
 function createLighthouse(
   renderer: Renderer,
   glowTexture: Texture,
 ): Lighthouse {
   const view: Container = new Container();
+  const towerView: Container = new Container();
   const tower: Graphics = new Graphics();
+  const door: Graphics = new Graphics();
+  const doorGlow: Sprite = new Sprite(glowTexture);
   const flare: Sprite = new Sprite(glowTexture);
   const beam: Sprite = new Sprite(createBeamTexture(renderer));
   const aim: Spring = { value: 0, velocity: 0 };
   const reach: Spring = { value: 0, velocity: 0 };
   let time: number = 0;
   let retracting: boolean = false;
+  const lit: Glide = createGlide(
+    0,
+    (value: number) => {
+      drawDoor(door, value);
+      doorGlow.alpha = value * doorGlowAlpha;
+      doorGlow.visible = value > 0;
+    },
+    doorSmoothing,
+  );
 
+  doorGlow.anchor.set(0.5);
+  doorGlow.blendMode = "add";
+  doorGlow.tint = windowColor;
+  doorGlow.visible = false;
+  towerView.addChild(tower, door);
   flare.anchor.set(0.5);
   flare.blendMode = "add";
   beam.anchor.set(0, 0.5);
   beam.blendMode = "add";
-  view.addChild(tower, flare);
+  view.addChild(doorGlow, towerView, flare);
 
   onTheme((theme: Theme) => {
     drawTower(tower, theme);
+    drawDoor(door, lit.value());
     flare.tint = theme.light;
     beam.tint = theme.light;
   });
@@ -219,8 +268,14 @@ function createLighthouse(
       );
     }
 
-    tower.scale.set(scale);
-    tower.position.set(lampX, base + lighthouseSink * scale);
+    towerView.scale.set(scale);
+    towerView.position.set(lampX, base + lighthouseSink * scale);
+    doorGlow.position.set(
+      lampX,
+      base + (lighthouseSink + doorBottom - doorHeight / 2) * scale,
+    );
+    doorGlow.width = height * lighthouseHeight * doorGlowSize;
+    doorGlow.height = doorGlow.width;
     flare.position.set(lampX, lampHeight);
     flare.width = flareSize;
     flare.height = flareSize;
@@ -263,6 +318,13 @@ function createLighthouse(
     retract: () => {
       retracting = true;
     },
+    setHovered: (hovered: boolean) => lit.set(hovered ? 1 : 0),
+    bounds: () => towerView.getBounds().rectangle,
+    door: () =>
+      towerView.toGlobal(
+        new Point(0, doorBottom - doorHeight / 2),
+        new Point(),
+      ),
   };
 }
 

@@ -6,6 +6,7 @@ import {
   ParticleContainer,
   Point,
   Sprite,
+  type Rectangle,
   type Application,
   type Renderer,
   type Texture,
@@ -59,6 +60,10 @@ type Vivid = {
   setHoverBlocker: (blocker: (point: Point) => boolean) => void;
   resetBeam: () => void;
   retractBeam: () => void;
+  setLighthouseHovered: (hovered: boolean) => void;
+  lighthouseBounds: () => Rectangle;
+  lighthouseDoor: () => Point;
+  setLighthouseShown: (shown: boolean) => void;
   view: Container;
   scene: Container;
   setDepth: (depth: number) => void;
@@ -740,6 +745,13 @@ function createVivid(app: Application): Vivid {
     },
     resetBeam: lighthouse.reset,
     retractBeam: lighthouse.retract,
+    setLighthouseHovered: lighthouse.setHovered,
+    lighthouseBounds: lighthouse.bounds,
+    lighthouseDoor: lighthouse.door,
+    setLighthouseShown: (shown: boolean) => {
+      lighthouse.view.visible = shown;
+      lighthouse.beam.visible = shown;
+    },
     setHoverBlocker: (blocker: (point: Point) => boolean) => {
       hoverBlocker = blocker;
     },

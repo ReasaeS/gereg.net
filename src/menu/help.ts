@@ -16,7 +16,14 @@ import { createMascot, mascotName, type Mascot } from "./mascot";
 import { lessonFor } from "./lessons";
 
 type Topic =
-  "menu" | "play" | "customise" | "gallery" | "editor" | "config" | "stats";
+  | "menu"
+  | "play"
+  | "customise"
+  | "gallery"
+  | "editor"
+  | "config"
+  | "stats"
+  | "lighthouse";
 
 function playRows(): Array<[string, string]> {
   const names: Array<string> = [
@@ -137,6 +144,19 @@ const topics: Map<Topic, Array<[string, string]>> = new Map([
       ["Left / Right", "Browse achievements"],
       ["R", "Reset stats and achievements"],
       ["Esc", "Back"],
+    ],
+  ],
+  [
+    "lighthouse",
+    [
+      ["Click", "Move, or use what you click"],
+      ["Arrows / WASD", "Move"],
+      ["Enter / Space", "Use what's nearby"],
+      ["E", "Emote wheel"],
+      ["1 - 8", "Quick emote"],
+      ["Esc", "Leave the lighthouse"],
+      ["F7", "Mute or unmute"],
+      ["F8", "Save a screenshot"],
     ],
   ],
   [

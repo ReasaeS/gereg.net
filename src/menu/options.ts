@@ -19,11 +19,13 @@ import {
 import { getTheme } from "../theme/theme";
 import { createShadowText } from "../ui/text";
 import { downKeys, upKeys } from "../game/input";
+import { seaHeight } from "../worlds/vivid";
 
 const fontPath: string = "./fonts/BarlowCondensed-BlackItalic.ttf";
 const fontSize: number = 132; // px
 const menuLeft: number = 52; // vw
-const menuTop: number = 20; // vh
+const menuTopGap: number = 6; // vh
+const menuSeaGap: number = 4; // vh
 const menuReach: number = 44; // vw
 const menuReference: number = 1000; // px
 const menuMinScale: number = 0.4;
@@ -52,6 +54,7 @@ const names: Array<string> = [
   "create",
   "stats",
   "config",
+  "lighthouse",
   "credits",
 ];
 
@@ -61,8 +64,7 @@ type MenuItem = {
   label: Text;
   scale: Spring;
   enter: number; // px
-  baseX: number; // px
-  baseY: number; // px
+  shown: number;
 };
 
 type Highlight = {
@@ -103,7 +105,12 @@ function menuHovered(point: Point): boolean {
   for (let index = 0; index < items.length; index++) {
     const view: Container = items[index]!.view;
 
-    if (!view.parent?.visible || view.alpha === 0 || !view.hitArea) {
+    if (
+      !view.parent?.visible ||
+      !view.visible ||
+      view.alpha === 0 ||
+      !view.hitArea
+    ) {
       continue;
     }
 
@@ -158,8 +165,7 @@ function createItem(name: string, index: number): MenuItem {
     label: label,
     scale: { value: 1, velocity: 0 },
     enter: enterDistance,
-    baseX: itemShift * index,
-    baseY: itemSpacing * index,
+    shown: 0,
   };
 
   label.anchor.set(0, 0.5);
@@ -219,24 +225,56 @@ function drawHighlight(graphics: Graphics, height: number): void {
     .fill(getTheme().highlight);
 }
 
+function labelWidth(): number {
+  return Math.max(...items.map((item: MenuItem) => item.label.width));
+}
+
+function labelHeight(): number {
+  return Math.max(...items.map((item: MenuItem) => item.label.height));
+}
+
 function menuWidth(): number {
   let width: number = 0;
 
-  for (let index = 0; index < items.length; index++) {
-    const item: MenuItem = items[index]!;
+  for (let slot = 0; slot < items.length; slot++) {
     width = Math.max(
       width,
-      item.baseX + item.label.width * selectScale + highlightPadding * 3,
+      itemShift * slot + labelWidth() * selectScale + highlightPadding * 3,
     );
   }
 
   return width;
 }
 
+function menuSpan(): [number, number] {
+  const sine: number = Math.sin(menuTilt);
+  const cosine: number = Math.cos(menuTilt);
+  let top: number = Infinity;
+  let bottom: number = -Infinity;
+
+  for (let slot = 0; slot < items.length; slot++) {
+    const half: number = (labelHeight() * selectScale) / 2 + bobAmount;
+    const left: number = itemShift * slot - highlightPadding * 1.4;
+    const right: number =
+      itemShift * slot + labelWidth() * selectScale + highlightPadding * 1.8;
+
+    for (const x of [left, right]) {
+      for (const y of [itemSpacing * slot - half, itemSpacing * slot + half]) {
+        const turned: number = x * sine + y * cosine;
+
+        top = Math.min(top, turned);
+        bottom = Math.max(bottom, turned);
+      }
+    }
+  }
+
+  return [top, bottom];
+}
+
 function resetButtons(): void {
   for (let index = 0; index < items.length; index++) {
     items[index]!.enter = enterDistance;
-    items[index]!.view.alpha = 0;
+    items[index]!.shown = 0;
   }
 }
 
@@ -252,7 +290,7 @@ function enterButtons(ticker: Ticker): Promise<void> {
       );
 
       item.enter = enterDistance * (1 - enterEasing(local));
-      item.view.alpha = Math.min(local * 2, 1);
+      item.shown = Math.min(local * 2, 1);
     }
   });
 }
@@ -269,7 +307,7 @@ function leaveButtons(ticker: Ticker): Promise<void> {
       );
 
       item.enter = enterDistance * local * local * local;
-      item.view.alpha = 1 - local;
+      item.shown = 1 - local;
     }
   });
 }
@@ -306,6 +344,7 @@ async function createButtons(app: Application): Promise<Container> {
   }
 
   const width: number = menuWidth();
+  const [spanTop, spanBottom] = menuSpan();
   const textHeight: number = items[0]?.label.height ?? fontSize;
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -330,16 +369,20 @@ async function createButtons(app: Application): Promise<Container> {
     const delta: number = frameDelta(ticker);
     const screenWidth: number = app.screen.width;
     const screenHeight: number = app.screen.height;
+    const bandTop: number = (screenHeight * menuTopGap) / 100;
+    const bandBottom: number =
+      (screenHeight * (100 - seaHeight - menuSeaGap)) / 100;
     const scale: number = Math.min(
       Math.max(screenHeight / menuReference, menuMinScale),
       (screenWidth * menuReach) / 100 / width,
       menuMaxScale,
+      (bandBottom - bandTop) / (spanBottom - spanTop),
     );
 
     time += delta;
     root.position.set(
       (screenWidth * menuLeft) / 100,
-      (screenHeight * menuTop) / 100,
+      (bandTop + bandBottom - (spanTop + spanBottom) * scale) / 2,
     );
     root.scale.set(scale);
     root.rotation = menuTilt;
@@ -357,7 +400,12 @@ async function createButtons(app: Application): Promise<Container> {
         springDamping,
         delta,
       );
-      item.view.position.set(item.baseX + item.enter, item.baseY + bob);
+      item.view.position.set(
+        itemShift * index + item.enter,
+        itemSpacing * index + bob,
+      );
+      item.view.alpha = item.shown;
+      item.view.visible = item.shown > 0.01;
       item.view.scale.set(item.scale.value);
       item.label.tint = chosen ? getTheme().menuSelected : getTheme().menuText;
       item.label.alpha = chosen ? 1 : idleAlpha;

@@ -5,8 +5,9 @@ import {
   Text,
   Texture,
   UPDATE_PRIORITY,
+  Rectangle,
   type BindGroup,
-  type Rectangle,
+  type Point,
   type Ticker,
 } from "pixi.js";
 import {
@@ -103,6 +104,7 @@ import { createHelp, type Help, type Topic } from "./menu/help";
 import { createToast, type Toast } from "./ui/toast";
 import { onUnlock, type Achievement } from "./game/achievements";
 import type { Option } from "./ui/widgets";
+import { createHome, type Home } from "./home/home";
 
 const rainEnabled: boolean = true;
 const resetWarning: string =
@@ -152,6 +154,7 @@ const destinations: Array<Option<string>> = [
   { value: "create", label: "Create" },
   { value: "stats", label: "Stats" },
   { value: "config", label: "Config" },
+  { value: "lighthouse", label: "Lighthouse" },
   { value: "credits", label: "Credits" },
 ];
 const routeSpeed: number = 10;
@@ -159,6 +162,13 @@ const routeLimit: number = 8000; // ms
 const backLimit: number = 12;
 const zoomDuration: number = 1100; // ms
 const zoomEasing: Easing = cubicBezier(0.45, 0, 0.35, 1);
+const homeZoom: number = 9;
+const homeEnterTime: number = 1200; // ms
+const homeLeaveTime: number = 1000; // ms
+const homeEasing: Easing = cubicBezier(0.6, 0, 0.3, 1);
+const homeReveal: number = 0.55;
+const homeDepth: number = 0.55;
+const doorMargin: number = 12; // px
 
 const container: HTMLDivElement = document.getElementById(
   "app",
@@ -426,6 +436,7 @@ type Screen =
   | "page"
   | "rising"
   | "credits"
+  | "home"
   | "playing";
 
 let menuOpen: boolean = false;
@@ -439,6 +450,10 @@ let booting: boolean = true;
 let scape: "terminal" | "landing" | "menu" = "terminal";
 let underwater: boolean = false;
 let quiet: boolean = false;
+let indoors: boolean = false;
+let radioOn: boolean = true;
+let homeDoor: Point | null = null;
+let doorHover: boolean = false;
 
 setLandingEnabled(landing, false);
 const peek: Spring = { value: 0, velocity: 0 };
@@ -483,8 +498,8 @@ app.ticker.add(() => {
           : 1 - opened / 2,
     portal: scape === "menu" ? 0 : opened * portalShore,
     rain: scape === "menu" ? 1 : 0,
-    music: scape === "menu" ? 1 : 0,
-    depth: underwater ? 1 : 0,
+    music: scape === "menu" && (!indoors || radioOn) ? 1 : 0,
+    depth: underwater ? 1 : indoors ? homeDepth : 0,
     level: quiet || editingCreation() ? 0 : 1,
   });
 });
@@ -562,14 +577,148 @@ function play(): void {
   );
 }
 
-const help: Help = createHelp(app, await loadMenuSound(voiceCard));
+const voiceSound: Sound | null = await loadMenuSound(voiceCard);
+const home: Home = createHome(
+  app,
+  voiceSound,
+  tips,
+  () => {
+    if (screen === "home") {
+      leaveHome();
+    }
+  },
+  (on: boolean) => {
+    radioOn = on;
+  },
+);
+const help: Help = createHelp(app, voiceSound);
 const toast: Toast = createToast(app);
+const lighthouseSpot: Container = new Container();
+
+function zoomWorld(amount: number, door: Point): void {
+  world.pivot.set(door.x, door.y);
+  world.position.set(
+    door.x + (app.screen.width / 2 - door.x) * amount,
+    door.y + (app.screen.height / 2 - door.y) * amount,
+  );
+  world.scale.set(Math.pow(homeZoom, amount));
+}
+
+function placeWorld(): void {
+  world.pivot.set(0, 0);
+  world.scale.set(1);
+  world.position.set(
+    0,
+    (home.horizon() - app.screen.height * (1 - seaHeight / 100)) *
+      (1 - home.gaze()),
+  );
+}
+
+function resetWorld(): void {
+  world.pivot.set(0, 0);
+  world.position.set(0, 0);
+  world.scale.set(1);
+}
+
+function enterHome(): void {
+  const door: Point = ocean.lighthouseDoor();
+
+  screen = "diving";
+  homeDoor = door;
+  setSurfacesActive(false);
+  ocean.setLighthouseHovered(true);
+  ocean.retractBeam();
+  leaveButtons(app.ticker).then(() => {
+    buttons.visible = false;
+  });
+  home.enter();
+  tween(app.ticker, homeEnterTime, (progress: number) => {
+    zoomWorld(homeEasing(progress), door);
+    home.setShown(
+      Math.min(Math.max((progress - homeReveal) / (1 - homeReveal), 0), 1),
+    );
+    indoors = progress > homeReveal;
+  }).then(() => {
+    ocean.setLighthouseShown(false);
+    placeWorld();
+    home.setActive(true);
+    screen = "home";
+  });
+}
+
+function leaveHome(): void {
+  const door: Point = homeDoor ?? ocean.lighthouseDoor();
+
+  screen = "rising";
+  indoors = false;
+  home.setActive(false);
+  ocean.setLighthouseShown(true);
+  Promise.all([
+    tween(app.ticker, homeLeaveTime, (progress: number) => {
+      zoomWorld(1 - homeEasing(progress), door);
+      home.setShown(1 - Math.min(progress / (1 - homeReveal), 1));
+    }),
+    wait(homeLeaveTime - transitionLead * 2).then(() => {
+      ocean.setLighthouseHovered(false);
+      buttons.visible = true;
+      setSurfacesActive(true);
+      return enterButtons(app.ticker);
+    }),
+  ]).then(() => {
+    resetWorld();
+    home.setShown(0);
+    navigate("menu");
+    screen = "main";
+  });
+}
+
+lighthouseSpot.eventMode = "static";
+lighthouseSpot.cursor = "pointer";
+lighthouseSpot.visible = false;
+lighthouseSpot.on("pointerover", () => {
+  doorHover = true;
+  ocean.setLighthouseHovered(true);
+});
+lighthouseSpot.on("pointerout", () => {
+  if (doorHover && screen === "main") {
+    ocean.setLighthouseHovered(false);
+  }
+
+  doorHover = false;
+});
+lighthouseSpot.on("pointertap", () => navigate("lighthouse"));
+world.addChildAt(lighthouseSpot, world.getChildIndex(landing));
+app.ticker.add(() => {
+  const open: boolean = screen === "main" && menuOpen;
+
+  if (screen === "home") {
+    placeWorld();
+  }
+
+  if (!open && lighthouseSpot.visible && doorHover && screen === "main") {
+    ocean.setLighthouseHovered(false);
+    doorHover = false;
+  }
+
+  lighthouseSpot.visible = open;
+
+  if (open) {
+    const bounds: Rectangle = ocean.lighthouseBounds();
+
+    lighthouseSpot.hitArea = new Rectangle(
+      bounds.x - doorMargin,
+      bounds.y - doorMargin,
+      bounds.width + doorMargin * 2,
+      bounds.height + doorMargin * 2,
+    );
+  }
+});
 
 onUnlock((achievement: Achievement) =>
   toast.show("Achievement  ·  " + achievement.name),
 );
 
-screenLayer.addChild(help.view, toast.view);
+screenLayer.addChild(home.view, help.view, toast.view);
 
 function takeScreenshot(): void {
   const capture: HTMLCanvasElement = app.renderer.extract.canvas(
@@ -670,6 +819,10 @@ function helpTopic(): Topic | null {
     return "play";
   }
 
+  if (screen === "home") {
+    return "lighthouse";
+  }
+
   if (screen === "page" && currentPage !== null) {
     return currentPage.content?.topic?.() ?? null;
   }
@@ -680,6 +833,10 @@ function helpTopic(): Topic | null {
 function helpSubject(topic: Topic): string {
   if (screen === "playing") {
     return playfield.subject();
+  }
+
+  if (screen === "home") {
+    return home.subject();
   }
 
   if (screen === "page" && currentPage !== null) {
@@ -755,6 +912,14 @@ window.addEventListener("keydown", (event: KeyboardEvent) => {
 
   if (event.key === "Escape" && screen === "credits") {
     closeCredits();
+    return;
+  }
+
+  if (event.key === "Escape" && screen === "home") {
+    if (!home.back()) {
+      leaveHome();
+    }
+
     return;
   }
 
@@ -977,6 +1142,11 @@ document.addEventListener("navigate", (event: Event) => {
     return;
   }
 
+  if (name === "lighthouse") {
+    enterHome();
+    return;
+  }
+
   if (name === "credits") {
     screen = "diving";
     setSurfacesActive(false);
@@ -1023,6 +1193,10 @@ function currentPlace(): string | null {
 
   if (screen === "credits") {
     return "credits";
+  }
+
+  if (screen === "home") {
+    return "lighthouse";
   }
 
   return null;
@@ -1091,6 +1265,11 @@ function stepRoute(): void {
 
   if (place === "credits") {
     closeCredits();
+    return;
+  }
+
+  if (place === "lighthouse") {
+    leaveHome();
     return;
   }
 

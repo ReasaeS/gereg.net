@@ -6,6 +6,7 @@ const lessons: Map<string, Array<string>> = new Map([
       "The umbrella keeps the rest of the bullet storm off me. Press Alt + H on any screen and I'll tell you what it's for.",
       "PLAY is where you fly. CUSTOMISE lets you draw your own ship. CREATE is where you build stages, enemies, music and more.",
       "STATS keeps your records and achievements, CONFIG holds the settings, and CREDITS rolls the names behind all this.",
+      "LIGHTHOUSE takes you to my home. You can also click the lighthouse itself to come and visit.",
     ],
   ],
   [
@@ -292,6 +293,21 @@ const lessons: Map<string, Array<string>> = new Map([
     "editor.painter",
     [
       "Paint over your vessel here, pixel by pixel. Whatever you draw is used in game.",
+    ],
+  ],
+  [
+    "lighthouse",
+    [
+      "This is my lighthouse! Click the floor to float over there, or click something to go and use it.",
+      "Press E for the emote wheel, or 1 to 8 for a quick emote. I'll answer!",
+      "The door takes you back to the menu. The stairs lead up to the lamp room, where you'll find me.",
+    ],
+  ],
+  [
+    "lighthouse.lamp",
+    [
+      "This is the lamp room at the top of the tower. The big lamp sweeps its light out over the storm.",
+      "This is where I stay. Look through the telescope, read the keeper's log, or take the stairs back down.",
     ],
   ],
   [
