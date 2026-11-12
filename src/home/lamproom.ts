@@ -42,8 +42,7 @@ const beamAlpha: number = 0.22;
 const spinSpeed: number = 0.6; // rad/s
 const spinBoost: number = 5; // rad/s
 const boostDecay: number = 1.4; // per s
-const flashAlpha: number = 0.07;
-const flashSharpness: number = 40;
+const glintSharpness: number = 14;
 const scopeX: number = 1180; // units
 const scopeY: number = 690; // units
 const deskX: number = 445; // units
@@ -107,7 +106,6 @@ function createLampRoom(): Room {
   );
   const frame: Graphics = new Graphics();
   const beams: Graphics = new Graphics();
-  const flash: Graphics = new Graphics();
   const lamp: Container = new Container();
   const lampArt: Graphics = new Graphics();
   const prisms: Graphics = new Graphics();
@@ -667,15 +665,8 @@ function createLampRoom(): Room {
     }
 
     const facing: number = Math.max(Math.sin(angle), Math.sin(angle + Math.PI));
-    const glow: number = Math.pow(Math.max(facing, 0), flashSharpness);
+    const glow: number = Math.pow(Math.max(facing, 0), glintSharpness);
 
-    flash
-      .clear()
-      .rect(-1000, -600, 3600, 2200)
-      .fill({
-        color: theme.light,
-        alpha: glow * flashAlpha * (spinSpeed / (spinSpeed + boost)),
-      });
     drawPrisms(glow);
   }
 
@@ -688,10 +679,8 @@ function createLampRoom(): Room {
   }
 
   beams.blendMode = "add";
-  flash.blendMode = "add";
   back.addChild(walls, drizzle.view, frame, beams);
   lamp.addChild(lampArt, prisms);
-  front.addChild(flash);
   lamp.position.set(lampX, lampY);
   lamp.zIndex = lampY;
   scope.addChild(scopeArt, tube);
